@@ -36,10 +36,10 @@ func (p *Player) Update(dt float32) {
 
 	var noInput bool
 	switch {
-	case rl.IsKeyDown(rl.KeyLeft):
+	case rl.IsKeyDown(rl.KeyLeft), rl.IsKeyDown(rl.KeyA):
 		acc.X -= DefaultAcc
 		p.orientation = -1
-	case rl.IsKeyDown(rl.KeyRight):
+	case rl.IsKeyDown(rl.KeyRight), rl.IsKeyDown(rl.KeyD):
 		acc.X += DefaultAcc
 		p.orientation = 1
 	default:
@@ -70,8 +70,6 @@ func (p *Player) Draw() {
 	if Debug {
 		rl.DrawRectangle(int32(p.pos.X), int32(p.pos.Y), 39, 44, DebugColor1)
 		rl.DrawRectangleLines(int32(p.pos.X), int32(p.pos.Y), 39, 44, DebugColor2)
-		msg := fmt.Sprintf("speed: %v\npos: %v", p.speed, p.pos)
-		rl.DrawText(msg, int32(p.pos.X), int32(p.pos.Y)-40, 1, rl.Red)
 	}
 	rl.DrawTextureRec(
 		anim,
@@ -84,4 +82,12 @@ func (p *Player) Draw() {
 		p.pos,
 		rl.White,
 	)
+	if Debug {
+		rl.DrawCircle(int32(p.pos.X+p.bound.Width/2), int32(p.pos.Y+p.bound.Height/2), 2, rl.Red)
+		rl.DrawCircle(int32(p.pos.X+p.bound.Width/2), int32(p.pos.Y+p.bound.Height*1/4), 1, rl.Green)
+	}
+}
+
+func (p *Player) Debug() string {
+	return fmt.Sprintf("speed: %v\npos: %v\n", p.speed, p.pos)
 }

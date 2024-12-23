@@ -1,6 +1,9 @@
 package main
 
-import rl "github.com/gen2brain/raylib-go/raylib"
+import (
+	"fmt"
+	rl "github.com/gen2brain/raylib-go/raylib"
+)
 
 const (
 	MinZoom = 4
@@ -8,10 +11,11 @@ const (
 )
 
 type Camera struct {
-	cam rl.Camera2D
+	cam       rl.Camera2D
+	zoomSpeed float32
 }
 
-var c = Camera{
+var cam = Camera{
 	cam: rl.Camera2D{
 		Offset:   rl.Vector2{X: SW / 2, Y: SH / 2},
 		Target:   p.pos,
@@ -21,7 +25,13 @@ var c = Camera{
 }
 
 func (c *Camera) Update(dt float32) {
-	c.cam.Zoom += rl.GetMouseWheelMove() * dt * 5 // TODO lerp? zoom speed?
+	c.zoomSpeed += rl.GetMouseWheelMove() * dt * 5
+	c.cam.Zoom += c.zoomSpeed
+	c.zoomSpeed = moveTo0(c.zoomSpeed, 1.2*dt)
 	c.cam.Zoom = clamp(c.cam.Zoom, MinZoom, MaxZoom)
 	c.cam.Target = p.pos
+}
+
+func (c *Camera) Debug() string {
+	return fmt.Sprintf("zoom: %f\nzoom_speed: %f", c.cam.Zoom, c.zoomSpeed)
 }
