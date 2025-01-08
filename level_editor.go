@@ -10,7 +10,7 @@ var le = &LevelEditor{
 	entities: []LevelEntity{},
 	texID:    TEXTURE_BLOCK_1,
 	pos:      rl.Vector2{},
-	gridSize: 39,
+	gridSize: rl.Vector2{39, 83},
 }
 
 type LevelEntity struct {
@@ -23,14 +23,14 @@ type LevelEditor struct {
 
 	texID    int32
 	pos      rl.Vector2
-	gridSize int32
+	gridSize rl.Vector2
 }
 
 func (le *LevelEditor) Update(dt float32) {
 	le.pos = rl.GetScreenToWorld2D(rl.GetMousePosition(), cam.cam)
-	if le.gridSize > 0 {
-		le.pos.X = float32(int32(le.pos.X) - int32(le.pos.X)%le.gridSize)
-		le.pos.Y = float32(int32(le.pos.Y) - int32(le.pos.Y)%le.gridSize)
+	if le.gridSize != (rl.Vector2{}) {
+		le.pos.X = float32(int32(le.pos.X) - int32(le.pos.X)%int32(le.gridSize.X))
+		le.pos.Y = float32(int32(le.pos.Y) - int32(le.pos.Y)%int32(le.gridSize.Y))
 	}
 	if rl.IsMouseButtonPressed(rl.MouseButtonLeft) {
 		le.entities = append(le.entities, LevelEntity{
@@ -39,10 +39,14 @@ func (le *LevelEditor) Update(dt float32) {
 		})
 		slices.SortFunc(le.entities, func(a, b LevelEntity) int {
 			switch {
-			case a.pos.X > b.pos.X:
-				return -1
 			case a.pos.Y > b.pos.Y:
 				return -1
+			case a.pos.Y < b.pos.Y:
+				return 1
+			case a.pos.X > b.pos.X:
+				return -1
+			case a.pos.X < b.pos.X:
+				return 1
 			default:
 				return 0
 			}
@@ -95,6 +99,18 @@ func lvlEditLoop(dt float32) {
 
 			le.Draw()
 			p.Draw()
+
+			rl.PushMatrix()
+			{
+				rl.Translatef(
+					float32(int32(le.pos.X)%int32(le.gridSize.X)),
+					float32(int32(le.pos.Y)%int32(le.gridSize.Y))+25*50,
+					0)
+				rl.Rotatef(90, 1, 0, 0)
+				rl.Scalef(39./82., 0, 82./39.)
+				rl.DrawGrid(100, 50)
+			}
+			rl.PopMatrix()
 		}
 		rl.EndMode2D()
 

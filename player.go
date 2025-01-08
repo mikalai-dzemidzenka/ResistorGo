@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	rl "github.com/gen2brain/raylib-go/raylib"
+	"math"
 )
 
 type Player struct {
@@ -65,6 +66,12 @@ func (p *Player) Update(dt float32) {
 	p.anim = TEXTURE_PLAYER_IDLE_1 + cur.atkSt
 
 	p.pos = rl.Vector2Add(p.pos, p.speed)
+	if p.speed.X > 0 {
+		p.pos.X = float32(math.Round(float64(p.pos.X)))
+	} else {
+		p.pos.X = float32(math.Floor(float64(p.pos.X)))
+	}
+	p.pos.Y = float32(math.Round(float64(p.pos.Y)))
 }
 
 func (p *Player) Draw() {
