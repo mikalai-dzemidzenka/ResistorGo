@@ -8,31 +8,42 @@ import (
 )
 
 const (
-	CursorLen   = 6
-	CursorThick = 2
+	CursorLen             = 6
+	CursorThick           = 2
+	CursorAttackSpeed     = 0.1
+	CursorFastAttackSpeed = 0.5
 )
 
-var cur Cursor
-
-type Cursor struct {
-	pos    rl.Vector2
-	atkPos rl.Vector2
-	atkSt  int
+var cur = &Cursor{
+	atkSpeed: CursorAttackSpeed,
 }
 
-func (c *Cursor) Update() {
+type Cursor struct {
+	pos      rl.Vector2
+	atkPos   rl.Vector2
+	atkSpeed float32
+	atkSt    int32
+}
+
+func (c *Cursor) Update(dt float32) {
+	if rl.IsMouseButtonDown(rl.MouseButtonRight) {
+		c.atkSpeed = CursorFastAttackSpeed
+	} else {
+		c.atkSpeed = CursorAttackSpeed
+	}
+
 	c.pos = rl.GetMousePosition()
-	c.atkPos = rl.Vector2Lerp(c.atkPos, c.pos, 0.1)
+	c.atkPos = rl.Vector2Lerp(c.atkPos, c.pos, c.atkSpeed)
 
 	a := rl.GetWorldToScreen2D(rl.Vector2{X: p.pos.X + p.bound.Width/2, Y: p.pos.Y + p.bound.Height*1/4}, cam.cam)
 	b := cur.atkPos
 	angle := rl.Vector2LineAngle(a, b) // [-pi/2;pi/2]
 	angle += math.Pi / 2               // [0, pi]
-	c.atkSt = int(angle / (math.Pi / 4))
+	c.atkSt = int32(angle / (math.Pi / 4))
 	c.atkSt = clamp(c.atkSt, 0, 3)
 }
 
-func (c *Cursor) Draw() {
+func (c *Cursor) DrawGui() {
 	DrawCross(c.pos, rl.Red)
 	DrawCross(cur.atkPos, rl.Green)
 	if Debug {

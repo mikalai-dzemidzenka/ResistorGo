@@ -15,7 +15,7 @@ type Camera struct {
 	zoomSpeed float32
 }
 
-var cam = Camera{
+var cam = &Camera{
 	cam: rl.Camera2D{
 		Offset:   rl.Vector2{X: SW / 2, Y: SH / 2},
 		Target:   p.pos,
@@ -28,8 +28,12 @@ func (c *Camera) Update(dt float32) {
 	c.zoomSpeed += rl.GetMouseWheelMove() * dt * 5
 	c.cam.Zoom += c.zoomSpeed
 	c.zoomSpeed = moveTo0(c.zoomSpeed, 1.2*dt)
-	c.cam.Zoom = clamp(c.cam.Zoom, MinZoom, MaxZoom)
-	c.cam.Target = p.pos
+	if !Debug {
+		c.cam.Zoom = clamp(c.cam.Zoom, MinZoom, MaxZoom)
+	} else {
+		c.cam.Zoom = clamp(c.cam.Zoom, 0.5, MaxZoom)
+	}
+	c.cam.Target = rl.Vector2Add(p.pos, rl.Vector2{X: 50})
 }
 
 func (c *Camera) Debug() string {

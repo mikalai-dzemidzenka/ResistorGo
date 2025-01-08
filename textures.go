@@ -8,12 +8,21 @@ const (
 	TEXTURE_PLAYER_IDLE_2
 	TEXTURE_PLAYER_IDLE_3
 	TEXTURE_PLAYER_IDLE_4
-	TEXTURE_PLAYER_LEN
-)
 
-const (
-	TEXTURE_BLOCK_1 = 400 + iota
+	TEXTURE_BLOCK_1
 	TEXTURE_BLOCK_2
+
+	TEXTURE_LEN
 )
 
-var Textures [TEXTURE_PLAYER_LEN]rl.Texture2D
+var Textures [TEXTURE_LEN]rl.Texture2D
+
+func LoadTextures() {
+	Textures[TEXTURE_PLAYER_IDLE] = rl.LoadTexture("resources/idle.png")
+	Textures[TEXTURE_PLAYER_IDLE_1] = rl.LoadTexture("resources/idle-1.png")
+	Textures[TEXTURE_PLAYER_IDLE_2] = rl.LoadTexture("resources/idle-2.png")
+	Textures[TEXTURE_PLAYER_IDLE_3] = rl.LoadTexture("resources/idle-3.png")
+	Textures[TEXTURE_PLAYER_IDLE_4] = rl.LoadTexture("resources/idle-4.png")
+
+	Textures[TEXTURE_BLOCK_1] = rl.LoadTexture("resources/e1m1_bg_wall1.png")
+}

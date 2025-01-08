@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	rl "github.com/gen2brain/raylib-go/raylib"
 )
 
@@ -9,17 +10,23 @@ const (
 	SH = 768
 )
 
+var l int
+
+const (
+	LEVEL_1 = iota
+	LEVEL_EDITOR
+	LEVELS
+)
+
 func main() {
 	rl.InitWindow(SW, SH, "Resistor")
 	defer rl.CloseWindow()
 
+	flag.IntVar(&l, "l", LEVEL_EDITOR, "level to load")
+
 	rl.DisableCursor()
 
-	Textures[TEXTURE_PLAYER_IDLE] = rl.LoadTexture("resources/idle.png")
-	Textures[TEXTURE_PLAYER_IDLE_1] = rl.LoadTexture("resources/idle-1.png")
-	Textures[TEXTURE_PLAYER_IDLE_2] = rl.LoadTexture("resources/idle-2.png")
-	Textures[TEXTURE_PLAYER_IDLE_3] = rl.LoadTexture("resources/idle-3.png")
-	Textures[TEXTURE_PLAYER_IDLE_4] = rl.LoadTexture("resources/idle-4.png")
+	LoadTextures()
 
 	rl.SetTargetFPS(60)
 
@@ -30,26 +37,11 @@ func main() {
 
 		dt := rl.GetFrameTime()
 
-		cur.Update()
-		p.Update(dt)
-		cam.Update(dt)
-
-		rl.BeginDrawing()
-		{
-			rl.ClearBackground(rl.Black)
-			rl.BeginMode2D(cam.cam)
-			{
-				p.Draw()
-			}
-			rl.EndMode2D()
-
-			cur.Draw()
-			if Debug {
-				rl.DrawText(p.Debug(), 40, 40, 1, rl.Red)
-				rl.DrawText(cam.Debug(), 40, 78, 1, rl.Green)
-				rl.DrawText(cur.Debug(), 40, 116, 1, rl.Blue)
-			}
+		switch l {
+		case LEVEL_EDITOR:
+			lvlEditLoop(dt)
+		default:
+			lvl1Loop(dt)
 		}
-		rl.EndDrawing()
 	}
 }

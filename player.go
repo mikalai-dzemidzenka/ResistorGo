@@ -10,7 +10,7 @@ type Player struct {
 	bound       rl.Rectangle
 	speed       rl.Vector2
 	friction    float32
-	anim        int
+	anim        int32
 	orientation int8
 }
 
@@ -20,7 +20,7 @@ const (
 	DefaultFriction = 0.4
 )
 
-var p = Player{
+var p = &Player{
 	pos: rl.Vector2{
 		X: 200, Y: 200,
 	},
@@ -61,6 +61,8 @@ func (p *Player) Update(dt float32) {
 	}
 
 	p.speed.X = clamp(p.speed.X, -MaxSpeed, MaxSpeed)
+
+	p.anim = TEXTURE_PLAYER_IDLE_1 + cur.atkSt
 
 	p.pos = rl.Vector2Add(p.pos, p.speed)
 }
