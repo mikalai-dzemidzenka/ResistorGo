@@ -102,13 +102,14 @@ func lvlEditLoop(dt float32) {
 
 			rl.PushMatrix()
 			{
+				a := le.gridSize.Y / le.gridSize.X
 				rl.Translatef(
-					float32(int32(le.pos.X)%int32(le.gridSize.X)),
-					float32(int32(le.pos.Y)%int32(le.gridSize.Y))+25*50,
+					float32(int32(le.pos.X)%int32(le.gridSize.X)+1),
+					float32(int32(le.pos.Y)%int32(le.gridSize.Y)+(5*int32(le.gridSize.Y))),
 					0)
 				rl.Rotatef(90, 1, 0, 0)
-				rl.Scalef(39./82., 0, 82./39.)
-				rl.DrawGrid(100, 50)
+				rl.Scalef(1, 0, a)
+				rl.DrawGrid(100, le.gridSize.X)
 			}
 			rl.PopMatrix()
 		}
