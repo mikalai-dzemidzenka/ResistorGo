@@ -1,0 +1,1415 @@
+<!DOCTYPE html>
+<!-- saved from url=(0056)https://jorenjoestar.github.io/post/pixel_art_filtering/ -->
+<html lang="en-us"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="generator" content="Source Themes Academic 4.4.0">
+
+  
+
+  
+  
+  
+  
+  
+    
+    
+    
+  
+  
+
+  <meta name="author" content="Gabriel Sassone">
+
+  
+  
+  
+    
+  
+  <meta name="description" content="An example of non integer scaling of pixel art.
+
+
+Overview Pixel art is living a beautiful renaissance these last years, with more and more studios embracing its visuals and more artists going back to this unique way of describing visuals in a game.One of the most annoying problem we are seeing, especially since we don’t have all the CRT TVs that ‘apply their filters’, is the pixel ‘shimmering’ happening when scaling or moving a pixel art image with non-integer values.">
+
+  
+  <link rel="alternate" hreflang="en-us" href="https://jorenjoestar.github.io/post/pixel_art_filtering/">
+
+  
+
+
+  
+
+  
+  
+  
+  <meta name="theme-color" content="hsl(339, 90%, 68%)">
+  
+
+  
+  
+  
+  
+    
+    <link rel="stylesheet" href="./Pixel Art Filtering _ Gabriel&#39;s Virtual Tavern_files/academicons.min.css" integrity="sha256-uFVgMKfistnJAfoCUQigIl+JfUaP47GrRKjf6CTPVmw=" crossorigin="anonymous">
+    <link rel="stylesheet" href="./Pixel Art Filtering _ Gabriel&#39;s Virtual Tavern_files/all.css" integrity="sha384-aOkxzJ5uQz7WBObEZcHvV5JvRW3TUc2rNPA7pe3AwnsUohiw1Vj2Rgx2KSOkF5+h" crossorigin="anonymous">
+    <link rel="stylesheet" href="./Pixel Art Filtering _ Gabriel&#39;s Virtual Tavern_files/jquery.fancybox.min.css" integrity="sha256-ygkqlh3CYSUri3LhQxzdcm0n1EQvH2Y+U5S2idbLtxs=" crossorigin="anonymous">
+
+    
+    
+    
+      
+    
+    
+      
+      
+        <link rel="stylesheet" href="./Pixel Art Filtering _ Gabriel&#39;s Virtual Tavern_files/ocean.min.css" crossorigin="anonymous" title="hl-light" disabled="">
+        <link rel="stylesheet" href="./Pixel Art Filtering _ Gabriel&#39;s Virtual Tavern_files/ocean.min.css" crossorigin="anonymous" title="hl-dark">
+      
+    
+
+    
+
+    
+
+  
+
+  
+  
+  <link rel="stylesheet" href="./Pixel Art Filtering _ Gabriel&#39;s Virtual Tavern_files/css">
+  
+
+  
+  
+  
+  <link rel="stylesheet" href="./Pixel Art Filtering _ Gabriel&#39;s Virtual Tavern_files/academic.min.3c1397731166a1801db28da8c18494e1.css">
+
+  
+
+  
+  
+  
+
+  
+
+  <link rel="manifest" href="https://jorenjoestar.github.io/site.webmanifest">
+  <link rel="icon" type="image/png" href="https://jorenjoestar.github.io/img/icon.png">
+  <link rel="apple-touch-icon" type="image/png" href="https://jorenjoestar.github.io/img/icon-192.png">
+
+  <link rel="canonical" href="https://jorenjoestar.github.io/post/pixel_art_filtering/">
+
+  
+  
+  
+  
+    
+    
+  
+  <meta property="twitter:card" content="summary">
+  
+  <meta property="twitter:site" content="@GabrielSassone">
+  <meta property="twitter:creator" content="@GabrielSassone">
+  
+  <meta property="og:site_name" content="Gabriel&#39;s Virtual Tavern">
+  <meta property="og:url" content="https://jorenjoestar.github.io/post/pixel_art_filtering/">
+  <meta property="og:title" content="Pixel Art Filtering | Gabriel&#39;s Virtual Tavern">
+  <meta property="og:description" content="An example of non integer scaling of pixel art.
+
+
+Overview Pixel art is living a beautiful renaissance these last years, with more and more studios embracing its visuals and more artists going back to this unique way of describing visuals in a game.One of the most annoying problem we are seeing, especially since we don’t have all the CRT TVs that ‘apply their filters’, is the pixel ‘shimmering’ happening when scaling or moving a pixel art image with non-integer values."><meta property="og:image" content="https://jorenjoestar.github.io/img/icon-192.png">
+  <meta property="twitter:image" content="https://jorenjoestar.github.io/img/icon-192.png"><meta property="og:locale" content="en-us">
+  
+  <meta property="article:published_time" content="2021-04-12T19:56:56+02:00">
+  
+  <meta property="article:modified_time" content="2021-04-12T19:56:56+02:00">
+  
+
+  
+
+<link rel="stylesheet" href="./Pixel Art Filtering _ Gabriel&#39;s Virtual Tavern_files/cookieconsent.min.css">
+<script src="./Pixel Art Filtering _ Gabriel&#39;s Virtual Tavern_files/cookieconsent.min.js.Без названия"></script>
+<script>
+  window.addEventListener("load", function(){
+    window.cookieconsent.initialise({
+      "palette": {
+        "popup": {
+          "background": "hsl(339, 90%, 68%)",
+          "text": "#fff"
+        },
+        "button": {
+          "background": "#fff",
+          "text": "hsl(339, 90%, 68%)"
+        }
+      },
+      "theme": "classic",
+      "content": {
+        "message": "This website uses cookies to ensure you get the best experience on our website.",
+        "dismiss": "Got it!",
+        "link": "Learn more",
+        "href": "https://cookies.insites.com"
+      }
+    })});
+</script>
+
+
+
+  
+
+
+
+
+
+  <title>Pixel Art Filtering | Gabriel's Virtual Tavern</title>
+
+<style type="text/css">.MathJax_Hover_Frame {border-radius: .25em; -webkit-border-radius: .25em; -moz-border-radius: .25em; -khtml-border-radius: .25em; box-shadow: 0px 0px 15px #83A; -webkit-box-shadow: 0px 0px 15px #83A; -moz-box-shadow: 0px 0px 15px #83A; -khtml-box-shadow: 0px 0px 15px #83A; border: 1px solid #A6D ! important; display: inline-block; position: absolute}
+.MathJax_Menu_Button .MathJax_Hover_Arrow {position: absolute; cursor: pointer; display: inline-block; border: 2px solid #AAA; border-radius: 4px; -webkit-border-radius: 4px; -moz-border-radius: 4px; -khtml-border-radius: 4px; font-family: 'Courier New',Courier; font-size: 9px; color: #F0F0F0}
+.MathJax_Menu_Button .MathJax_Hover_Arrow span {display: block; background-color: #AAA; border: 1px solid; border-radius: 3px; line-height: 0; padding: 4px}
+.MathJax_Hover_Arrow:hover {color: white!important; border: 2px solid #CCC!important}
+.MathJax_Hover_Arrow:hover span {background-color: #CCC!important}
+</style><style type="text/css">#MathJax_About {position: fixed; left: 50%; width: auto; text-align: center; border: 3px outset; padding: 1em 2em; background-color: #DDDDDD; color: black; cursor: default; font-family: message-box; font-size: 120%; font-style: normal; text-indent: 0; text-transform: none; line-height: normal; letter-spacing: normal; word-spacing: normal; word-wrap: normal; white-space: nowrap; float: none; z-index: 201; border-radius: 15px; -webkit-border-radius: 15px; -moz-border-radius: 15px; -khtml-border-radius: 15px; box-shadow: 0px 10px 20px #808080; -webkit-box-shadow: 0px 10px 20px #808080; -moz-box-shadow: 0px 10px 20px #808080; -khtml-box-shadow: 0px 10px 20px #808080; filter: progid:DXImageTransform.Microsoft.dropshadow(OffX=2, OffY=2, Color='gray', Positive='true')}
+#MathJax_About.MathJax_MousePost {outline: none}
+.MathJax_Menu {position: absolute; background-color: white; color: black; width: auto; padding: 2px; border: 1px solid #CCCCCC; margin: 0; cursor: default; font: menu; text-align: left; text-indent: 0; text-transform: none; line-height: normal; letter-spacing: normal; word-spacing: normal; word-wrap: normal; white-space: nowrap; float: none; z-index: 201; box-shadow: 0px 10px 20px #808080; -webkit-box-shadow: 0px 10px 20px #808080; -moz-box-shadow: 0px 10px 20px #808080; -khtml-box-shadow: 0px 10px 20px #808080; filter: progid:DXImageTransform.Microsoft.dropshadow(OffX=2, OffY=2, Color='gray', Positive='true')}
+.MathJax_MenuItem {padding: 2px 2em; background: transparent}
+.MathJax_MenuArrow {position: absolute; right: .5em; padding-top: .25em; color: #666666; font-size: .75em}
+.MathJax_MenuActive .MathJax_MenuArrow {color: white}
+.MathJax_MenuArrow.RTL {left: .5em; right: auto}
+.MathJax_MenuCheck {position: absolute; left: .7em}
+.MathJax_MenuCheck.RTL {right: .7em; left: auto}
+.MathJax_MenuRadioCheck {position: absolute; left: 1em}
+.MathJax_MenuRadioCheck.RTL {right: 1em; left: auto}
+.MathJax_MenuLabel {padding: 2px 2em 4px 1.33em; font-style: italic}
+.MathJax_MenuRule {border-top: 1px solid #CCCCCC; margin: 4px 1px 0px}
+.MathJax_MenuDisabled {color: GrayText}
+.MathJax_MenuActive {background-color: Highlight; color: HighlightText}
+.MathJax_MenuDisabled:focus, .MathJax_MenuLabel:focus {background-color: #E8E8E8}
+.MathJax_ContextMenu:focus {outline: none}
+.MathJax_ContextMenu .MathJax_MenuItem:focus {outline: none}
+#MathJax_AboutClose {top: .2em; right: .2em}
+.MathJax_Menu .MathJax_MenuClose {top: -10px; left: -10px}
+.MathJax_MenuClose {position: absolute; cursor: pointer; display: inline-block; border: 2px solid #AAA; border-radius: 18px; -webkit-border-radius: 18px; -moz-border-radius: 18px; -khtml-border-radius: 18px; font-family: 'Courier New',Courier; font-size: 24px; color: #F0F0F0}
+.MathJax_MenuClose span {display: block; background-color: #AAA; border: 1.5px solid; border-radius: 18px; -webkit-border-radius: 18px; -moz-border-radius: 18px; -khtml-border-radius: 18px; line-height: 0; padding: 8px 0 6px}
+.MathJax_MenuClose:hover {color: white!important; border: 2px solid #CCC!important}
+.MathJax_MenuClose:hover span {background-color: #CCC!important}
+.MathJax_MenuClose:hover:focus {outline: none}
+</style><style type="text/css">.MathJax_Preview .MJXf-math {color: inherit!important}
+</style><style type="text/css">.MJX_Assistive_MathML {position: absolute!important; top: 0; left: 0; clip: rect(1px, 1px, 1px, 1px); padding: 1px 0 0 0!important; border: 0!important; height: 1px!important; width: 1px!important; overflow: hidden!important; display: block!important; -webkit-touch-callout: none; -webkit-user-select: none; -khtml-user-select: none; -moz-user-select: none; -ms-user-select: none; user-select: none}
+.MJX_Assistive_MathML.MJX_Assistive_MathML_Block {width: 100%!important}
+</style><style type="text/css">#MathJax_Zoom {position: absolute; background-color: #F0F0F0; overflow: auto; display: block; z-index: 301; padding: .5em; border: 1px solid black; margin: 0; font-weight: normal; font-style: normal; text-align: left; text-indent: 0; text-transform: none; line-height: normal; letter-spacing: normal; word-spacing: normal; word-wrap: normal; white-space: nowrap; float: none; -webkit-box-sizing: content-box; -moz-box-sizing: content-box; box-sizing: content-box; box-shadow: 5px 5px 15px #AAAAAA; -webkit-box-shadow: 5px 5px 15px #AAAAAA; -moz-box-shadow: 5px 5px 15px #AAAAAA; -khtml-box-shadow: 5px 5px 15px #AAAAAA; filter: progid:DXImageTransform.Microsoft.dropshadow(OffX=2, OffY=2, Color='gray', Positive='true')}
+#MathJax_ZoomOverlay {position: absolute; left: 0; top: 0; z-index: 300; display: inline-block; width: 100%; height: 100%; border: 0; padding: 0; margin: 0; background-color: white; opacity: 0; filter: alpha(opacity=0)}
+#MathJax_ZoomFrame {position: relative; display: inline-block; height: 0; width: 0}
+#MathJax_ZoomEventTrap {position: absolute; left: 0; top: 0; z-index: 302; display: inline-block; border: 0; padding: 0; margin: 0; background-color: white; opacity: 0; filter: alpha(opacity=0)}
+</style><style type="text/css">.MathJax_Preview {color: #888}
+#MathJax_Message {position: fixed; left: 1em; bottom: 1.5em; background-color: #E6E6E6; border: 1px solid #959595; margin: 0px; padding: 2px 8px; z-index: 102; color: black; font-size: 80%; width: auto; white-space: nowrap}
+#MathJax_MSIE_Frame {position: absolute; top: 0; left: 0; width: 0px; z-index: 101; border: 0px; margin: 0px; padding: 0px}
+.MathJax_Error {color: #CC0000; font-style: italic}
+</style><style type="text/css">.MJXp-script {font-size: .8em}
+.MJXp-right {-webkit-transform-origin: right; -moz-transform-origin: right; -ms-transform-origin: right; -o-transform-origin: right; transform-origin: right}
+.MJXp-bold {font-weight: bold}
+.MJXp-italic {font-style: italic}
+.MJXp-scr {font-family: MathJax_Script,'Times New Roman',Times,STIXGeneral,serif}
+.MJXp-frak {font-family: MathJax_Fraktur,'Times New Roman',Times,STIXGeneral,serif}
+.MJXp-sf {font-family: MathJax_SansSerif,'Times New Roman',Times,STIXGeneral,serif}
+.MJXp-cal {font-family: MathJax_Caligraphic,'Times New Roman',Times,STIXGeneral,serif}
+.MJXp-mono {font-family: MathJax_Typewriter,'Times New Roman',Times,STIXGeneral,serif}
+.MJXp-largeop {font-size: 150%}
+.MJXp-largeop.MJXp-int {vertical-align: -.2em}
+.MJXp-math {display: inline-block; line-height: 1.2; text-indent: 0; font-family: 'Times New Roman',Times,STIXGeneral,serif; white-space: nowrap; border-collapse: collapse}
+.MJXp-display {display: block; text-align: center; margin: 1em 0}
+.MJXp-math span {display: inline-block}
+.MJXp-box {display: block!important; text-align: center}
+.MJXp-box:after {content: " "}
+.MJXp-rule {display: block!important; margin-top: .1em}
+.MJXp-char {display: block!important}
+.MJXp-mo {margin: 0 .15em}
+.MJXp-mfrac {margin: 0 .125em; vertical-align: .25em}
+.MJXp-denom {display: inline-table!important; width: 100%}
+.MJXp-denom > * {display: table-row!important}
+.MJXp-surd {vertical-align: top}
+.MJXp-surd > * {display: block!important}
+.MJXp-script-box > *  {display: table!important; height: 50%}
+.MJXp-script-box > * > * {display: table-cell!important; vertical-align: top}
+.MJXp-script-box > *:last-child > * {vertical-align: bottom}
+.MJXp-script-box > * > * > * {display: block!important}
+.MJXp-mphantom {visibility: hidden}
+.MJXp-munderover {display: inline-table!important}
+.MJXp-over {display: inline-block!important; text-align: center}
+.MJXp-over > * {display: block!important}
+.MJXp-munderover > * {display: table-row!important}
+.MJXp-mtable {vertical-align: .25em; margin: 0 .125em}
+.MJXp-mtable > * {display: inline-table!important; vertical-align: middle}
+.MJXp-mtr {display: table-row!important}
+.MJXp-mtd {display: table-cell!important; text-align: center; padding: .5em 0 0 .5em}
+.MJXp-mtr > .MJXp-mtd:first-child {padding-left: 0}
+.MJXp-mtr:first-child > .MJXp-mtd {padding-top: 0}
+.MJXp-mlabeledtr {display: table-row!important}
+.MJXp-mlabeledtr > .MJXp-mtd:first-child {padding-left: 0}
+.MJXp-mlabeledtr:first-child > .MJXp-mtd {padding-top: 0}
+.MJXp-merror {background-color: #FFFF88; color: #CC0000; border: 1px solid #CC0000; padding: 1px 3px; font-style: normal; font-size: 90%}
+.MJXp-scale0 {-webkit-transform: scaleX(.0); -moz-transform: scaleX(.0); -ms-transform: scaleX(.0); -o-transform: scaleX(.0); transform: scaleX(.0)}
+.MJXp-scale1 {-webkit-transform: scaleX(.1); -moz-transform: scaleX(.1); -ms-transform: scaleX(.1); -o-transform: scaleX(.1); transform: scaleX(.1)}
+.MJXp-scale2 {-webkit-transform: scaleX(.2); -moz-transform: scaleX(.2); -ms-transform: scaleX(.2); -o-transform: scaleX(.2); transform: scaleX(.2)}
+.MJXp-scale3 {-webkit-transform: scaleX(.3); -moz-transform: scaleX(.3); -ms-transform: scaleX(.3); -o-transform: scaleX(.3); transform: scaleX(.3)}
+.MJXp-scale4 {-webkit-transform: scaleX(.4); -moz-transform: scaleX(.4); -ms-transform: scaleX(.4); -o-transform: scaleX(.4); transform: scaleX(.4)}
+.MJXp-scale5 {-webkit-transform: scaleX(.5); -moz-transform: scaleX(.5); -ms-transform: scaleX(.5); -o-transform: scaleX(.5); transform: scaleX(.5)}
+.MJXp-scale6 {-webkit-transform: scaleX(.6); -moz-transform: scaleX(.6); -ms-transform: scaleX(.6); -o-transform: scaleX(.6); transform: scaleX(.6)}
+.MJXp-scale7 {-webkit-transform: scaleX(.7); -moz-transform: scaleX(.7); -ms-transform: scaleX(.7); -o-transform: scaleX(.7); transform: scaleX(.7)}
+.MJXp-scale8 {-webkit-transform: scaleX(.8); -moz-transform: scaleX(.8); -ms-transform: scaleX(.8); -o-transform: scaleX(.8); transform: scaleX(.8)}
+.MJXp-scale9 {-webkit-transform: scaleX(.9); -moz-transform: scaleX(.9); -ms-transform: scaleX(.9); -o-transform: scaleX(.9); transform: scaleX(.9)}
+.MathJax_PHTML .noError {vertical-align: ; font-size: 90%; text-align: left; color: black; padding: 1px 3px; border: 1px solid}
+</style><style type="text/css">.mjx-chtml {display: inline-block; line-height: 0; text-indent: 0; text-align: left; text-transform: none; font-style: normal; font-weight: normal; font-size: 100%; font-size-adjust: none; letter-spacing: normal; word-wrap: normal; word-spacing: normal; white-space: nowrap; float: none; direction: ltr; max-width: none; max-height: none; min-width: 0; min-height: 0; border: 0; margin: 0; padding: 1px 0}
+.MJXc-display {display: block; text-align: center; margin: 1em 0; padding: 0}
+.mjx-chtml[tabindex]:focus, body :focus .mjx-chtml[tabindex] {display: inline-table}
+.mjx-full-width {text-align: center; display: table-cell!important; width: 10000em}
+.mjx-math {display: inline-block; border-collapse: separate; border-spacing: 0}
+.mjx-math * {display: inline-block; -webkit-box-sizing: content-box!important; -moz-box-sizing: content-box!important; box-sizing: content-box!important; text-align: left}
+.mjx-numerator {display: block; text-align: center}
+.mjx-denominator {display: block; text-align: center}
+.MJXc-stacked {height: 0; position: relative}
+.MJXc-stacked > * {position: absolute}
+.MJXc-bevelled > * {display: inline-block}
+.mjx-stack {display: inline-block}
+.mjx-op {display: block}
+.mjx-under {display: table-cell}
+.mjx-over {display: block}
+.mjx-over > * {padding-left: 0px!important; padding-right: 0px!important}
+.mjx-under > * {padding-left: 0px!important; padding-right: 0px!important}
+.mjx-stack > .mjx-sup {display: block}
+.mjx-stack > .mjx-sub {display: block}
+.mjx-prestack > .mjx-presup {display: block}
+.mjx-prestack > .mjx-presub {display: block}
+.mjx-delim-h > .mjx-char {display: inline-block}
+.mjx-surd {vertical-align: top}
+.mjx-mphantom * {visibility: hidden}
+.mjx-merror {background-color: #FFFF88; color: #CC0000; border: 1px solid #CC0000; padding: 2px 3px; font-style: normal; font-size: 90%}
+.mjx-annotation-xml {line-height: normal}
+.mjx-menclose > svg {fill: none; stroke: currentColor}
+.mjx-mtr {display: table-row}
+.mjx-mlabeledtr {display: table-row}
+.mjx-mtd {display: table-cell; text-align: center}
+.mjx-label {display: table-row}
+.mjx-box {display: inline-block}
+.mjx-block {display: block}
+.mjx-span {display: inline}
+.mjx-char {display: block; white-space: pre}
+.mjx-itable {display: inline-table; width: auto}
+.mjx-row {display: table-row}
+.mjx-cell {display: table-cell}
+.mjx-table {display: table; width: 100%}
+.mjx-line {display: block; height: 0}
+.mjx-strut {width: 0; padding-top: 1em}
+.mjx-vsize {width: 0}
+.MJXc-space1 {margin-left: .167em}
+.MJXc-space2 {margin-left: .222em}
+.MJXc-space3 {margin-left: .278em}
+.mjx-chartest {display: block; visibility: hidden; position: absolute; top: 0; line-height: normal; font-size: 500%}
+.mjx-chartest .mjx-char {display: inline}
+.mjx-chartest .mjx-box {padding-top: 1000px}
+.MJXc-processing {visibility: hidden; position: fixed; width: 0; height: 0; overflow: hidden}
+.MJXc-processed {display: none}
+.mjx-test {display: block; font-style: normal; font-weight: normal; font-size: 100%; font-size-adjust: none; text-indent: 0; text-transform: none; letter-spacing: normal; word-spacing: normal; overflow: hidden; height: 1px}
+.mjx-ex-box-test {position: absolute; overflow: hidden; width: 1px; height: 60ex}
+.mjx-line-box-test {display: table!important}
+.mjx-line-box-test span {display: table-cell!important; width: 10000em!important; min-width: 0; max-width: none; padding: 0; border: 0; margin: 0}
+#MathJax_CHTML_Tooltip {background-color: InfoBackground; color: InfoText; border: 1px solid black; box-shadow: 2px 2px 5px #AAAAAA; -webkit-box-shadow: 2px 2px 5px #AAAAAA; -moz-box-shadow: 2px 2px 5px #AAAAAA; -khtml-box-shadow: 2px 2px 5px #AAAAAA; padding: 3px 4px; z-index: 401; position: absolute; left: 0; top: 0; width: auto; height: auto; display: none}
+.mjx-chtml .mjx-noError {line-height: 1.2; vertical-align: ; font-size: 90%; text-align: left; color: black; padding: 1px 3px; border: 1px solid}
+.MJXc-TeX-unknown-R {font-family: STIXGeneral,'Cambria Math','Arial Unicode MS',serif; font-style: normal; font-weight: normal}
+.MJXc-TeX-unknown-I {font-family: STIXGeneral,'Cambria Math','Arial Unicode MS',serif; font-style: italic; font-weight: normal}
+.MJXc-TeX-unknown-B {font-family: STIXGeneral,'Cambria Math','Arial Unicode MS',serif; font-style: normal; font-weight: bold}
+.MJXc-TeX-unknown-BI {font-family: STIXGeneral,'Cambria Math','Arial Unicode MS',serif; font-style: italic; font-weight: bold}
+.MJXc-TeX-ams-R {font-family: MJXc-TeX-ams-R,MJXc-TeX-ams-Rw}
+.MJXc-TeX-cal-B {font-family: MJXc-TeX-cal-B,MJXc-TeX-cal-Bx,MJXc-TeX-cal-Bw}
+.MJXc-TeX-frak-R {font-family: MJXc-TeX-frak-R,MJXc-TeX-frak-Rw}
+.MJXc-TeX-frak-B {font-family: MJXc-TeX-frak-B,MJXc-TeX-frak-Bx,MJXc-TeX-frak-Bw}
+.MJXc-TeX-math-BI {font-family: MJXc-TeX-math-BI,MJXc-TeX-math-BIx,MJXc-TeX-math-BIw}
+.MJXc-TeX-sans-R {font-family: MJXc-TeX-sans-R,MJXc-TeX-sans-Rw}
+.MJXc-TeX-sans-B {font-family: MJXc-TeX-sans-B,MJXc-TeX-sans-Bx,MJXc-TeX-sans-Bw}
+.MJXc-TeX-sans-I {font-family: MJXc-TeX-sans-I,MJXc-TeX-sans-Ix,MJXc-TeX-sans-Iw}
+.MJXc-TeX-script-R {font-family: MJXc-TeX-script-R,MJXc-TeX-script-Rw}
+.MJXc-TeX-type-R {font-family: MJXc-TeX-type-R,MJXc-TeX-type-Rw}
+.MJXc-TeX-cal-R {font-family: MJXc-TeX-cal-R,MJXc-TeX-cal-Rw}
+.MJXc-TeX-main-B {font-family: MJXc-TeX-main-B,MJXc-TeX-main-Bx,MJXc-TeX-main-Bw}
+.MJXc-TeX-main-I {font-family: MJXc-TeX-main-I,MJXc-TeX-main-Ix,MJXc-TeX-main-Iw}
+.MJXc-TeX-main-R {font-family: MJXc-TeX-main-R,MJXc-TeX-main-Rw}
+.MJXc-TeX-math-I {font-family: MJXc-TeX-math-I,MJXc-TeX-math-Ix,MJXc-TeX-math-Iw}
+.MJXc-TeX-size1-R {font-family: MJXc-TeX-size1-R,MJXc-TeX-size1-Rw}
+.MJXc-TeX-size2-R {font-family: MJXc-TeX-size2-R,MJXc-TeX-size2-Rw}
+.MJXc-TeX-size3-R {font-family: MJXc-TeX-size3-R,MJXc-TeX-size3-Rw}
+.MJXc-TeX-size4-R {font-family: MJXc-TeX-size4-R,MJXc-TeX-size4-Rw}
+.MJXc-TeX-vec-R {font-family: MJXc-TeX-vec-R,MJXc-TeX-vec-Rw}
+.MJXc-TeX-vec-B {font-family: MJXc-TeX-vec-B,MJXc-TeX-vec-Bx,MJXc-TeX-vec-Bw}
+@font-face {font-family: MJXc-TeX-ams-R; src: local('MathJax_AMS'), local('MathJax_AMS-Regular')}
+@font-face {font-family: MJXc-TeX-ams-Rw; src /*1*/: url('https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.4/fonts/HTML-CSS/TeX/eot/MathJax_AMS-Regular.eot'); src /*2*/: url('https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.4/fonts/HTML-CSS/TeX/woff/MathJax_AMS-Regular.woff') format('woff'), url('https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.4/fonts/HTML-CSS/TeX/otf/MathJax_AMS-Regular.otf') format('opentype')}
+@font-face {font-family: MJXc-TeX-cal-B; src: local('MathJax_Caligraphic Bold'), local('MathJax_Caligraphic-Bold')}
+@font-face {font-family: MJXc-TeX-cal-Bx; src: local('MathJax_Caligraphic'); font-weight: bold}
+@font-face {font-family: MJXc-TeX-cal-Bw; src /*1*/: url('https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.4/fonts/HTML-CSS/TeX/eot/MathJax_Caligraphic-Bold.eot'); src /*2*/: url('https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.4/fonts/HTML-CSS/TeX/woff/MathJax_Caligraphic-Bold.woff') format('woff'), url('https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.4/fonts/HTML-CSS/TeX/otf/MathJax_Caligraphic-Bold.otf') format('opentype')}
+@font-face {font-family: MJXc-TeX-frak-R; src: local('MathJax_Fraktur'), local('MathJax_Fraktur-Regular')}
+@font-face {font-family: MJXc-TeX-frak-Rw; src /*1*/: url('https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.4/fonts/HTML-CSS/TeX/eot/MathJax_Fraktur-Regular.eot'); src /*2*/: url('https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.4/fonts/HTML-CSS/TeX/woff/MathJax_Fraktur-Regular.woff') format('woff'), url('https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.4/fonts/HTML-CSS/TeX/otf/MathJax_Fraktur-Regular.otf') format('opentype')}
+@font-face {font-family: MJXc-TeX-frak-B; src: local('MathJax_Fraktur Bold'), local('MathJax_Fraktur-Bold')}
+@font-face {font-family: MJXc-TeX-frak-Bx; src: local('MathJax_Fraktur'); font-weight: bold}
+@font-face {font-family: MJXc-TeX-frak-Bw; src /*1*/: url('https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.4/fonts/HTML-CSS/TeX/eot/MathJax_Fraktur-Bold.eot'); src /*2*/: url('https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.4/fonts/HTML-CSS/TeX/woff/MathJax_Fraktur-Bold.woff') format('woff'), url('https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.4/fonts/HTML-CSS/TeX/otf/MathJax_Fraktur-Bold.otf') format('opentype')}
+@font-face {font-family: MJXc-TeX-math-BI; src: local('MathJax_Math BoldItalic'), local('MathJax_Math-BoldItalic')}
+@font-face {font-family: MJXc-TeX-math-BIx; src: local('MathJax_Math'); font-weight: bold; font-style: italic}
+@font-face {font-family: MJXc-TeX-math-BIw; src /*1*/: url('https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.4/fonts/HTML-CSS/TeX/eot/MathJax_Math-BoldItalic.eot'); src /*2*/: url('https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.4/fonts/HTML-CSS/TeX/woff/MathJax_Math-BoldItalic.woff') format('woff'), url('https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.4/fonts/HTML-CSS/TeX/otf/MathJax_Math-BoldItalic.otf') format('opentype')}
+@font-face {font-family: MJXc-TeX-sans-R; src: local('MathJax_SansSerif'), local('MathJax_SansSerif-Regular')}
+@font-face {font-family: MJXc-TeX-sans-Rw; src /*1*/: url('https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.4/fonts/HTML-CSS/TeX/eot/MathJax_SansSerif-Regular.eot'); src /*2*/: url('https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.4/fonts/HTML-CSS/TeX/woff/MathJax_SansSerif-Regular.woff') format('woff'), url('https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.4/fonts/HTML-CSS/TeX/otf/MathJax_SansSerif-Regular.otf') format('opentype')}
+@font-face {font-family: MJXc-TeX-sans-B; src: local('MathJax_SansSerif Bold'), local('MathJax_SansSerif-Bold')}
+@font-face {font-family: MJXc-TeX-sans-Bx; src: local('MathJax_SansSerif'); font-weight: bold}
+@font-face {font-family: MJXc-TeX-sans-Bw; src /*1*/: url('https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.4/fonts/HTML-CSS/TeX/eot/MathJax_SansSerif-Bold.eot'); src /*2*/: url('https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.4/fonts/HTML-CSS/TeX/woff/MathJax_SansSerif-Bold.woff') format('woff'), url('https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.4/fonts/HTML-CSS/TeX/otf/MathJax_SansSerif-Bold.otf') format('opentype')}
+@font-face {font-family: MJXc-TeX-sans-I; src: local('MathJax_SansSerif Italic'), local('MathJax_SansSerif-Italic')}
+@font-face {font-family: MJXc-TeX-sans-Ix; src: local('MathJax_SansSerif'); font-style: italic}
+@font-face {font-family: MJXc-TeX-sans-Iw; src /*1*/: url('https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.4/fonts/HTML-CSS/TeX/eot/MathJax_SansSerif-Italic.eot'); src /*2*/: url('https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.4/fonts/HTML-CSS/TeX/woff/MathJax_SansSerif-Italic.woff') format('woff'), url('https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.4/fonts/HTML-CSS/TeX/otf/MathJax_SansSerif-Italic.otf') format('opentype')}
+@font-face {font-family: MJXc-TeX-script-R; src: local('MathJax_Script'), local('MathJax_Script-Regular')}
+@font-face {font-family: MJXc-TeX-script-Rw; src /*1*/: url('https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.4/fonts/HTML-CSS/TeX/eot/MathJax_Script-Regular.eot'); src /*2*/: url('https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.4/fonts/HTML-CSS/TeX/woff/MathJax_Script-Regular.woff') format('woff'), url('https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.4/fonts/HTML-CSS/TeX/otf/MathJax_Script-Regular.otf') format('opentype')}
+@font-face {font-family: MJXc-TeX-type-R; src: local('MathJax_Typewriter'), local('MathJax_Typewriter-Regular')}
+@font-face {font-family: MJXc-TeX-type-Rw; src /*1*/: url('https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.4/fonts/HTML-CSS/TeX/eot/MathJax_Typewriter-Regular.eot'); src /*2*/: url('https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.4/fonts/HTML-CSS/TeX/woff/MathJax_Typewriter-Regular.woff') format('woff'), url('https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.4/fonts/HTML-CSS/TeX/otf/MathJax_Typewriter-Regular.otf') format('opentype')}
+@font-face {font-family: MJXc-TeX-cal-R; src: local('MathJax_Caligraphic'), local('MathJax_Caligraphic-Regular')}
+@font-face {font-family: MJXc-TeX-cal-Rw; src /*1*/: url('https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.4/fonts/HTML-CSS/TeX/eot/MathJax_Caligraphic-Regular.eot'); src /*2*/: url('https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.4/fonts/HTML-CSS/TeX/woff/MathJax_Caligraphic-Regular.woff') format('woff'), url('https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.4/fonts/HTML-CSS/TeX/otf/MathJax_Caligraphic-Regular.otf') format('opentype')}
+@font-face {font-family: MJXc-TeX-main-B; src: local('MathJax_Main Bold'), local('MathJax_Main-Bold')}
+@font-face {font-family: MJXc-TeX-main-Bx; src: local('MathJax_Main'); font-weight: bold}
+@font-face {font-family: MJXc-TeX-main-Bw; src /*1*/: url('https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.4/fonts/HTML-CSS/TeX/eot/MathJax_Main-Bold.eot'); src /*2*/: url('https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.4/fonts/HTML-CSS/TeX/woff/MathJax_Main-Bold.woff') format('woff'), url('https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.4/fonts/HTML-CSS/TeX/otf/MathJax_Main-Bold.otf') format('opentype')}
+@font-face {font-family: MJXc-TeX-main-I; src: local('MathJax_Main Italic'), local('MathJax_Main-Italic')}
+@font-face {font-family: MJXc-TeX-main-Ix; src: local('MathJax_Main'); font-style: italic}
+@font-face {font-family: MJXc-TeX-main-Iw; src /*1*/: url('https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.4/fonts/HTML-CSS/TeX/eot/MathJax_Main-Italic.eot'); src /*2*/: url('https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.4/fonts/HTML-CSS/TeX/woff/MathJax_Main-Italic.woff') format('woff'), url('https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.4/fonts/HTML-CSS/TeX/otf/MathJax_Main-Italic.otf') format('opentype')}
+@font-face {font-family: MJXc-TeX-main-R; src: local('MathJax_Main'), local('MathJax_Main-Regular')}
+@font-face {font-family: MJXc-TeX-main-Rw; src /*1*/: url('https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.4/fonts/HTML-CSS/TeX/eot/MathJax_Main-Regular.eot'); src /*2*/: url('https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.4/fonts/HTML-CSS/TeX/woff/MathJax_Main-Regular.woff') format('woff'), url('https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.4/fonts/HTML-CSS/TeX/otf/MathJax_Main-Regular.otf') format('opentype')}
+@font-face {font-family: MJXc-TeX-math-I; src: local('MathJax_Math Italic'), local('MathJax_Math-Italic')}
+@font-face {font-family: MJXc-TeX-math-Ix; src: local('MathJax_Math'); font-style: italic}
+@font-face {font-family: MJXc-TeX-math-Iw; src /*1*/: url('https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.4/fonts/HTML-CSS/TeX/eot/MathJax_Math-Italic.eot'); src /*2*/: url('https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.4/fonts/HTML-CSS/TeX/woff/MathJax_Math-Italic.woff') format('woff'), url('https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.4/fonts/HTML-CSS/TeX/otf/MathJax_Math-Italic.otf') format('opentype')}
+@font-face {font-family: MJXc-TeX-size1-R; src: local('MathJax_Size1'), local('MathJax_Size1-Regular')}
+@font-face {font-family: MJXc-TeX-size1-Rw; src /*1*/: url('https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.4/fonts/HTML-CSS/TeX/eot/MathJax_Size1-Regular.eot'); src /*2*/: url('https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.4/fonts/HTML-CSS/TeX/woff/MathJax_Size1-Regular.woff') format('woff'), url('https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.4/fonts/HTML-CSS/TeX/otf/MathJax_Size1-Regular.otf') format('opentype')}
+@font-face {font-family: MJXc-TeX-size2-R; src: local('MathJax_Size2'), local('MathJax_Size2-Regular')}
+@font-face {font-family: MJXc-TeX-size2-Rw; src /*1*/: url('https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.4/fonts/HTML-CSS/TeX/eot/MathJax_Size2-Regular.eot'); src /*2*/: url('https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.4/fonts/HTML-CSS/TeX/woff/MathJax_Size2-Regular.woff') format('woff'), url('https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.4/fonts/HTML-CSS/TeX/otf/MathJax_Size2-Regular.otf') format('opentype')}
+@font-face {font-family: MJXc-TeX-size3-R; src: local('MathJax_Size3'), local('MathJax_Size3-Regular')}
+@font-face {font-family: MJXc-TeX-size3-Rw; src /*1*/: url('https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.4/fonts/HTML-CSS/TeX/eot/MathJax_Size3-Regular.eot'); src /*2*/: url('https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.4/fonts/HTML-CSS/TeX/woff/MathJax_Size3-Regular.woff') format('woff'), url('https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.4/fonts/HTML-CSS/TeX/otf/MathJax_Size3-Regular.otf') format('opentype')}
+@font-face {font-family: MJXc-TeX-size4-R; src: local('MathJax_Size4'), local('MathJax_Size4-Regular')}
+@font-face {font-family: MJXc-TeX-size4-Rw; src /*1*/: url('https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.4/fonts/HTML-CSS/TeX/eot/MathJax_Size4-Regular.eot'); src /*2*/: url('https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.4/fonts/HTML-CSS/TeX/woff/MathJax_Size4-Regular.woff') format('woff'), url('https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.4/fonts/HTML-CSS/TeX/otf/MathJax_Size4-Regular.otf') format('opentype')}
+@font-face {font-family: MJXc-TeX-vec-R; src: local('MathJax_Vector'), local('MathJax_Vector-Regular')}
+@font-face {font-family: MJXc-TeX-vec-Rw; src /*1*/: url('https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.4/fonts/HTML-CSS/TeX/eot/MathJax_Vector-Regular.eot'); src /*2*/: url('https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.4/fonts/HTML-CSS/TeX/woff/MathJax_Vector-Regular.woff') format('woff'), url('https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.4/fonts/HTML-CSS/TeX/otf/MathJax_Vector-Regular.otf') format('opentype')}
+@font-face {font-family: MJXc-TeX-vec-B; src: local('MathJax_Vector Bold'), local('MathJax_Vector-Bold')}
+@font-face {font-family: MJXc-TeX-vec-Bx; src: local('MathJax_Vector'); font-weight: bold}
+@font-face {font-family: MJXc-TeX-vec-Bw; src /*1*/: url('https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.4/fonts/HTML-CSS/TeX/eot/MathJax_Vector-Bold.eot'); src /*2*/: url('https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.4/fonts/HTML-CSS/TeX/woff/MathJax_Vector-Bold.woff') format('woff'), url('https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.4/fonts/HTML-CSS/TeX/otf/MathJax_Vector-Bold.otf') format('opentype')}
+</style><style></style></head>
+
+<body id="top" data-spy="scroll" data-offset="70" data-target="#TableOfContents" class="dark"><div role="dialog" aria-live="polite" aria-label="cookieconsent" aria-describedby="cookieconsent:desc" class="cc-window cc-banner cc-type-info cc-theme-classic cc-bottom cc-color-override-459859200  cc-invisible" style="display: none;"><!--googleoff: all--><span id="cookieconsent:desc" class="cc-message">This website uses cookies to ensure you get the best experience on our website. <a aria-label="learn more about cookies" role="button" tabindex="0" class="cc-link" href="https://cookies.insites.com/" target="_blank">Learn more</a></span><div class="cc-compliance"><a aria-label="dismiss cookie message" role="button" tabindex="0" class="cc-btn cc-dismiss">Got it!</a></div><!--googleon: all--></div><div id="MathJax_Message" style="display: none;"></div>
+
+  <aside class="search-results" id="search">
+  <div class="container">
+    <section class="search-header">
+
+      <div class="row no-gutters justify-content-between mb-3">
+        <div class="col-6">
+          <h1>Search</h1>
+        </div>
+        <div class="col-6 col-search-close">
+          <a class="js-search" href="https://jorenjoestar.github.io/post/pixel_art_filtering/#"><i class="fas fa-times-circle text-muted" aria-hidden="true"></i></a>
+        </div>
+      </div>
+
+      <div id="search-box">
+        
+        <input name="q" id="search-query" placeholder="Search..." autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false" type="search">
+        
+      </div>
+
+    </section>
+    <section class="section-search-results">
+
+      <div id="search-hits">
+        
+      </div>
+
+    </section>
+  </div>
+</aside>
+
+
+  
+<nav class="navbar navbar-light fixed-top navbar-expand-lg py-0 compensate-for-scrollbar" id="navbar-main">
+  <div class="container">
+
+    
+      <a class="navbar-brand" href="https://jorenjoestar.github.io/">Gabriel's Virtual Tavern</a>
+      
+      <button type="button" class="navbar-toggler" data-toggle="collapse" data-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
+        <span><i class="fas fa-bars"></i></span>
+      </button>
+      
+
+    
+    <div class="collapse navbar-collapse" id="navbar">
+
+      
+      
+      <ul class="navbar-nav mr-auto">
+        
+
+        
+
+        
+        
+        
+          
+        
+
+        
+        
+        
+        
+        
+        
+          
+          
+          
+            
+          
+          
+        
+
+        <li class="nav-item">
+          <a class="nav-link " href="https://jorenjoestar.github.io/#about"><span>Home</span></a>
+        </li>
+
+        
+        
+
+        
+
+        
+        
+        
+          
+        
+
+        
+        
+        
+        
+        
+        
+          
+          
+          
+            
+          
+          
+        
+
+        <li class="nav-item">
+          <a class="nav-link " href="https://jorenjoestar.github.io/#posts"><span>Posts</span></a>
+        </li>
+
+        
+        
+
+        
+
+        
+        
+        
+          
+        
+
+        
+        
+        
+        
+        
+        
+          
+          
+          
+            
+          
+          
+        
+
+        <li class="nav-item">
+          <a class="nav-link " href="https://jorenjoestar.github.io/#contact"><span>Contact</span></a>
+        </li>
+
+        
+        
+
+      
+      </ul>
+      <ul class="navbar-nav ml-auto">
+      
+
+        
+
+        
+        <li class="nav-item">
+          <a class="nav-link js-search" href="https://jorenjoestar.github.io/post/pixel_art_filtering/#"><i class="fas fa-search" aria-hidden="true"></i></a>
+        </li>
+        
+
+        
+
+        
+        <li class="nav-item">
+          <a class="nav-link js-dark-toggle" href="https://jorenjoestar.github.io/post/pixel_art_filtering/#"><i class="fas fa-sun" aria-hidden="true"></i></a>
+        </li>
+        
+
+      </ul>
+
+    </div>
+  </div>
+</nav>
+
+
+  <article class="article" itemscope="" itemtype="http://schema.org/Article">
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+  
+  
+<div class="article-container pt-3">
+  <h1 itemprop="name">Pixel Art Filtering</h1>
+
+  
+
+  
+    
+
+
+
+<meta content="2021-04-12 19:56:56 +0200 CEST" itemprop="datePublished">
+<meta content="2021-04-12 19:56:56 +0200 CEST" itemprop="dateModified">
+
+<div class="article-metadata">
+
+  
+  
+
+  
+  <span class="article-date">
+    
+    
+      
+    
+    <time>2021-04-12</time>
+  </span>
+  
+
+  
+
+  
+  <span class="middot-divider"></span>
+  <span class="article-reading-time">
+    15 min read
+  </span>
+  
+
+  
+  
+  
+
+  
+  
+  <span class="middot-divider"></span>
+  <span class="article-categories">
+    <i class="fas fa-folder"></i>
+    <a href="https://jorenjoestar.github.io/categories/coding/">coding</a></span>
+  
+
+  
+    
+<div class="share-box" aria-hidden="true">
+  <ul class="share">
+    
+      
+      
+      
+        
+      
+      
+      
+      <li>
+        <a href="https://twitter.com/intent/tweet?url=https://jorenjoestar.github.io/post/pixel_art_filtering/&amp;text=Pixel%20Art%20Filtering" target="_blank" rel="noopener" class="share-btn-twitter">
+          <i class="fab fa-twitter"></i>
+        </a>
+      </li>
+    
+      
+      
+      
+        
+      
+      
+      
+      <li>
+        <a href="https://www.facebook.com/sharer.php?u=https://jorenjoestar.github.io/post/pixel_art_filtering/&amp;t=Pixel%20Art%20Filtering" target="_blank" rel="noopener" class="share-btn-facebook">
+          <i class="fab fa-facebook-f"></i>
+        </a>
+      </li>
+    
+      
+      
+      
+        
+      
+      
+      
+      <li>
+        <a href="mailto:?subject=Pixel%20Art%20Filtering&amp;body=https://jorenjoestar.github.io/post/pixel_art_filtering/" target="_blank" rel="noopener" class="share-btn-email">
+          <i class="fas fa-envelope"></i>
+        </a>
+      </li>
+    
+      
+      
+      
+        
+      
+      
+      
+      <li>
+        <a href="https://www.linkedin.com/shareArticle?url=https://jorenjoestar.github.io/post/pixel_art_filtering/&amp;title=Pixel%20Art%20Filtering" target="_blank" rel="noopener" class="share-btn-linkedin">
+          <i class="fab fa-linkedin-in"></i>
+        </a>
+      </li>
+    
+      
+      
+      
+        
+      
+      
+      
+      <li>
+        <a href="https://reddit.com/submit?url=https://jorenjoestar.github.io/post/pixel_art_filtering/&amp;title=Pixel%20Art%20Filtering" target="_blank" rel="noopener" class="share-btn-reddit">
+          <i class="fab fa-reddit-alien"></i>
+        </a>
+      </li>
+    
+  </ul>
+</div>
+
+
+  
+
+</div>
+
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+</div>
+
+
+
+  <div class="article-container">
+
+    <div class="article-style" itemprop="articleBody">
+      
+
+
+
+
+
+<figure>
+
+  <a data-fancybox="" href="./Pixel Art Filtering _ Gabriel&#39;s Virtual Tavern_files/pixel_art_filtering.png">
+
+<img src="./Pixel Art Filtering _ Gabriel&#39;s Virtual Tavern_files/pixel_art_filtering.png">
+</a>
+
+
+<figcaption data-pre="Figure " data-post=":">
+  <h4>An example of non integer scaling of pixel art.</h4>
+  
+</figcaption>
+
+</figure>
+
+<h1 id="overview">Overview</h1>
+<p>Pixel art is living a beautiful renaissance these last years, with more and more studios embracing its visuals and more artists going back to this unique way of describing visuals in a game.<!-- raw HTML omitted --></p>
+<p>One of the most annoying problem we are seeing, especially since we don’t have all the CRT TVs that ‘apply their filters’, is the pixel ‘shimmering’ happening when scaling or moving a pixel art image with non-integer values.</p>
+<p>This article aims to be a light introduction to the problem and more a practical testbed to experiment with filtering. I found that just using Shadertoy was not enough, and I would like to give programmers a more advanced testbed that they can modify to improve their games!</p>
+<h1 id="summarytldr">Summary/TLDR</h1>
+<p>First of all we will state what is the problem we are trying to solve, even though enough posts already talked about that.
+There is an intuition that is at the base of all the filters, so it is important to have that in mind.</p>
+<p>Then we will go through each filter I found around, with a simple explanation and link to the original article and code. Hopefully it will be easy to follow!</p>
+<p>Finally some informations about the included source code, so you can experiment with Pixel Art Filtering.</p>
+<p>Enjoy!</p>
+<h1 id="the-problem">The Problem</h1>
+<p>What we are trying to fix is to <strong>find the relationship between pixel on the screen and pixel of the texture, or texels, to perceptually preserve the original texture appearance</strong>.<!-- raw HTML omitted --></p>
+<p>One key component here is that we want to apply any kind of transform to the <em>sprite/mesh</em> that will use this texture and still preserve the texture appearance.<!-- raw HTML omitted -->
+Something that can be done withouth further venturing into this realm is to use both integer-only camera movement increments, and scale to only integer number. This works only for sprite based games, and it can suffice if you don’t add any zoom or rotation to the game.<!-- raw HTML omitted -->
+Many indie games, that are beautifully 2D and sprite based, can simply do that if no zoom (thus scaling) or rotation is applied.</p>
+<p>But if you are wanting to add something more dynamic then it can become a problem!</p>
+<h2 id="examples-samurai-showdown-and-children-of-morta">Examples: Samurai Showdown and Children of Morta</h2>
+<p>Already back in the day scaling and rotation were a problem, and artifacts were visible.<!-- raw HTML omitted -->
+I can think of Samurai Showdown games when zooming out the camera, and in the quick action of the game, despite the purposely quick zoom, you can see pixel shimmering around.</p>
+<p>A more recent example, that received a lot of attention from <a href="https://hero.handmade.network/episode/chat/chat018/">Handmade Hero</a>, is <a href="https://childrenofmorta.com/">Children of Morta</a> (very nice game, go and play it if you haven’t!).<!-- raw HTML omitted --></p>
+<p><strong>Disclaimer: it is not my intention to talk bad about the game, just to show an example that already suffered for this problem, and maybe, at the end of the article, have a testbed to try different solutions!</strong></p>
+<p>As you can see also from videos of the game, zooming out (especially done with a slow speed) show the pixel shimmering that causes the problem.</p>
+<p>For some (unknown to me) reason, some shaders use the term ‘Fat Pixel’ to refer to this problem, and it will help you finding some solutions on Shadertoy as well!</p>
+<h2 id="pixels-and-texels-and-fat-pixels">Pixels and Texels (and Fat Pixels)</h2>
+<p>To simplify the problem, we will look at sprite based games, so no 3D rotations, but the solution can be generalized to 3D as well.</p>
+<p>I found <a href="https://colececil.io/blog/2017/scaling-pixel-art-without-destroying-it/">this article</a> to have the easiest explanation of the problem we are trying to solve, but I will restate it so it is clear visually inside this article as well.</p>
+<p>The appearance we want to preserve is the one of a Pixel Art texture, so we want pixel of the texture, that we will call <strong>Texels</strong> to be distinguishable from each other.<!-- raw HTML omitted -->
+We thus need to apply some sort of filtering to the texture when rendering it on the screen.</p>
+<p>Let’s see a simple case: an integer scale:</p>
+
+
+
+
+
+
+<figure>
+
+  <a data-fancybox="" href="./Pixel Art Filtering _ Gabriel&#39;s Virtual Tavern_files/pixel_art_scaling_01.png">
+
+<img src="./Pixel Art Filtering _ Gabriel&#39;s Virtual Tavern_files/pixel_art_scaling_01.png">
+</a>
+
+
+<figcaption data-pre="Figure " data-post=":">
+  <h4>2X Scale.</h4>
+  
+</figcaption>
+
+</figure>
+
+<p>Here is clear that the pixels will be 1 to 1 with the texels, thus maintaining the pixel art visuals. <!-- raw HTML omitted --></p>
+<p><strong>NOTE</strong>: using <strong>bilinear</strong> will add blurriness at the edges though, so normally integer scaling and translation need a <strong>neighbour/nearest</strong> filter.</p>
+<p>And now let’s see a non integer scale with some translation applied as well:</p>
+
+
+
+
+
+
+<figure>
+
+  <a data-fancybox="" href="./Pixel Art Filtering _ Gabriel&#39;s Virtual Tavern_files/pixel_art_scaling_02.png">
+
+<img src="./Pixel Art Filtering _ Gabriel&#39;s Virtual Tavern_files/pixel_art_scaling_02.png">
+</a>
+
+
+<figcaption data-pre="Figure " data-post=":">
+  <h4>1.5X Scale and Translation.</h4>
+  
+</figcaption>
+
+</figure>
+
+<p>The situation is worst. Some pixels are <strong>full</strong> while some others are <strong>edges</strong>. I tried to highlight the original texture (a simple quad) with grey outline and color the pixels in the fully filled pixels.<!-- raw HTML omitted --></p>
+<p>We see that only 4 pixels are fully colored, the others all need some sort of filter for the edges.</p>
+<p>Finally, some scale and rotation as well:</p>
+
+
+
+
+
+
+<figure>
+
+  <a data-fancybox="" href="./Pixel Art Filtering _ Gabriel&#39;s Virtual Tavern_files/pixel_art_scaling_03.png">
+
+<img src="./Pixel Art Filtering _ Gabriel&#39;s Virtual Tavern_files/pixel_art_scaling_03.png">
+</a>
+
+
+<figcaption data-pre="Figure " data-post=":">
+  <h4>1.5X Scale, Translation and Rotation.</h4>
+  
+</figcaption>
+
+</figure>
+
+<p>This is the most difficult situation. Only 3 pixels are full and everything else needs a proper edge management.</p>
+<p>It is clear (I hope!) that using only <strong>bilinear</strong> filter is not enough: the fact that each pixel can always take up 4 samples smudges everything, and we lose exactly what we want: sharp pixel art!</p>
+<p>Same for <strong>neighbour/nearest</strong>: on fully contained pixels-in-texels it works, but on edges it is straight wrong. This causes non-square texels to fill the image.</p>
+<p><strong>We need a combination of both!</strong></p>
+<h1 id="the-intuition">The Intuition</h1>
+<p>The idea behind the filtering is simple: apply <strong>neighbour/nearest</strong> filter on pixels that are fully inside a texel, and use <strong>bilinear</strong> with custom weights at the edges!</p>
+<p>This is what is all about.<!-- raw HTML omitted --></p>
+<p>The tricky part is to come out with some custom weights for the bilinear filter to work out, and that is why there are so many different filters.</p>
+<p>We will now see the different filters included in the testbed.
+Nothing that I wrote, so I will include links to the original material and you can see the awesomeness of the authors!</p>
+<h1 id="the-filters">The Filters</h1>
+<p>Here we analyze the different filters proposed and separate their code.
+All the shaders are into the <strong>DataDrivenRendering/data/articles/PixelArtFiltering/pixel_art_filtering.hfx</strong> file.</p>
+<p><strong>NOTE!</strong>: textures are sampled with Bilinear filtering and Alpha Blending is enabled, so that edges can be smoother. This is very important for the final results!</p>
+<p>All the filters will give back a modified UV that will leverage the bilinear sampling.</p>
+<h2 id="nearest">Nearest</h2>
+<p>Even though is not a part of the ‘solution’, it is interesting to see how we can obtain manually the nearest filter coordinates, despite having enabled bilinear filtering.</p>
+<p>Taken directly from the <a href="https://www.khronos.org/registry/OpenGL/specs/gl/glspec46.core.pdf">OpenGL Specification</a> (page 281):</p>
+
+
+
+
+
+
+<figure>
+
+  <a data-fancybox="" href="./Pixel Art Filtering _ Gabriel&#39;s Virtual Tavern_files/opengl_nearest_formula.png">
+
+<img src="./Pixel Art Filtering _ Gabriel&#39;s Virtual Tavern_files/opengl_nearest_formula.png">
+</a>
+
+
+<figcaption data-pre="Figure " data-post=":">
+  <h4>OpenGL nearest formula.</h4>
+  
+</figcaption>
+
+</figure>
+
+<p>In the footer, the idea we are using is explained:</p>
+<blockquote>
+<p>Implementations may instead round the texture layer using the nearly equivalent computation |value + 1/2|.</p>
+</blockquote>
+<p>We need to search the Manhattan distance from the texel center, thus using <code>floor(pixel) + 0.5</code> works perfectly.</p>
+<pre tabindex="0"><code class="hljs nginx"><span class="hljs-attribute">vec2</span> uv_nearest( vec2 uv, ivec2 texture_size ) {
+    <span class="hljs-attribute">vec2</span> pixel = uv * texture_size;
+    <span class="hljs-attribute">pixel</span> = floor(pixel) + .<span class="hljs-number">5</span>;
+
+    <span class="hljs-attribute">return</span> pixel / texture_size;
+}
+</code></pre><h2 id="csantos">CSantos</h2>
+<p>Claudio Santos (<a href="https://github.com/csantosbh">github</a>) in his blog already in 2014 tackled the problem, as we can see from the following blog posts:</p>
+<ul>
+<li><a href="https://csantosbh.wordpress.com/2014/01/25/manual-texture-filtering-for-pixelated-games-in-webgl/">manual-texture-filtering-for-pixelated-games-in-webgl</a></li>
+<li><a href="https://csantosbh.wordpress.com/2014/02/05/automatically-detecting-the-texture-filter-threshold-for-pixelated-magnifications/">automatically-detecting-the-texture-filter-threshold-for-pixelated-magnifications</a></li>
+</ul>
+<p>He was searching for a way to modify the UV closer to the <strong>texel seam</strong>, and came up with his own way.</p>
+<blockquote>
+<p>In order to have smooth transitions between texels, this offset should be replaced by a function that increases linearly at the margin of the texel, remains constant at its “blocky” region (with a value of 0.5) and then increases to 1.0 on the opposite margin of the texel.</p>
+</blockquote>
+<p>He mathematically found the 2 functions to add close to the ‘minimum’ seam (towards the 0 of the texel) and towards the ‘maximum’ seam (towards 1):</p>
+<ul>
+<li>clamp( .5 / alpha * pixels_fract, 0, .5 )</li>
+<li>clamp( .5 / alpha * (pixels_fract - 1) + .5, 0, .5 )</li>
+</ul>
+<p>In the second blog post, he found also that using <strong>fwidth</strong> on the texel coordinates give you a resolution independent value that can be used to have a more consistent look:</p>
+<pre tabindex="0"><code class="hljs properties"><span class="hljs-attr">vec2</span> <span class="hljs-string">uv_cstantos( vec2 uv, vec2 res ) {</span>
+    <span class="hljs-attr">vec2</span> <span class="hljs-string">pixels = uv * res;</span>
+
+    <span class="hljs-meta">//</span> <span class="hljs-string">Updated to the final article</span>
+    <span class="hljs-attr">vec2</span> <span class="hljs-string">alpha = 0.7 * fwidth(pixels);</span>
+    <span class="hljs-attr">vec2</span> <span class="hljs-string">pixels_fract = fract(pixels);</span>
+    <span class="hljs-attr">vec2</span> <span class="hljs-string">pixels_diff = clamp( .5 / alpha * pixels_fract, 0, .5 ) +</span>
+                       <span class="hljs-meta">clamp(</span> <span class="hljs-string">.5 / alpha * (pixels_fract - 1) + .5, 0, .5 );</span>
+    <span class="hljs-attr">pixels</span> = <span class="hljs-string">floor(pixels) + pixels_diff;</span>
+    <span class="hljs-attr">return</span> <span class="hljs-string">pixels / res;</span>
+<span class="hljs-attr">}</span>
+</code></pre><p>We will see in many other filters that the usage of <a href="https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/fwidth.xhtml">fwidth</a> is crucial to work with resolution independent filtering.</p>
+<p>For more informations on <strong>fwidth</strong>:</p>
+<ul>
+<li><a href="https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/fwidth.xhtml">https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/fwidth.xhtml</a></li>
+<li><a href="https://computergraphics.stackexchange.com/questions/61/what-is-fwidth-and-how-does-it-work">https://computergraphics.stackexchange.com/questions/61/what-is-fwidth-and-how-does-it-work</a></li>
+<li><a href="https://www.ronja-tutorials.com/post/046-fwidth/">https://www.ronja-tutorials.com/post/046-fwidth/</a></li>
+</ul>
+<h2 id="cole-cecil">Cole Cecil</h2>
+<p>In a similar way, Cole Cecil in <a href="https://colececil.io/blog/2017/scaling-pixel-art-without-destroying-it/">this article</a> creates two different functions that define the steepness of the function that interpolation amount.</p>
+<pre tabindex="0"><code class="hljs cpp"><span class="hljs-function">vec2 <span class="hljs-title">uv_colececil</span><span class="hljs-params">( vec2 uv, ivec2 texture_size )</span> </span>{
+    vec2 pixel = uv * texture_size;
+
+    vec2 locationWithinTexel = fract(pixel);
+    <span class="hljs-comment">// Calculate the inverse of texels_per_pixel so we multiply here instead of dividing.</span>
+    vec2 interpolationAmount = clamp(locationWithinTexel * locals.texels_per_pixel, <span class="hljs-number">0</span>, <span class="hljs-number">.5</span>) +
+                               clamp((locationWithinTexel - <span class="hljs-number">1</span>) * locals.texels_per_pixel + <span class="hljs-number">.5</span>, <span class="hljs-number">0</span>, <span class="hljs-number">.5</span>);
+
+    <span class="hljs-keyword">return</span> (<span class="hljs-built_in">floor</span>(pixel) + interpolationAmount) / texture_size;
+}
+</code></pre><p>The ‘texels_per_pixel’ variable is calculated on the CPU, and it is basically a ratio between the camera render target size and the screen size, including the possible zoom of it.</p>
+<p>In the original post from the author it can be found in the comment section.</p>
+<p>I write it down here as reference:</p>
+<pre tabindex="0"><code class="hljs cpp"><span class="hljs-function"><span class="hljs-keyword">static</span> f32 <span class="hljs-title">calculate_texels_per_pixel</span><span class="hljs-params">( f32 camera_width, f32 camera_height, f32 camera_zoom, f32 screen_width, f32 screen_height )</span> </span>{
+    f32 texels_per_pixel = <span class="hljs-number">1.f</span>;
+
+    <span class="hljs-keyword">const</span> f32 camera_aspect_ratio = camera_width / camera_height;
+    <span class="hljs-keyword">const</span> f32 screen_aspect_ratio = screen_width / screen_height;
+
+    <span class="hljs-keyword">if</span> ( screen_aspect_ratio &gt; camera_aspect_ratio ) {
+        texels_per_pixel = camera_height / screen_height;
+    }
+    <span class="hljs-keyword">else</span> {
+        texels_per_pixel = camera_width / screen_width;
+    }
+    <span class="hljs-comment">// Zoom is inverted compared to ColeCecil post, so we keep same calculation here but in the shader we multiply.</span>
+    <span class="hljs-keyword">return</span> texels_per_pixel / camera_zoom;
+}
+</code></pre><h2 id="rnavega">RNavega</h2>
+<p>The last filter accompained by a blog post of some sort is from Rodrigo Navega, in the <a href="https://love2d.org/forums/viewtopic.php?t=89442">Love2D forum</a> and the <a href="https://github.com/RNavega/PixelArt-Antialias-Love2D/blob/master/main.lua">shader code</a>.</p>
+<p>After the previous filters the mindset is similar, so showing the code should be simpler. We are still calculating the weights based on the distance from the edge, the difference here is that it outputs also an alpha value to be used in conjunction with the texture alpha.</p>
+<pre tabindex="0"><code class="hljs cpp"><span class="hljs-comment">// The default size, in pixels, of the antialiasing filter. The default is 1.0 for a mathematically perfect</span>
+<span class="hljs-comment">// antialias. But if you want, you can increase this to 1.5, 2.0, 3.0 and such to force a bigger antialias zone</span>
+<span class="hljs-comment">// than normal, using more screen pixels.</span>
+
+<span class="hljs-keyword">float</span> SMOOTH_SIZE = locals.filter_width;
+<span class="hljs-keyword">float</span> _HALF_SMOOTH = SMOOTH_SIZE / <span class="hljs-number">2.0</span>;
+
+<span class="hljs-function">vec2 <span class="hljs-title">uv_aa_dist</span><span class="hljs-params">( vec2 uv, vec2 res, out <span class="hljs-keyword">float</span> alpha )</span> </span>{
+
+    vec2 pixels = uv * res;
+
+    <span class="hljs-keyword">const</span> vec2 nearest_edge = <span class="hljs-built_in">floor</span>( pixels + <span class="hljs-number">0.5</span> );
+    <span class="hljs-keyword">const</span> vec2 edge_distance = (pixels - nearest_edge) * locals.camera_scale;
+    <span class="hljs-keyword">const</span> vec2 factor = clamp( edge_distance / vec2(_HALF_SMOOTH), <span class="hljs-number">-1.0</span>, <span class="hljs-number">1.0</span> );
+
+    pixels = (nearest_edge + <span class="hljs-number">0.5</span> * factor );
+
+    <span class="hljs-keyword">const</span> vec2 center_offset = <span class="hljs-built_in">abs</span>(uv - vec2(<span class="hljs-number">0.5</span>));
+    vec2 alpha_distance = ((center_offset - <span class="hljs-number">0.5</span>) * res * locals.camera_scale + _HALF_SMOOTH) / SMOOTH_SIZE;
+    alpha_distance = clamp( alpha_distance, <span class="hljs-number">0</span>, <span class="hljs-number">1</span> );
+    alpha = <span class="hljs-number">1.0</span> - max(alpha_distance.x, alpha_distance.y);
+
+    <span class="hljs-keyword">return</span> pixels / res;
+}
+</code></pre><p>Remembering that we are using alpha blending as well, we can use this value to output a smoother edge.<!-- raw HTML omitted -->
+Also to note that the smooth size can be driven by the filter width in the demo, to experiment with the visuals.</p>
+<p>Here the factor is calculated based on the edge distance from the center texel and clamped between -1 and 1.</p>
+<h2 id="klems">Klems</h2>
+<p>Klems decide to use a smoothstep based <a href="https://www.shadertoy.com/view/MllBWf">approach</a> in the shader:</p>
+<pre tabindex="0"><code class="hljs properties"><span class="hljs-attr">vec2</span> <span class="hljs-string">uv_klems( vec2 uv, ivec2 texture_size ) {</span>
+            
+    <span class="hljs-attr">vec2</span> <span class="hljs-string">pixels = uv * texture_size + 0.5;</span>
+    
+    <span class="hljs-meta">//</span> <span class="hljs-string">tweak fractional value of the texture coordinate</span>
+    <span class="hljs-attr">vec2</span> <span class="hljs-string">fl = floor(pixels);</span>
+    <span class="hljs-attr">vec2</span> <span class="hljs-string">fr = fract(pixels);</span>
+    <span class="hljs-attr">vec2</span> <span class="hljs-string">aa = fwidth(pixels) * 0.75;</span>
+
+    <span class="hljs-attr">fr</span> = <span class="hljs-string">smoothstep( vec2(0.5) - aa, vec2(0.5) + aa, fr);</span>
+    
+    <span class="hljs-attr">return</span> <span class="hljs-string">(fl + fr - 0.5) / texture_size;</span>
+<span class="hljs-attr">}</span>
+</code></pre><p>It again use <strong>fwidth</strong> approach to calculate the factor, and use the fractional value to smoothstep between the 2 values that will be used near the edges.</p>
+<h2 id="inigo-quilez-3">Inigo Quilez (&lt;3)</h2>
+<p>From the comments in the <a href="https://www.shadertoy.com/view/MllBWf">Klems filter</a>, the incredible Inigo comes up with another filter:</p>
+<pre tabindex="0"><code class="hljs nginx"><span class="hljs-attribute">vec2</span> uv_iq( vec2 uv, ivec2 texture_size ) {
+    <span class="hljs-attribute">vec2</span> pixel = uv * texture_size;
+
+    <span class="hljs-attribute">vec2</span> seam = floor(pixel + <span class="hljs-number">0</span>.<span class="hljs-number">5</span>);
+    <span class="hljs-attribute">vec2</span> dudv = fwidth(pixel);
+    <span class="hljs-attribute">pixel</span> = seam + clamp( (pixel - seam) / dudv, -<span class="hljs-number">0</span>.<span class="hljs-number">5</span>, <span class="hljs-number">0</span>.<span class="hljs-number">5</span>);
+    
+    <span class="hljs-attribute">return</span> pixel / texture_size;
+}
+</code></pre><p>The variable names are quite explicit, but the idea is to again start from the seam of the texture and modify the final uv based on the distance from the seam.</p>
+<h2 id="blocky">Blocky</h2>
+<p>This is very similar to IQ filter, just using different math:</p>
+<pre tabindex="0"><code class="hljs cs"><span class="hljs-comment">// https://www.shadertoy.com/view/ltfXWS</span>
+<span class="hljs-comment">// samples from a linearly-interpolated texture to produce an appearance similar to</span>
+<span class="hljs-comment">// nearest-neighbor interpolation, but with resolution-dependent antialiasing</span>
+<span class="hljs-comment">// </span>
+<span class="hljs-comment">// this function's interface is exactly the same as texture's, aside from the 'res'</span>
+<span class="hljs-comment">// parameter, which represents the resolution of the texture 'tex'.</span>
+<span class="hljs-comment">// basically calculates the lengths of (a.x, b.x) and (a.y, b.y) at the same time</span>
+<span class="hljs-function">vec2 <span class="hljs-title">v2len</span>(<span class="hljs-params"><span class="hljs-keyword">in</span> vec2 a, <span class="hljs-keyword">in</span> vec2 b</span>)</span> {
+    <span class="hljs-keyword">return</span> sqrt( a * a + b * b );
+}
+
+<span class="hljs-function">vec2 <span class="hljs-title">uv_blocky</span>(<span class="hljs-params"> <span class="hljs-keyword">in</span> vec2 uv, <span class="hljs-keyword">in</span> ivec2 res </span>)</span> {
+    vec2 pixels = uv * res; <span class="hljs-comment">// enter texel coordinate space.</span>
+    
+    vec2 seam = floor(pixels + <span class="hljs-number">.5</span>); <span class="hljs-comment">// find the nearest seam between texels.</span>
+    
+    <span class="hljs-comment">// here's where the magic happens. scale up the distance to the seam so that all</span>
+    <span class="hljs-comment">// interpolation happens in a one-pixel-wide space.</span>
+    pixels = (pixels - seam) / v2len(dFdx(pixels), dFdy(pixels)) + seam;
+    
+    pixels = clamp(pixels, seam - <span class="hljs-number">.5</span>, seam + <span class="hljs-number">.5</span>); <span class="hljs-comment">// clamp to the center of a texel.</span>
+    
+    <span class="hljs-keyword">return</span> pixels / res;<span class="hljs-comment">// convert back to 0..1 coordinate space.</span>
+}
+</code></pre><h2 id="bgolus-anti-aliasing">BGolus: Anti-Aliasing</h2>
+<p><a href="https://twitter.com/bgolus/">Ben Golus</a> also wrote his own implementation <a href="https://www.shadertoy.com/view/ltBfRD">here</a> with two variations as well!</p>
+<pre tabindex="0"><code class="hljs nginx"><span class="hljs-attribute">vec2</span> uv_aa_linear( vec2 uv, vec2 res, float width ) {
+    <span class="hljs-attribute">vec2</span> pixels = uv * res;
+    
+    <span class="hljs-attribute">vec2</span> pixels_floor = floor(pixels + <span class="hljs-number">0</span>.<span class="hljs-number">5</span>);
+    <span class="hljs-attribute">vec2</span> pixels_fract = clamp( (pixels - pixels_floor) / fwidth(pixels) / width, -<span class="hljs-number">0</span>.<span class="hljs-number">5</span>, <span class="hljs-number">0</span>.<span class="hljs-number">5</span>);
+
+    <span class="hljs-attribute">return</span> (pixels_floor + pixel_fract) / res;
+}
+
+<span class="hljs-attribute">vec2</span> uv_aa_smoothstep( vec2 uv, vec2 res, float width ) {
+    <span class="hljs-attribute">vec2</span> pixels = uv * res;
+    
+    <span class="hljs-attribute">vec2</span> pixels_floor = floor(pixels + <span class="hljs-number">0</span>.<span class="hljs-number">5</span>);
+    <span class="hljs-attribute">vec2</span> pixels_fract = fract(pixels + <span class="hljs-number">0</span>.<span class="hljs-number">5</span>);
+    <span class="hljs-attribute">vec2</span> pixels_aa = fwidth(pixels) * width * <span class="hljs-number">0</span>.<span class="hljs-number">5</span>;
+    <span class="hljs-attribute">pixels_fract</span> = smoothstep( vec2(<span class="hljs-number">0</span>.<span class="hljs-number">5</span>) - pixels_aa, vec2(<span class="hljs-number">0</span>.<span class="hljs-number">5</span>) + pixels_aa, pixels_fract );
+    
+    <span class="hljs-attribute">return</span> (pixels_floor + pixels_fract - <span class="hljs-number">0</span>.<span class="hljs-number">5</span>) / res;
+}
+</code></pre><p>They both use a width to define how big is the area covered by the <em>anti-aliasing</em> on the edges, and in the demo it is a tweakable value (default to 1.5).<!-- raw HTML omitted --></p>
+<p>The first variation it scales using <strong>fwidth</strong> but also modifies the value with the width, giving the possibility of a more fine tuned control over the edge appearance <code>(pixels - pixels_floor) / fwidth(pixels) / width</code>. This is a <strong>unique feature</strong> of his filters!</p>
+<p>The second variation has both the smoothstep as a way of filtering the UV based on the distance from the center of the texel, and a fwidth tunable with the width again as value to move the sampling coordinate. Note that if width is 0, pixel_fract is 0.5, thus being the center of the texel, and in the final conversion back it is taken in consideration.</p>
+<h2 id="fat-pixel">Fat Pixel</h2>
+<p>This is the shader that was mentioned by Casey Muratori in his <a href="https://hero.handmade.network/episode/chat/chat018/">video</a> and for me started all this research culminating in this article!
+The original source code is <a href="https://www.shadertoy.com/view/ltBGWc">here</a> but again I post the code straight away:</p>
+<pre tabindex="0"><code class="hljs properties"><span class="hljs-attr">vec2</span> <span class="hljs-string">uv_fat_pixel( vec2 uv, ivec2 texture_size ) {</span>
+    <span class="hljs-attr">vec2</span> <span class="hljs-string">pixel = uv * texture_size;</span>
+
+    <span class="hljs-attr">vec2</span> <span class="hljs-string">fat_pixel = floor(pixel) + 0.5;</span>
+    <span class="hljs-meta">//</span> <span class="hljs-string">subpixel aa algorithm (COMMENT OUT TO COMPARE WITH POINT SAMPLING)</span>
+    <span class="hljs-attr">fat_pixel</span> <span class="hljs-string">+= 1 - clamp((1.0 - fract(pixel)) * locals.texels_per_pixel, 0, 1);</span>
+        
+    <span class="hljs-attr">return</span> <span class="hljs-string">fat_pixel / texture_size;</span>
+<span class="hljs-attr">}</span>
+</code></pre><p>Using the same texels_per_pixel number calculated as for the Cole Cecil shader, we basically move the UV based on the distance to the edge. <!-- raw HTML omitted --></p>
+<p>Note that texels_per_pixel if camera and scene have the same size it becomes just the <strong>camera zoom</strong> - so we are choosing the weight from edge scaled by the zoom factor of the camera.</p>
+<h2 id="todo-the-maister">TODO: The Maister</h2>
+<p>There is a final filter that I wanted to check, but I will come at it later. I wanted to write about it briefly because there is the most mathematical approach and thus can shed some light also an all the other filters!</p>
+<p>The most mathematical approach is by <a href="https://twitter.com/Themaister">Hans Kristian</a> in which he does an analysis of the problem from a signal theory point of view. <a href="https://themaister.net/blog">His blog</a> is full of great posts, so go check it out!</p>
+<p>The posts that we will see are the following:</p>
+<ul>
+<li><a href="https://themaister.net/blog/2018/08/25/pseudo-bandlimited-pixel-art-filtering-in-3d-a-mathematical-derivation/">pseudo-bandlimited-pixel-art-filtering-in-3d-a-mathematical-derivation</a></li>
+<li><a href="https://themaister.net/blog/2018/08/29/why-coverage-based-pixel-art-filtering-is-terrible/">why-coverage-based-pixel-art-filtering-is-terrible</a></li>
+</ul>
+<p>They are an in-depth signal based analysis of the problem, even though the author kindly added <a href="https://github.com/Themaister/Granite/blob/master/assets/shaders/inc/bandlimited_pixel_filter.h">source code as well</a>.</p>
+<p>I will check the shader code in the future, for now the blog post is what really gives a hand at understanding the other filters.</p>
+<h1 id="the-testbed">The Testbed</h1>
+<p>With the accompanying source code there is included also some graphics to already test the idea presented here.<!-- raw HTML omitted -->
+I’ve used two textures, that were free to use made available by the amazing <a href="https://twitter.com/ansimuz">Luis Zuno</a> found through his <a href="https://ansimuz.itch.io/">itch.io page</a>.</p>
+<p>It should be pretty straightforward to modify the shaders and test your own ideas, so I hope you will come up with new filters!</p>
+<p>All the filters are in <strong>DataDrivenRendering/data/articles/PixelArtFiltering/pixel_art_filtering.hfx</strong> file.</p>
+<p>The source is in my <a href="https://github.com/JorenJoestar/DataDrivenRendering">github repository</a> both in data/articles/PixelArtfiltering and source/articles/PixelArtFiltering where you can find the shaders and the code. There are basically only two files (pixel_art_filtering.hfx and pixel_art_filtering_app.cpp) that you need to modify to experiment with this concepts.</p>
+<h2 id="scene-setup">Scene Setup</h2>
+<p>The scene is composed of an animated sprite and a background.<!-- raw HTML omitted --></p>
+<p>There are different options to zoom in and out and translate, to test all possible scenarios.</p>
+<p>I’ve added also a simple CRT filter to be toggled after the scene is rendered.</p>
+<p>Also, sampling is always bilinear.</p>
+<p>You can also toggle <strong>premultiplied alpha</strong>, so you see that not having any alpha blending will result in shimmering edges, another big problem not really mentioned around.</p>
+<h1 id="links-and-previous-work">Links and Previous Work</h1>
+<p>Here I want to link all the previous posts about the subject for quick reference:<!-- raw HTML omitted --></p>
+<ul>
+<li><a href="https://csantosbh.wordpress.com/2014/01/25/manual-texture-filtering-for-pixelated-games-in-webgl/">https://csantosbh.wordpress.com/2014/01/25/manual-texture-filtering-for-pixelated-games-in-webgl/</a></li>
+<li><a href="https://csantosbh.wordpress.com/2014/02/05/automatically-detecting-the-texture-filter-threshold-for-pixelated-magnifications/">https://csantosbh.wordpress.com/2014/02/05/automatically-detecting-the-texture-filter-threshold-for-pixelated-magnifications/</a></li>
+<li><a href="https://colececil.io/blog/2017/scaling-pixel-art-without-destroying-it/">https://colececil.io/blog/2017/scaling-pixel-art-without-destroying-it/</a></li>
+<li><a href="https://themaister.net/blog/2018/08/25/pseudo-bandlimited-pixel-art-filtering-in-3d-a-mathematical-derivation/">https://themaister.net/blog/2018/08/25/pseudo-bandlimited-pixel-art-filtering-in-3d-a-mathematical-derivation/</a></li>
+<li><a href="https://love2d.org/forums/viewtopic.php?t=89442">https://love2d.org/forums/viewtopic.php?t=89442</a></li>
+<li><a href="https://github.com/RNavega/PixelArt-Antialias-Love2D/blob/master/main.lua">https://github.com/RNavega/PixelArt-Antialias-Love2D/blob/master/main.lua</a></li>
+</ul>
+<p>Also <a href="https://www.shadertoy.com/">ShaderToy</a> is a source of many other filters included in the demo.</p>
+<ul>
+<li><a href="https://www.shadertoy.com/view/MllBWf">https://www.shadertoy.com/view/MllBWf</a></li>
+<li><a href="https://www.shadertoy.com/view/ltfXWS">https://www.shadertoy.com/view/ltfXWS</a></li>
+<li><a href="https://www.shadertoy.com/view/4dlXzB">https://www.shadertoy.com/view/4dlXzB</a></li>
+<li><a href="https://www.shadertoy.com/view/ltcGDX">https://www.shadertoy.com/view/ltcGDX</a></li>
+<li><a href="https://www.shadertoy.com/view/ltBGWc">https://www.shadertoy.com/view/ltBGWc</a></li>
+<li><a href="https://www.shadertoy.com/view/ltBfRD">https://www.shadertoy.com/view/ltBfRD</a></li>
+</ul>
+<h1 id="conclusions">Conclusions</h1>
+<p>We saw different <strong>sampling filters</strong> that resulted in different ways of leveraging the <em>bilinear filtering</em> with some custom coordinates to obtain a mix of sharpness for inside pixels and smoothness on the edges.</p>
+<p>We also have now a easy to modify testbed to try different ideas and hopefully make your pixels (and your eyes) happy!</p>
+<p>As always, please comment, modify, improve, share the article and the code!</p>
+
+    </div>
+
+    
+
+
+    
+
+<div class="article-tags">
+  
+  <a class="badge badge-light" href="https://jorenjoestar.github.io/tags/pixel-art/">pixel art</a>
+  
+</div>
+
+
+
+    
+      
+
+
+
+
+
+
+
+
+  
+
+
+
+
+
+  
+  
+  
+    
+  
+  
+  <div class="media author-card" itemscope="" itemtype="http://schema.org/Person">
+    
+      
+      <img class="portrait mr-3" src="./Pixel Art Filtering _ Gabriel&#39;s Virtual Tavern_files/avatar_hu3e6c5092cc1e130aad9217f7c0923093_462692_250x250_fill_q90_lanczos_center.jpg" itemprop="image" alt="Avatar">
+    
+
+    <div class="media-body">
+      <h5 class="card-title" itemprop="name"><a href="https://jorenjoestar.github.io/">Gabriel Sassone</a></h5>
+      <h6 class="card-subtitle">Principal Rendering/Engine Programmer</h6>
+      
+      <ul class="network-icon" aria-hidden="true">
+        
+          
+          
+          
+            
+          
+          
+          
+          
+          
+            
+          
+          <li>
+            <a itemprop="sameAs" href="https://twitter.com/GabrielSassone" target="_blank" rel="noopener">
+              <i class="fab fa-twitter"></i>
+            </a>
+          </li>
+        
+          
+          
+          
+            
+          
+          
+          
+          
+          
+            
+          
+          <li>
+            <a itemprop="sameAs" href="https://mastodon.gamedev.place/@GabrielSassone" target="_blank" rel="noopener">
+              <i class="fab fa-mastodon"></i>
+            </a>
+          </li>
+        
+          
+          
+          
+            
+          
+          
+          
+          
+          
+            
+          
+          <li>
+            <a itemprop="sameAs" href="https://github.com/JorenJoestar" target="_blank" rel="noopener">
+              <i class="fab fa-github"></i>
+            </a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+
+
+
+      
+      
+    
+
+    
+
+    
+
+
+  </div>
+</article>
+
+      
+
+    
+    
+    
+    <script src="./Pixel Art Filtering _ Gabriel&#39;s Virtual Tavern_files/mathjax-config.js.Без названия"></script>
+    
+
+    
+    
+    
+      <script src="./Pixel Art Filtering _ Gabriel&#39;s Virtual Tavern_files/jquery.min.js.Без названия" integrity="sha256-CSXorXvZcTkaix6Yvo6HppcZGetbYMGWSFlBw8HfCJo=" crossorigin="anonymous"></script>
+      <script src="./Pixel Art Filtering _ Gabriel&#39;s Virtual Tavern_files/imagesloaded.pkgd.min.js.Без названия" integrity="sha256-lqvxZrPLtfffUl2G/e7szqSvPBILGbwmsGE1MKlOi0Q=" crossorigin="anonymous"></script>
+      <script src="./Pixel Art Filtering _ Gabriel&#39;s Virtual Tavern_files/isotope.pkgd.min.js.Без названия" integrity="sha256-CBrpuqrMhXwcLLUd5tvQ4euBHCdh7wGlDfNz8vbu/iI=" crossorigin="anonymous"></script>
+      <script src="./Pixel Art Filtering _ Gabriel&#39;s Virtual Tavern_files/jquery.fancybox.min.js.Без названия" integrity="sha256-X5PoE3KU5l+JcX+w09p/wHl9AzK333C4hJ2I9S5mD4M=" crossorigin="anonymous"></script>
+
+      
+        <script src="./Pixel Art Filtering _ Gabriel&#39;s Virtual Tavern_files/mermaid.min.js.Без названия" integrity="sha256-0w92bcB21IY5+rGI84MGj52jNfHNbXVeQLrZ0CGdjNY=" crossorigin="anonymous" title="mermaid"></script>
+      
+
+      
+        
+        <script src="./Pixel Art Filtering _ Gabriel&#39;s Virtual Tavern_files/highlight.min.js.Без названия" integrity="sha256-aYTdUrn6Ow1DDgh5JTc3aDGnnju48y/1c8s1dgkYPQ8=" crossorigin="anonymous"></script>
+        
+        <script src="./Pixel Art Filtering _ Gabriel&#39;s Virtual Tavern_files/cpp.min.js.Без названия"></script>
+        
+      
+
+      
+      
+      <script src="./Pixel Art Filtering _ Gabriel&#39;s Virtual Tavern_files/MathJax.js.Без названия" integrity="sha256-GhM+5JHb6QUzOQPXSJLEWP7R73CbkisjzK5Eyij4U9w=" crossorigin="anonymous" async=""></script>
+      
+    
+
+    
+    
+
+    
+    
+    <script>hljs.initHighlightingOnLoad();</script>
+    
+
+    
+    
+    <script>
+      const search_index_filename = "/index.json";
+      const i18n = {
+        'placeholder': "Search...",
+        'results': "results found",
+        'no_results': "No results found"
+      };
+      const content_type = {
+        'post': "Posts",
+        'project': "Projects",
+        'publication' : "Publications",
+        'talk' : "Talks"
+        };
+    </script>
+    
+
+    
+    
+
+    
+    
+    <script id="search-hit-fuse-template" type="text/x-template">
+      <div class="search-hit" id="summary-{{key}}">
+      <div class="search-hit-content">
+        <div class="search-hit-name">
+          <a href="{{relpermalink}}">{{title}}</a>
+          <div class="article-metadata search-hit-type">{{type}}</div>
+          <p class="search-hit-description">{{snippet}}</p>
+        </div>
+      </div>
+      </div>
+    </script>
+    
+
+    
+    
+    <script src="./Pixel Art Filtering _ Gabriel&#39;s Virtual Tavern_files/fuse.min.js.Без названия" integrity="sha256-VzgmKYmhsGNNN4Ph1kMW+BjoYJM2jV5i4IlFoeZA9XI=" crossorigin="anonymous"></script>
+    <script src="./Pixel Art Filtering _ Gabriel&#39;s Virtual Tavern_files/jquery.mark.min.js.Без названия" integrity="sha256-4HLtjeVgH0eIB3aZ9mLYF6E8oU5chNdjU6p6rrXpl9U=" crossorigin="anonymous"></script>
+    
+
+    
+    
+
+    
+    
+    
+    
+    
+    
+    
+    
+    
+      
+    
+    
+    
+    
+    <script src="./Pixel Art Filtering _ Gabriel&#39;s Virtual Tavern_files/academic.min.5fde6b67896bd1833c4041260289785f.js.Без названия"></script>
+
+    
+
+
+
+
+
+
+  
+  <div class="container">
+    <footer class="site-footer">
+  
+
+  <p class="powered-by">
+    
+
+    Powered by the
+    <a href="https://sourcethemes.com/academic/" target="_blank" rel="noopener">Academic theme</a> for
+    <a href="https://gohugo.io/" target="_blank" rel="noopener">Hugo</a>.
+
+    
+    <span class="float-right" aria-hidden="true">
+      <a href="https://jorenjoestar.github.io/post/pixel_art_filtering/#" id="back_to_top">
+        <span class="button_icon">
+          <i class="fas fa-chevron-up fa-2x"></i>
+        </span>
+      </a>
+    </span>
+    
+  </p>
+</footer>
+
+  </div>
+  
+
+  
+<div id="modal" class="modal fade" role="dialog">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Cite</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">×</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        <pre><code class="tex hljs"></code></pre>
+      </div>
+      <div class="modal-footer">
+        <a class="btn btn-outline-primary my-1 js-copy-cite" href="https://jorenjoestar.github.io/post/pixel_art_filtering/#" target="_blank">
+          <i class="fas fa-copy"></i> Copy
+        </a>
+        <a class="btn btn-outline-primary my-1 js-download-cite" href="https://jorenjoestar.github.io/post/pixel_art_filtering/#" target="_blank">
+          <i class="fas fa-download"></i> Download
+        </a>
+        <div id="modal-error"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+
+</body></html>

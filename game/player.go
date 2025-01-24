@@ -1,4 +1,4 @@
-package main
+package game
 
 import (
 	"fmt"
@@ -72,6 +72,10 @@ func (p *Player) Update(dt float32) {
 		p.pos.X = float32(math.Floor(float64(p.pos.X)))
 	}
 	p.pos.Y = float32(math.Round(float64(p.pos.Y)))
+}
+
+func (p *Player) Z() int8 {
+	return 0
 }
 
 func (p *Player) Draw() {

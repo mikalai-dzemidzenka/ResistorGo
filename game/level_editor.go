@@ -1,16 +1,15 @@
-package main
+package game
 
 import (
 	rl "github.com/gen2brain/raylib-go/raylib"
 	"slices"
-	"strconv"
 )
 
 var le = &LevelEditor{
 	entities: []LevelEntity{},
 	texID:    TEXTURE_BLOCK_1,
 	pos:      rl.Vector2{},
-	gridSize: rl.Vector2{39, 83},
+	gridSize: rl.Vector2{X: 39, Y: 83},
 }
 
 type LevelEntity struct {
@@ -24,6 +23,10 @@ type LevelEditor struct {
 	texID    int32
 	pos      rl.Vector2
 	gridSize rl.Vector2
+}
+
+func (le *LevelEditor) Z() int8 {
+	return -1
 }
 
 func (le *LevelEditor) Update(dt float32) {
@@ -81,50 +84,19 @@ func (le *LevelEditor) Draw() {
 		le.pos,
 		rl.White,
 	)
-}
 
-func lvlEditLoop(dt float32) {
-	Debug = true
-
-	cur.Update(dt)
-	p.Update(dt)
-	cam.Update(dt)
-	le.Update(dt)
-
-	rl.BeginDrawing()
+	rl.PushMatrix()
 	{
-		rl.ClearBackground(rl.Black)
-		rl.BeginMode2D(cam.cam)
-		{
-
-			le.Draw()
-			p.Draw()
-
-			rl.PushMatrix()
-			{
-				a := le.gridSize.Y / le.gridSize.X
-				rl.Translatef(
-					float32(int32(le.pos.X)%int32(le.gridSize.X)+1),
-					float32(int32(le.pos.Y)%int32(le.gridSize.Y)+(5*int32(le.gridSize.Y))),
-					0)
-				rl.Rotatef(90, 1, 0, 0)
-				rl.Scalef(1, 0, a)
-				rl.DrawGrid(100, le.gridSize.X)
-			}
-			rl.PopMatrix()
-		}
-		rl.EndMode2D()
-
-		cur.DrawGui()
-		if Debug {
-			fps := strconv.Itoa(int(rl.GetFPS()))
-			rl.DrawText("fps:"+fps, 20, 20, 2, rl.White)
-			rl.DrawText(p.Debug(), 40, 40, 1, rl.Red)
-			rl.DrawText(cam.Debug(), 40, 78, 1, rl.Green)
-			rl.DrawText(cur.Debug(), 40, 116, 1, rl.Blue)
-		}
+		a := le.gridSize.Y / le.gridSize.X
+		rl.Translatef(
+			float32(int32(le.pos.X)%int32(le.gridSize.X)+1),
+			float32(int32(le.pos.Y)%int32(le.gridSize.Y)+(5*int32(le.gridSize.Y))),
+			0)
+		rl.Rotatef(90, 1, 0, 0)
+		rl.Scalef(1, 0, a)
+		rl.DrawGrid(100, le.gridSize.X)
 	}
-	rl.EndDrawing()
+	rl.PopMatrix()
 }
 
 func pos2block(pos rl.Vector2) rl.Vector2 {
