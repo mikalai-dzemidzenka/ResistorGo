@@ -9,11 +9,11 @@ import (
 )
 
 const (
-	SW = 1024
-	SH = 768
+	SW = 1280
+	SH = 720
 )
 
-var l int
+var CurrentLevel int
 
 const (
 	LEVEL_1 = iota
@@ -34,7 +34,7 @@ type Updatable interface {
 }
 
 type GUIDrawable interface {
-	Z() int8
+	GuiZ() int8
 	DrawGui()
 }
 
@@ -42,7 +42,7 @@ func Run() {
 	rl.InitWindow(SW, SH, "Resistor")
 	defer rl.CloseWindow()
 
-	flag.IntVar(&l, "l", LEVEL_EDITOR, "level to load")
+	flag.IntVar(&CurrentLevel, "l", LEVEL_EDITOR, "level to load")
 
 	rl.DisableCursor()
 
@@ -77,7 +77,7 @@ func Run() {
 		{
 			dg, ok := Entities[i].(GUIDrawable)
 			if ok {
-				drawablesIndexedGUI = append(drawablesIndexedGUI, idx{dg.Z(), dg.DrawGui})
+				drawablesIndexedGUI = append(drawablesIndexedGUI, idx{dg.GuiZ(), dg.DrawGui})
 			}
 		}
 	}

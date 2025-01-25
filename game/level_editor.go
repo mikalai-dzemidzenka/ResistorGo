@@ -1,6 +1,7 @@
 package game
 
 import (
+	rlg "github.com/gen2brain/raylib-go/raygui"
 	rl "github.com/gen2brain/raylib-go/raylib"
 	"slices"
 )
@@ -10,6 +11,8 @@ var le = &LevelEditor{
 	texID:    TEXTURE_BLOCK_1,
 	pos:      rl.Vector2{},
 	gridSize: rl.Vector2{X: 39, Y: 83},
+	z:        -1,
+	guiZ:     1,
 }
 
 type LevelEntity struct {
@@ -19,14 +22,19 @@ type LevelEntity struct {
 
 type LevelEditor struct {
 	entities []LevelEntity
-
-	texID    int32
 	pos      rl.Vector2
 	gridSize rl.Vector2
+	texID    int32
+	z        int8
+	guiZ     int8
+}
+
+func (le *LevelEditor) GuiZ() int8 {
+	return le.guiZ
 }
 
 func (le *LevelEditor) Z() int8 {
-	return -1
+	return le.z
 }
 
 func (le *LevelEditor) Update(dt float32) {
@@ -57,9 +65,9 @@ func (le *LevelEditor) Update(dt float32) {
 	}
 }
 
-func (le *LevelEditor) Draw() {
-	for _, e := range le.entities {
-		tex := Textures[e.texID]
+func (le *LevelEditor) drawEntities() {
+	for i := range le.entities {
+		tex := Textures[le.entities[i].texID]
 		rl.DrawTextureRec(
 			tex,
 			rl.Rectangle{
@@ -68,10 +76,13 @@ func (le *LevelEditor) Draw() {
 				Width:  float32(tex.Width),
 				Height: float32(tex.Height),
 			},
-			e.pos,
+			le.entities[i].pos,
 			rl.White,
 		)
 	}
+}
+
+func (le *LevelEditor) drawCurEntity() {
 	tex := Textures[le.texID]
 	rl.DrawTextureRec(
 		tex,
@@ -84,7 +95,9 @@ func (le *LevelEditor) Draw() {
 		le.pos,
 		rl.White,
 	)
+}
 
+func (le *LevelEditor) drawGrid() {
 	rl.PushMatrix()
 	{
 		a := le.gridSize.Y / le.gridSize.X
@@ -97,6 +110,18 @@ func (le *LevelEditor) Draw() {
 		rl.DrawGrid(100, le.gridSize.X)
 	}
 	rl.PopMatrix()
+}
+
+func (le *LevelEditor) Draw() {
+	le.drawEntities()
+	le.drawCurEntity()
+	le.drawGrid()
+}
+
+func (le *LevelEditor) DrawGui() {
+	col := rl.GetColor(uint(rlg.GetStyle(rlg.DEFAULT, rlg.BACKGROUND_COLOR)))
+	rl.DrawRectangle(SW-200, 0, 200, SH, col)
+	rlg.ListView(rl.Rectangle{SW - 200, 0, 200, 200}, "1;2;3", new(int32), 0)
 }
 
 func pos2block(pos rl.Vector2) rl.Vector2 {

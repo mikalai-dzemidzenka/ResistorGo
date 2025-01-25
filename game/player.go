@@ -13,6 +13,8 @@ type Player struct {
 	friction    float32
 	anim        int32
 	orientation int8
+	z           int8
+	paused      bool
 }
 
 const (
@@ -25,6 +27,7 @@ var p = &Player{
 	pos: rl.Vector2{
 		X: 200, Y: 200,
 	},
+	z:           0,
 	bound:       rl.Rectangle{Width: 39, Height: 44},
 	speed:       rl.Vector2{0, 0},
 	friction:    DefaultFriction,
@@ -75,7 +78,7 @@ func (p *Player) Update(dt float32) {
 }
 
 func (p *Player) Z() int8 {
-	return 0
+	return p.z
 }
 
 func (p *Player) Draw() {
