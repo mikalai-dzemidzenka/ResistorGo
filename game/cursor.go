@@ -16,7 +16,8 @@ const (
 
 var cur = &Cursor{
 	atkSpeed: CursorAttackSpeed,
-	z:        0,
+	baseDraw: baseDraw{z: 0},
+	baseGui:  baseGui{guiZ: 2},
 }
 
 type Cursor struct {
@@ -24,16 +25,8 @@ type Cursor struct {
 	atkPos   rl.Vector2
 	atkSpeed float32
 	atkSt    int32
-	z        int8
-	guiZ     int8
-}
-
-func (c *Cursor) GuiZ() int8 {
-	return c.guiZ
-}
-
-func (c *Cursor) Z() int8 {
-	return c.z
+	baseDraw
+	baseGui
 }
 
 func (c *Cursor) Update(dt float32) {

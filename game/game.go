@@ -3,6 +3,7 @@ package game
 import (
 	"cmp"
 	"flag"
+	rlg "github.com/gen2brain/raylib-go/raygui"
 	rl "github.com/gen2brain/raylib-go/raylib"
 	"slices"
 	"strconv"
@@ -47,6 +48,7 @@ func Run() {
 	rl.DisableCursor()
 
 	LoadTextures()
+	rlg.LoadStyle("resources/style_dark.rgs")
 
 	rl.SetTargetFPS(60)
 
@@ -104,8 +106,6 @@ func Run() {
 		}
 
 		dt := rl.GetFrameTime()
-
-		Debug = true
 
 		for i := range updaters {
 			updaters[i](dt)
