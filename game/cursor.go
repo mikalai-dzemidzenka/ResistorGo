@@ -16,8 +16,8 @@ const (
 
 var cur = &Cursor{
 	atkSpeed: CursorAttackSpeed,
-	baseDraw: baseDraw{z: 0},
-	baseGui:  baseGui{guiZ: 2},
+	z:        0,
+	guiZ:     2,
 }
 
 type Cursor struct {
@@ -25,8 +25,15 @@ type Cursor struct {
 	atkPos   rl.Vector2
 	atkSpeed float32
 	atkSt    int32
-	baseDraw
-	baseGui
+	z        int8
+	guiZ     int8
+}
+
+var _ Updatable = (*Cursor)(nil)
+var _ GUIDrawable = (*Cursor)(nil)
+
+func (c *Cursor) GuiZ() int8 {
+	return c.guiZ
 }
 
 func (c *Cursor) Update(dt float32) {
@@ -70,6 +77,10 @@ func DrawCross(pos rl.Vector2, col color.RGBA) {
 	rl.DrawLineEx(rl.Vector2Add(pos, rl.Vector2{-2, 0}),
 		rl.Vector2Add(pos, rl.Vector2{-CursorLen, 0}),
 		CursorThick, col)
+}
+
+func (c *Cursor) Z() int8 {
+	return c.z
 }
 
 func (c *Cursor) Debug() string {

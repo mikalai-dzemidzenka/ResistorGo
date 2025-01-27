@@ -6,6 +6,12 @@ import (
 	"math"
 )
 
+const (
+	DefaultAcc      = 0.3
+	MaxSpeed        = 2.5
+	DefaultFriction = 0.4
+)
+
 type Player struct {
 	pos         rl.Vector2
 	bound       rl.Rectangle
@@ -13,15 +19,16 @@ type Player struct {
 	friction    float32
 	anim        int32
 	orientation int8
-	baseDraw
-	paused bool
+	z           int8
+	paused      bool
 }
 
-const (
-	DefaultAcc      = 0.3
-	MaxSpeed        = 2.5
-	DefaultFriction = 0.4
-)
+func (p *Player) Z() int8 {
+	return p.z
+}
+
+var _ Updatable = (*Player)(nil)
+var _ Drawable = (*Player)(nil)
 
 var p = &Player{
 	pos: rl.Vector2{

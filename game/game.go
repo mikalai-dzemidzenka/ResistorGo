@@ -1,11 +1,9 @@
 package game
 
 import (
-	"cmp"
 	"flag"
 	rlg "github.com/gen2brain/raylib-go/raygui"
 	rl "github.com/gen2brain/raylib-go/raylib"
-	"slices"
 	"strconv"
 )
 
@@ -23,22 +21,6 @@ const (
 	LEVELS
 )
 
-var Entities []any
-
-type Drawable interface {
-	Z() int8
-	Draw()
-}
-
-type Updatable interface {
-	Update(float32)
-}
-
-type GUIDrawable interface {
-	GuiZ() int8
-	DrawGui()
-}
-
 func Run() {
 	rl.InitWindow(SW, SH, "Resistor")
 	defer rl.CloseWindow()
@@ -52,53 +34,8 @@ func Run() {
 
 	rl.SetTargetFPS(60)
 
-	var drawables []func()
-	var updaters []func(float32)
-	var drawGuis []func()
-
 	Entities = []any{cur, p, cam, le}
-	type idx struct {
-		z    int8
-		draw func()
-	}
-	var drawablesIndexed []idx
-	var drawablesIndexedGUI []idx
-	for i := range Entities {
-		{
-			u, ok := Entities[i].(Updatable)
-			if ok {
-				updaters = append(updaters, u.Update)
-			}
-		}
-		{
-			d, ok := Entities[i].(Drawable)
-			if ok {
-				drawablesIndexed = append(drawablesIndexed, idx{d.Z(), d.Draw})
-			}
-		}
-		{
-			dg, ok := Entities[i].(GUIDrawable)
-			if ok {
-				drawablesIndexedGUI = append(drawablesIndexedGUI, idx{dg.GuiZ(), dg.DrawGui})
-			}
-		}
-	}
-	{
-		slices.SortFunc(drawablesIndexed, func(a, b idx) int {
-			return cmp.Compare(a.z, b.z)
-		})
-		for i := range drawablesIndexed {
-			drawables = append(drawables, drawablesIndexed[i].draw)
-		}
-	}
-	{
-		slices.SortFunc(drawablesIndexedGUI, func(a, b idx) int {
-			return cmp.Compare(a.z, b.z)
-		})
-		for i := range drawablesIndexedGUI {
-			drawGuis = append(drawGuis, drawablesIndexedGUI[i].draw)
-		}
-	}
+	SortEntities()
 
 	for !rl.WindowShouldClose() {
 		if rl.IsKeyPressed(rl.KeyGrave) {
@@ -107,8 +44,8 @@ func Run() {
 
 		dt := rl.GetFrameTime()
 
-		for i := range updaters {
-			updaters[i](dt)
+		for i := range Updaters {
+			Updaters[i](dt)
 		}
 
 		rl.BeginDrawing()
@@ -116,14 +53,14 @@ func Run() {
 			rl.ClearBackground(rl.Black)
 			rl.BeginMode2D(cam.cam)
 			{
-				for i := range drawables {
-					drawables[i]()
+				for i := range Drawables {
+					Drawables[i].draw()
 				}
 			}
 			rl.EndMode2D()
 
-			for i := range drawGuis {
-				drawGuis[i]()
+			for i := range DrawGUIs {
+				DrawGUIs[i].draw()
 			}
 			if Debug {
 				fps := strconv.Itoa(int(rl.GetFPS()))
