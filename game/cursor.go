@@ -15,51 +15,49 @@ const (
 )
 
 var cur = &Cursor{
-	atkSpeed: CursorAttackSpeed,
-	z:        0,
-	guiZ:     2,
+	AtkSpeed: CursorAttackSpeed,
+	GUIZ:     2,
 }
 
 type Cursor struct {
-	pos      rl.Vector2
-	atkPos   rl.Vector2
-	atkSpeed float32
-	atkSt    int32
-	z        int8
-	guiZ     int8
+	Pos      rl.Vector2
+	AtkPos   rl.Vector2
+	AtkSpeed float32
+	AtkSt    int32
+	GUIZ     int8
 }
 
 var _ Updatable = (*Cursor)(nil)
 var _ GUIDrawable = (*Cursor)(nil)
 
-func (c *Cursor) GuiZ() int8 {
-	return c.guiZ
+func (c *Cursor) GetGUIZ() int8 {
+	return c.GUIZ
 }
 
 func (c *Cursor) Update(dt float32) {
 	if rl.IsMouseButtonDown(rl.MouseButtonRight) {
-		c.atkSpeed = CursorFastAttackSpeed
+		c.AtkSpeed = CursorFastAttackSpeed
 	} else {
-		c.atkSpeed = CursorAttackSpeed
+		c.AtkSpeed = CursorAttackSpeed
 	}
 
-	c.pos = rl.GetMousePosition()
-	c.atkPos = rl.Vector2Lerp(c.atkPos, c.pos, c.atkSpeed)
+	c.Pos = rl.GetMousePosition()
+	c.AtkPos = rl.Vector2Lerp(c.AtkPos, c.Pos, c.AtkSpeed)
 
-	a := rl.GetWorldToScreen2D(rl.Vector2{X: p.pos.X + p.bound.Width/2, Y: p.pos.Y + p.bound.Height*1/4}, cam.cam)
-	b := cur.atkPos
+	a := rl.GetWorldToScreen2D(rl.Vector2{X: p.Pos.X + p.Bound.Width/2, Y: p.Pos.Y + p.Bound.Height*1/4}, cam.Cam)
+	b := cur.AtkPos
 	angle := rl.Vector2LineAngle(a, b) // [-pi/2;pi/2]
 	angle += math.Pi / 2               // [0, pi]
-	c.atkSt = int32(angle / (math.Pi / 4))
-	c.atkSt = clamp(c.atkSt, 0, 3)
+	c.AtkSt = int32(angle / (math.Pi / 4))
+	c.AtkSt = clamp(c.AtkSt, 0, 3)
 }
 
-func (c *Cursor) DrawGui() {
-	DrawCross(c.pos, rl.Red)
-	DrawCross(cur.atkPos, rl.Green)
+func (c *Cursor) DrawGUI() {
+	DrawCross(c.Pos, rl.Red)
+	DrawCross(cur.AtkPos, rl.Green)
 	if Debug {
-		a := rl.GetWorldToScreen2D(rl.Vector2{X: p.pos.X + p.bound.Width/2, Y: p.pos.Y + p.bound.Height*1/4}, cam.cam)
-		b := cur.atkPos
+		a := rl.GetWorldToScreen2D(rl.Vector2{X: p.Pos.X + p.Bound.Width/2, Y: p.Pos.Y + p.Bound.Height*1/4}, cam.Cam)
+		b := cur.AtkPos
 		rl.DrawLineV(a, b, rl.Blue)
 	}
 }
@@ -79,10 +77,6 @@ func DrawCross(pos rl.Vector2, col color.RGBA) {
 		CursorThick, col)
 }
 
-func (c *Cursor) Z() int8 {
-	return c.z
-}
-
 func (c *Cursor) Debug() string {
-	return fmt.Sprintf("pos: %v\natk_pos:%v\natk_state:%d", cur.pos, cur.atkPos, cur.atkSt)
+	return fmt.Sprintf("pos: %v\natk_pos:%v\natk_state:%d", cur.Pos, cur.AtkPos, cur.AtkSt)
 }

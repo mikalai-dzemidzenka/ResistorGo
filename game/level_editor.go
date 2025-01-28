@@ -8,60 +8,63 @@ import (
 )
 
 var le = &LevelEditor{
-	entities: []LevelEntity{},
-	idx:      make(map[LevelBlock]uint16),
-	curEntity: LevelEntity{
-		typ: ENTITY_SOLID,
-		tex: TEXTURE_BLOCK_1,
-		pos: rl.Vector2{},
+	Entities: []LevelEntity{},
+	Idx:      make(map[LevelBlock]uint16),
+	CurEntity: LevelEntity{
+		Typ: ENTITY_SOLID,
+		Tex: TEXTURE_BLOCK_1,
+		Pos: rl.Vector2{},
 	},
-	gridSize: rl.Vector2{X: 39, Y: 83},
-	z:        -1,
-	guiZ:     1,
+	GridSize: rl.Vector2{X: 39, Y: 83},
+	Z:        -1,
+	GUIZ:     1,
 }
 
 type LevelBlock = rl.Vector2
 
 // TODO must be serializable
 type LevelEntity struct {
-	typ EntityType
-	tex uint16
-	pos rl.Vector2
+	Typ EntityType
+	Tex uint16
+	Pos rl.Vector2
 }
 
 type LevelEditor struct {
-	entities []LevelEntity
-	idx      map[LevelBlock]uint16
+	Entities []LevelEntity
+	Idx      map[LevelBlock]uint16
 
-	gridSize      rl.Vector2
-	curEntity     LevelEntity
-	entViewOpened bool
-	z             int8
-	guiZ          int8
+	GridSize   rl.Vector2
+	CurEntity  LevelEntity
+	ViewOpened bool
+	Z          int8
+	GUIZ       int8
 }
 
+func (le *LevelEditor) NoSerialize() {}
+
+var _ NoSerialize = (*LevelEditor)(nil)
 var _ Updatable = (*LevelEditor)(nil)
 var _ GUIDrawable = (*LevelEditor)(nil)
 var _ Drawable = (*LevelEditor)(nil)
 
-func (le *LevelEditor) Z() int8 {
-	return le.z
+func (le *LevelEditor) GetZ() int8 {
+	return le.Z
 }
 
-func (le *LevelEditor) GuiZ() int8 {
-	return le.guiZ
+func (le *LevelEditor) GetGUIZ() int8 {
+	return le.GUIZ
 }
 func (le *LevelEditor) Update(dt float32) {
 	if rl.IsKeyPressed(rl.KeyTab) {
-		le.entViewOpened = !le.entViewOpened
+		le.ViewOpened = !le.ViewOpened
 	}
-	if le.entViewOpened {
+	if le.ViewOpened {
 		return
 	}
 
-	le.curEntity.pos = rl.GetScreenToWorld2D(rl.GetMousePosition(), cam.cam)
-	if le.gridSize != (rl.Vector2{}) {
-		le.curEntity.pos = pos2block(le.curEntity.pos)
+	le.CurEntity.Pos = rl.GetScreenToWorld2D(rl.GetMousePosition(), cam.Cam)
+	if le.GridSize != (rl.Vector2{}) {
+		le.CurEntity.Pos = pos2block(le.CurEntity.Pos)
 	}
 	if rl.IsMouseButtonPressed(rl.MouseButtonLeft) {
 		le.addEntity()
@@ -72,12 +75,12 @@ func (le *LevelEditor) Draw() {
 	le.drawEntities()
 	le.drawCurEntity()
 	le.drawGrid()
-	rl.DrawRectangle(int32(le.curEntity.pos.X), int32(le.curEntity.pos.Y), 2, 2, rl.Red)
+	rl.DrawRectangle(int32(le.CurEntity.Pos.X), int32(le.CurEntity.Pos.Y), 2, 2, rl.Red)
 
 }
 
-func (le *LevelEditor) DrawGui() {
-	if le.entViewOpened {
+func (le *LevelEditor) DrawGUI() {
+	if le.ViewOpened {
 		col := rl.GetColor(uint(rlg.GetStyle(rlg.DEFAULT, rlg.BACKGROUND_COLOR)))
 		col.A = 127
 		rl.DrawRectangle(25, 25, SW-50, SH-50, col)
@@ -91,7 +94,7 @@ func (le *LevelEditor) DrawGui() {
 			rlg.SetStyle(rlg.BUTTON, rlg.BASE_COLOR_FOCUSED, int64(rl.ColorToInt(color.RGBA{0, 0, 0, 25})))
 
 			if rlg.Button(rl.Rectangle{float32((i * 100) + 25), 35, 100, 100}, "") {
-				le.curEntity.tex = uint16(i)
+				le.CurEntity.Tex = uint16(i)
 			}
 		}
 
@@ -99,24 +102,24 @@ func (le *LevelEditor) DrawGui() {
 }
 
 func (le *LevelEditor) addEntity() {
-	idx, ok := le.idx[le.curEntity.pos]
+	idx, ok := le.Idx[le.CurEntity.Pos]
 	if ok {
-		le.entities[idx] = le.curEntity
+		le.Entities[idx] = le.CurEntity
 	} else {
-		le.entities = append(le.entities, le.curEntity)
-		idx = uint16(len(le.entities) - 1)
-		le.idx[le.curEntity.pos] = idx
+		le.Entities = append(le.Entities, le.CurEntity)
+		idx = uint16(len(le.Entities) - 1)
+		le.Idx[le.CurEntity.Pos] = idx
 	}
 
-	slices.SortFunc(le.entities, func(a, b LevelEntity) int {
+	slices.SortFunc(le.Entities, func(a, b LevelEntity) int {
 		switch {
-		case a.pos.Y > b.pos.Y:
+		case a.Pos.Y > b.Pos.Y:
 			return -1
-		case a.pos.Y < b.pos.Y:
+		case a.Pos.Y < b.Pos.Y:
 			return 1
-		case a.pos.X > b.pos.X:
+		case a.Pos.X > b.Pos.X:
 			return -1
-		case a.pos.X < b.pos.X:
+		case a.Pos.X < b.Pos.X:
 			return 1
 		default:
 			return 0
@@ -125,8 +128,8 @@ func (le *LevelEditor) addEntity() {
 }
 
 func (le *LevelEditor) drawEntities() {
-	for _, ent := range le.entities {
-		tex := Textures[ent.tex]
+	for _, ent := range le.Entities {
+		tex := Textures[ent.Tex]
 		rl.DrawTextureRec(
 			tex,
 			rl.Rectangle{
@@ -135,14 +138,14 @@ func (le *LevelEditor) drawEntities() {
 				Width:  float32(tex.Width),
 				Height: float32(tex.Height),
 			},
-			ent.pos,
+			ent.Pos,
 			rl.White,
 		)
 	}
 }
 
 func (le *LevelEditor) drawCurEntity() {
-	tex := Textures[le.curEntity.tex]
+	tex := Textures[le.CurEntity.Tex]
 	rl.DrawTextureRec(
 		tex,
 		rl.Rectangle{
@@ -151,7 +154,7 @@ func (le *LevelEditor) drawCurEntity() {
 			Width:  float32(tex.Width),
 			Height: float32(tex.Height),
 		},
-		le.curEntity.pos,
+		le.CurEntity.Pos,
 		color.RGBA{255, 255, 255, 128},
 	)
 }
@@ -159,20 +162,20 @@ func (le *LevelEditor) drawCurEntity() {
 func (le *LevelEditor) drawGrid() {
 	rl.PushMatrix()
 	{
-		a := le.gridSize.Y / le.gridSize.X
+		a := le.GridSize.Y / le.GridSize.X
 		rl.Translatef(
-			float32(int32(le.gridSize.X)+1),
-			float32(int32(le.gridSize.Y)+(5*int32(le.gridSize.Y))),
+			float32(int32(le.GridSize.X)+1),
+			float32(int32(le.GridSize.Y)+(5*int32(le.GridSize.Y))),
 			0)
 		rl.Rotatef(90, 1, 0, 0)
 		rl.Scalef(1, 0, a)
-		rl.DrawGrid(100, le.gridSize.X)
+		rl.DrawGrid(100, le.GridSize.X)
 	}
 	rl.PopMatrix()
 }
 
 func pos2block(pos rl.Vector2) LevelBlock {
-	pos.X = float32(int32(pos.X) - int32(pos.X)%int32(le.gridSize.X))
-	pos.Y = float32(int32(pos.Y) - int32(pos.Y)%int32(le.gridSize.Y))
+	pos.X = float32(int32(pos.X) - int32(pos.X)%int32(le.GridSize.X))
+	pos.Y = float32(int32(pos.Y) - int32(pos.Y)%int32(le.GridSize.Y))
 	return pos
 }

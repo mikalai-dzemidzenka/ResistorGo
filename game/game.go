@@ -34,8 +34,8 @@ func Run() {
 
 	rl.SetTargetFPS(60)
 
-	Entities = []any{cur, p, cam, le}
-	SortEntities()
+	Entities = map[int]any{1: cur, 2: p, 3: cam, 4: le}
+	EvalEntities()
 
 	for !rl.WindowShouldClose() {
 		if rl.IsKeyPressed(rl.KeyGrave) {
@@ -44,24 +44,19 @@ func Run() {
 
 		dt := rl.GetFrameTime()
 
-		for i := range Updaters {
-			Updaters[i](dt)
-		}
+		Update(dt)
 
 		rl.BeginDrawing()
 		{
 			rl.ClearBackground(rl.Black)
-			rl.BeginMode2D(cam.cam)
+			rl.BeginMode2D(cam.Cam)
 			{
-				for i := range Drawables {
-					Drawables[i].draw()
-				}
+				Draw()
 			}
 			rl.EndMode2D()
 
-			for i := range DrawGUIs {
-				DrawGUIs[i].draw()
-			}
+			DrawGUI()
+
 			if Debug {
 				fps := strconv.Itoa(int(rl.GetFPS()))
 				rl.DrawText("fps:"+fps, 20, 20, 2, rl.White)
@@ -72,4 +67,5 @@ func Run() {
 		}
 		rl.EndDrawing()
 	}
+	SaveEntities("levels/level.json")
 }

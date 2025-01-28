@@ -1,6 +1,7 @@
 package game
 
 import (
+	"encoding/json"
 	"fmt"
 	rl "github.com/gen2brain/raylib-go/raylib"
 	"math"
@@ -13,32 +14,45 @@ const (
 )
 
 type Player struct {
-	pos         rl.Vector2
-	bound       rl.Rectangle
-	speed       rl.Vector2
-	friction    float32
-	anim        int32
-	orientation int8
-	z           int8
-	paused      bool
+	Bound    rl.Rectangle
+	Pos      rl.Vector2
+	Speed    rl.Vector2
+	Friction float32
+	Anim     int32
+	Orient   int8
+	Z        int8
+	Paused   bool
 }
 
-func (p *Player) Z() int8 {
-	return p.z
+func (p *Player) MarshalJSON() ([]byte, error) {
+	type P Player
+	return json.Marshal(struct {
+		Type EntityType `json:"typ"`
+		*P
+	}{
+		Type: ENTITY_PLAYER,
+		P:    (*P)(p),
+	},
+	)
 }
 
+func (p *Player) GetZ() int8 {
+	return p.Z
+}
+
+var _ Serializable = (*Player)(nil)
 var _ Updatable = (*Player)(nil)
 var _ Drawable = (*Player)(nil)
 
 var p = &Player{
-	pos: rl.Vector2{
+	Pos: rl.Vector2{
 		X: 200, Y: 200,
 	},
-	bound:       rl.Rectangle{Width: 39, Height: 44},
-	speed:       rl.Vector2{0, 0},
-	friction:    DefaultFriction,
-	anim:        TEXTURE_PLAYER_IDLE,
-	orientation: 1,
+	Bound:    rl.Rectangle{Width: 39, Height: 44},
+	Speed:    rl.Vector2{0, 0},
+	Friction: DefaultFriction,
+	Anim:     TEXTURE_PLAYER_IDLE,
+	Orient:   1,
 }
 
 func (p *Player) Update(dt float32) {
@@ -48,64 +62,64 @@ func (p *Player) Update(dt float32) {
 	switch {
 	case rl.IsKeyDown(rl.KeyLeft), rl.IsKeyDown(rl.KeyA):
 		acc.X -= DefaultAcc
-		p.orientation = -1
+		p.Orient = -1
 	case rl.IsKeyDown(rl.KeyRight), rl.IsKeyDown(rl.KeyD):
 		acc.X += DefaultAcc
-		p.orientation = 1
+		p.Orient = 1
 	default:
 		noInput = true
 	}
 
 	if noInput {
 		switch {
-		case p.speed.X > 0:
-			p.speed.X -= p.friction
-		case p.speed.X < 0:
-			p.speed.X += p.friction
+		case p.Speed.X > 0:
+			p.Speed.X -= p.Friction
+		case p.Speed.X < 0:
+			p.Speed.X += p.Friction
 		}
-		if abs(p.speed.X) < 0.2 {
-			p.speed.X = 0
+		if abs(p.Speed.X) < 0.2 {
+			p.Speed.X = 0
 		}
 	} else {
-		p.speed = rl.Vector2Add(p.speed, acc)
+		p.Speed = rl.Vector2Add(p.Speed, acc)
 	}
 
-	p.speed.X = clamp(p.speed.X, -MaxSpeed, MaxSpeed)
+	p.Speed.X = clamp(p.Speed.X, -MaxSpeed, MaxSpeed)
 
-	p.anim = TEXTURE_PLAYER_IDLE_1 + cur.atkSt
+	p.Anim = TEXTURE_PLAYER_IDLE_1 + cur.AtkSt
 
-	p.pos = rl.Vector2Add(p.pos, p.speed)
-	if p.speed.X > 0 {
-		p.pos.X = float32(math.Round(float64(p.pos.X)))
+	p.Pos = rl.Vector2Add(p.Pos, p.Speed)
+	if p.Speed.X > 0 {
+		p.Pos.X = float32(math.Round(float64(p.Pos.X)))
 	} else {
-		p.pos.X = float32(math.Floor(float64(p.pos.X)))
+		p.Pos.X = float32(math.Floor(float64(p.Pos.X)))
 	}
-	p.pos.Y = float32(math.Round(float64(p.pos.Y)))
+	p.Pos.Y = float32(math.Round(float64(p.Pos.Y)))
 }
 
 func (p *Player) Draw() {
-	anim := Textures[p.anim]
+	anim := Textures[p.Anim]
 	if Debug {
-		rl.DrawRectangle(int32(p.pos.X), int32(p.pos.Y), 39, 44, DebugColor1)
-		rl.DrawRectangleLines(int32(p.pos.X), int32(p.pos.Y), 39, 44, DebugColor2)
+		rl.DrawRectangle(int32(p.Pos.X), int32(p.Pos.Y), 39, 44, DebugColor1)
+		rl.DrawRectangleLines(int32(p.Pos.X), int32(p.Pos.Y), 39, 44, DebugColor2)
 	}
 	rl.DrawTextureRec(
 		anim,
 		rl.Rectangle{
 			X:      0,
 			Y:      0,
-			Width:  float32(anim.Width * int32(p.orientation)),
+			Width:  float32(anim.Width * int32(p.Orient)),
 			Height: float32(anim.Height),
 		},
-		p.pos,
+		p.Pos,
 		rl.White,
 	)
 	if Debug {
-		rl.DrawCircle(int32(p.pos.X+p.bound.Width/2), int32(p.pos.Y+p.bound.Height/2), 2, rl.Red)
-		rl.DrawCircle(int32(p.pos.X+p.bound.Width/2), int32(p.pos.Y+p.bound.Height*1/4), 1, rl.Green)
+		rl.DrawCircle(int32(p.Pos.X+p.Bound.Width/2), int32(p.Pos.Y+p.Bound.Height/2), 2, rl.Red)
+		rl.DrawCircle(int32(p.Pos.X+p.Bound.Width/2), int32(p.Pos.Y+p.Bound.Height*1/4), 1, rl.Green)
 	}
 }
 
 func (p *Player) Debug() string {
-	return fmt.Sprintf("speed: %v\npos: %v\n", p.speed, p.pos)
+	return fmt.Sprintf("speed: %v\npos: %v\n", p.Speed, p.Pos)
 }
