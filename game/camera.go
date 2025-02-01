@@ -1,6 +1,7 @@
 package game
 
 import (
+	"encoding/json"
 	"fmt"
 	rl "github.com/gen2brain/raylib-go/raylib"
 )
@@ -11,8 +12,8 @@ const (
 )
 
 type Camera struct {
-	Cam       rl.Camera2D
-	ZoomSpeed float32
+	Cam       rl.Camera2D `json:"cam"`
+	ZoomSpeed float32     `json:"zoomSpeed,omitempty"`
 }
 
 var cam = &Camera{
@@ -22,6 +23,17 @@ var cam = &Camera{
 		Rotation: 0,
 		Zoom:     MinZoom,
 	},
+}
+
+func (c *Camera) MarshalJSON() ([]byte, error) {
+	type C Camera
+	return json.Marshal(struct {
+		Type EntityType `json:"typ"`
+		*C
+	}{
+		Type: ENTITY_CAMERA,
+		C:    (*C)(c),
+	})
 }
 
 func (c *Camera) Update(dt float32) {

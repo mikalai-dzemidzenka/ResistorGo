@@ -27,8 +27,11 @@ type Cursor struct {
 	GUIZ     int8
 }
 
+func (c *Cursor) NoSerialize() {}
+
 var _ Updatable = (*Cursor)(nil)
 var _ GUIDrawable = (*Cursor)(nil)
+var _ NoSerialize = (*Cursor)(nil)
 
 func (c *Cursor) GetGUIZ() int8 {
 	return c.GUIZ

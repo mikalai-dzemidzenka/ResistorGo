@@ -14,14 +14,14 @@ const (
 )
 
 type Player struct {
-	Bound    rl.Rectangle
-	Pos      rl.Vector2
-	Speed    rl.Vector2
-	Friction float32
-	Anim     int32
-	Orient   int8
-	Z        int8
-	Paused   bool
+	Bound    rl.Rectangle `json:"bound"`
+	Pos      rl.Vector2   `json:"pos"`
+	Speed    rl.Vector2   `json:"speed"`
+	Friction float32      `json:"friction,omitempty"`
+	Anim     int32        `json:"anim,omitempty"`
+	Orient   int8         `json:"orient,omitempty"`
+	Z        int8         `json:"z,omitempty"`
+	Paused   bool         `json:"paused,omitempty"`
 }
 
 func (p *Player) MarshalJSON() ([]byte, error) {
@@ -32,8 +32,7 @@ func (p *Player) MarshalJSON() ([]byte, error) {
 	}{
 		Type: ENTITY_PLAYER,
 		P:    (*P)(p),
-	},
-	)
+	})
 }
 
 func (p *Player) GetZ() int8 {

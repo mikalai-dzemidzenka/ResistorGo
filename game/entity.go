@@ -12,6 +12,7 @@ type EntityType int16
 const (
 	ENTITY_NO EntityType = iota
 	ENTITY_PLAYER
+	ENTITY_CAMERA
 	ENTITY_SOLID
 	ENTITY_BG
 )

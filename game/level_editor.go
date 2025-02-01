@@ -8,8 +8,8 @@ import (
 )
 
 var le = &LevelEditor{
-	Entities: []LevelEntity{},
-	Idx:      make(map[LevelBlock]uint16),
+	Entities:            []LevelEntity{},
+	EntityPositionIndex: make(map[LevelBlock]uint16),
 	CurEntity: LevelEntity{
 		Typ: ENTITY_SOLID,
 		Tex: TEXTURE_BLOCK_1,
@@ -22,7 +22,6 @@ var le = &LevelEditor{
 
 type LevelBlock = rl.Vector2
 
-// TODO must be serializable
 type LevelEntity struct {
 	Typ EntityType
 	Tex uint16
@@ -30,8 +29,8 @@ type LevelEntity struct {
 }
 
 type LevelEditor struct {
-	Entities []LevelEntity
-	Idx      map[LevelBlock]uint16
+	Entities            []LevelEntity
+	EntityPositionIndex map[LevelBlock]uint16
 
 	GridSize   rl.Vector2
 	CurEntity  LevelEntity
@@ -75,8 +74,8 @@ func (le *LevelEditor) Draw() {
 	le.drawEntities()
 	le.drawCurEntity()
 	le.drawGrid()
-	rl.DrawRectangle(int32(le.CurEntity.Pos.X), int32(le.CurEntity.Pos.Y), 2, 2, rl.Red)
 
+	rl.DrawRectangle(int32(le.CurEntity.Pos.X), int32(le.CurEntity.Pos.Y), 2, 2, rl.Red)
 }
 
 func (le *LevelEditor) DrawGUI() {
@@ -102,13 +101,11 @@ func (le *LevelEditor) DrawGUI() {
 }
 
 func (le *LevelEditor) addEntity() {
-	idx, ok := le.Idx[le.CurEntity.Pos]
+	i, ok := le.EntityPositionIndex[le.CurEntity.Pos]
 	if ok {
-		le.Entities[idx] = le.CurEntity
+		le.Entities[i] = le.CurEntity
 	} else {
 		le.Entities = append(le.Entities, le.CurEntity)
-		idx = uint16(len(le.Entities) - 1)
-		le.Idx[le.CurEntity.Pos] = idx
 	}
 
 	slices.SortFunc(le.Entities, func(a, b LevelEntity) int {
@@ -125,6 +122,11 @@ func (le *LevelEditor) addEntity() {
 			return 0
 		}
 	})
+
+	clear(le.EntityPositionIndex)
+	for i, e := range le.Entities {
+		le.EntityPositionIndex[e.Pos] = uint16(i)
+	}
 }
 
 func (le *LevelEditor) drawEntities() {

@@ -1,0 +1,37 @@
+[
+  {
+    "typ": 1,
+    "bound": {
+      "X": 0,
+      "Y": 0,
+      "Width": 39,
+      "Height": 44
+    },
+    "pos": {
+      "X": 200,
+      "Y": 200
+    },
+    "speed": {
+      "X": 0,
+      "Y": 0
+    },
+    "friction": 0.4,
+    "anim": 4,
+    "orient": 1
+  },
+  {
+    "typ": 2,
+    "cam": {
+      "Offset": {
+        "X": 640,
+        "Y": 360
+      },
+      "Target": {
+        "X": 250,
+        "Y": 200
+      },
+      "Rotation": 0,
+      "Zoom": 4
+    }
+  }
+]
