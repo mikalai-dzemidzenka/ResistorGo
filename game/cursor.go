@@ -1,6 +1,7 @@
 package game
 
 import (
+	"encoding/json"
 	"fmt"
 	rl "github.com/gen2brain/raylib-go/raylib"
 	"image/color"
@@ -27,11 +28,19 @@ type Cursor struct {
 	GUIZ     int8
 }
 
+func (c *Cursor) MarshalJSON() ([]byte, error) {
+	type C Cursor
+	return json.Marshal(EntitySerde{
+		Type:   ENTITY_CURSOR,
+		Entity: (*C)(c),
+	})
+}
+
 func (c *Cursor) NoSerialize() {}
 
 var _ Updatable = (*Cursor)(nil)
 var _ GUIDrawable = (*Cursor)(nil)
-var _ NoSerialize = (*Cursor)(nil)
+var _ Serializable = (*Cursor)(nil)
 
 func (c *Cursor) GetGUIZ() int8 {
 	return c.GUIZ

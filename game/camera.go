@@ -13,7 +13,7 @@ const (
 
 type Camera struct {
 	Cam       rl.Camera2D `json:"cam"`
-	ZoomSpeed float32     `json:"zoomSpeed,omitempty"`
+	ZoomSpeed float32     `json:"-"`
 }
 
 var cam = &Camera{
@@ -27,12 +27,9 @@ var cam = &Camera{
 
 func (c *Camera) MarshalJSON() ([]byte, error) {
 	type C Camera
-	return json.Marshal(struct {
-		Type EntityType `json:"typ"`
-		*C
-	}{
-		Type: ENTITY_CAMERA,
-		C:    (*C)(c),
+	return json.Marshal(EntitySerde{
+		Type:   ENTITY_CAMERA,
+		Entity: (*C)(c),
 	})
 }
 

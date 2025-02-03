@@ -1,6 +1,8 @@
 package game
 
 import (
+	"encoding/json"
+	"fmt"
 	rlg "github.com/gen2brain/raylib-go/raygui"
 	rl "github.com/gen2brain/raylib-go/raylib"
 	"image/color"
@@ -8,8 +10,12 @@ import (
 )
 
 var le = &LevelEditor{
-	Entities:            []LevelEntity{},
-	EntityPositionIndex: make(map[LevelBlock]uint16),
+	LevelLayers: []*LevelLayer{
+		{
+			Entities:            []LevelEntity{},
+			EntityPositionIndex: make(map[LevelBlock]uint16),
+		},
+	},
 	CurEntity: LevelEntity{
 		Typ: ENTITY_SOLID,
 		Tex: TEXTURE_BLOCK_1,
@@ -28,9 +34,15 @@ type LevelEntity struct {
 	Pos rl.Vector2
 }
 
-type LevelEditor struct {
+type LevelLayer struct {
+	Z                   int
 	Entities            []LevelEntity
-	EntityPositionIndex map[LevelBlock]uint16
+	EntityPositionIndex map[LevelBlock]uint16 `json:"-"`
+}
+
+type LevelEditor struct {
+	LevelLayers  []*LevelLayer
+	CurrentLayer int
 
 	GridSize   rl.Vector2
 	CurEntity  LevelEntity
@@ -39,9 +51,15 @@ type LevelEditor struct {
 	GUIZ       int8
 }
 
-func (le *LevelEditor) NoSerialize() {}
+func (le *LevelEditor) MarshalJSON() ([]byte, error) {
+	type LE LevelEditor
+	return json.Marshal(EntitySerde{
+		Type:   ENTITY_LEVEL_EDITOR,
+		Entity: (*LE)(le),
+	})
+}
 
-var _ NoSerialize = (*LevelEditor)(nil)
+var _ Serializable = (*LevelEditor)(nil)
 var _ Updatable = (*LevelEditor)(nil)
 var _ GUIDrawable = (*LevelEditor)(nil)
 var _ Drawable = (*LevelEditor)(nil)
@@ -61,12 +79,15 @@ func (le *LevelEditor) Update(dt float32) {
 		return
 	}
 
-	le.CurEntity.Pos = rl.GetScreenToWorld2D(rl.GetMousePosition(), cam.Cam)
+	le.CurEntity.Pos = rl.GetScreenToWorld2D(cur.Pos, cam.Cam)
 	if le.GridSize != (rl.Vector2{}) {
 		le.CurEntity.Pos = pos2block(le.CurEntity.Pos)
 	}
-	if rl.IsMouseButtonPressed(rl.MouseButtonLeft) {
+	switch {
+	case rl.IsMouseButtonPressed(rl.MouseButtonLeft):
 		le.addEntity()
+	case rl.IsMouseButtonPressed(rl.MouseButtonRight):
+		le.delEntity()
 	}
 }
 
@@ -76,6 +97,7 @@ func (le *LevelEditor) Draw() {
 	le.drawGrid()
 
 	rl.DrawRectangle(int32(le.CurEntity.Pos.X), int32(le.CurEntity.Pos.Y), 2, 2, rl.Red)
+	rl.DrawText(fmt.Sprintf("%v", le.CurEntity.Pos), int32(le.CurEntity.Pos.X), int32(le.CurEntity.Pos.Y), 2, rl.White)
 }
 
 func (le *LevelEditor) DrawGUI() {
@@ -101,14 +123,31 @@ func (le *LevelEditor) DrawGUI() {
 }
 
 func (le *LevelEditor) addEntity() {
-	i, ok := le.EntityPositionIndex[le.CurEntity.Pos]
+	la := le.LevelLayers[le.CurrentLayer]
+	i, ok := la.EntityPositionIndex[le.CurEntity.Pos]
 	if ok {
-		le.Entities[i] = le.CurEntity
+		la.Entities[i] = le.CurEntity
 	} else {
-		le.Entities = append(le.Entities, le.CurEntity)
+		la.Entities = append(la.Entities, le.CurEntity)
+		le.reindex()
 	}
+}
 
-	slices.SortFunc(le.Entities, func(a, b LevelEntity) int {
+func (le *LevelEditor) delEntity() {
+	la := le.LevelLayers[le.CurrentLayer]
+	i, ok := la.EntityPositionIndex[le.CurEntity.Pos]
+	if ok {
+		la.Entities[i] = la.Entities[len(la.Entities)-1]
+		la.Entities = la.Entities[:len(la.Entities)-1]
+
+		le.reindex()
+	}
+}
+
+func (le *LevelEditor) reindex() {
+	la := le.LevelLayers[le.CurrentLayer]
+
+	slices.SortFunc(la.Entities, func(a, b LevelEntity) int {
 		switch {
 		case a.Pos.Y > b.Pos.Y:
 			return -1
@@ -123,27 +162,33 @@ func (le *LevelEditor) addEntity() {
 		}
 	})
 
-	clear(le.EntityPositionIndex)
-	for i, e := range le.Entities {
-		le.EntityPositionIndex[e.Pos] = uint16(i)
+	if la.EntityPositionIndex == nil {
+		la.EntityPositionIndex = make(map[LevelBlock]uint16)
+	}
+	clear(la.EntityPositionIndex)
+	for i, e := range la.Entities {
+		la.EntityPositionIndex[e.Pos] = uint16(i)
 	}
 }
 
 func (le *LevelEditor) drawEntities() {
-	for _, ent := range le.Entities {
-		tex := Textures[ent.Tex]
-		rl.DrawTextureRec(
-			tex,
-			rl.Rectangle{
-				X:      0,
-				Y:      0,
-				Width:  float32(tex.Width),
-				Height: float32(tex.Height),
-			},
-			ent.Pos,
-			rl.White,
-		)
+	for _, la := range le.LevelLayers {
+		for _, ent := range la.Entities {
+			tex := Textures[ent.Tex]
+			rl.DrawTextureRec(
+				tex,
+				rl.Rectangle{
+					X:      0,
+					Y:      0,
+					Width:  float32(tex.Width),
+					Height: float32(tex.Height),
+				},
+				ent.Pos,
+				rl.White,
+			)
+		}
 	}
+
 }
 
 func (le *LevelEditor) drawCurEntity() {
@@ -177,7 +222,7 @@ func (le *LevelEditor) drawGrid() {
 }
 
 func pos2block(pos rl.Vector2) LevelBlock {
-	pos.X = float32(int32(pos.X) - int32(pos.X)%int32(le.GridSize.X))
+	pos.X = float32(int32(pos.X) - int32(pos.X)%int32(le.GridSize.X)) // TODO sign error on negative pos here
 	pos.Y = float32(int32(pos.Y) - int32(pos.Y)%int32(le.GridSize.Y))
 	return pos
 }

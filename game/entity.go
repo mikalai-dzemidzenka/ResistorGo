@@ -4,8 +4,55 @@ import (
 	"cmp"
 	"encoding/json"
 	"os"
+	"reflect"
 	"slices"
+	"strconv"
 )
+
+var Entities = RuntimeEntities{}
+
+type RuntimeEntities map[int]any
+
+type EntitySerde struct {
+	Type   EntityType `json:"type"`
+	Entity any        `json:"entity"`
+}
+
+func (r *RuntimeEntities) UnmarshalJSON(bytes []byte) error {
+	var serde []EntitySerde
+	err := json.Unmarshal(bytes, &serde)
+	if err != nil {
+		return err
+	}
+	for i, s := range serde {
+		typ, ok := EntityRegistry[s.Type]
+		if !ok {
+			panic("missing type" + strconv.Itoa(int(s.Type)))
+		}
+		v := reflect.New(typ)
+		iface := v.Interface()
+		serde[i].Entity = iface
+	}
+	err = json.Unmarshal(bytes, &serde)
+	if err != nil {
+		return err
+	}
+
+	for i, v := range serde {
+		(*r)[i] = v.Entity
+	}
+	return nil
+}
+
+var _ json.Unmarshaler = &Entities
+
+var EntityRegistry = map[EntityType]reflect.Type{
+	ENTITY_PLAYER:       reflect.TypeOf(Player{}),
+	ENTITY_CAMERA:       reflect.TypeOf(Camera{}),
+	ENTITY_SOLID:        reflect.TypeOf(Solid{}),
+	ENTITY_LEVEL_EDITOR: reflect.TypeOf(LevelEditor{}),
+	ENTITY_CURSOR:       reflect.TypeOf(Cursor{}),
+}
 
 type EntityType int16
 
@@ -15,6 +62,8 @@ const (
 	ENTITY_CAMERA
 	ENTITY_SOLID
 	ENTITY_BG
+	ENTITY_LEVEL_EDITOR
+	ENTITY_CURSOR
 )
 
 type Drawable interface {
@@ -35,20 +84,26 @@ type GUIDrawable interface {
 	DrawGUI()
 }
 
-type NoSerialize interface {
-	NoSerialize()
-}
-
-var Entities map[int]any
-
 func SaveEntities(path string) {
-	entities := make([]any, 0, len(Entities))
-	for _, e := range Entities {
-		if _, ok := e.(NoSerialize); ok {
-			continue
-		}
-		entities = append(entities, e)
+	type SerEnt struct {
+		I      int
+		Entity any
 	}
+	sortEnt := make([]SerEnt, 0, len(Entities))
+	for i, e := range Entities {
+		sortEnt = append(sortEnt, SerEnt{
+			I:      i,
+			Entity: e,
+		})
+	}
+	slices.SortFunc(sortEnt, func(a, b SerEnt) int {
+		return cmp.Compare(a.I, b.I)
+	})
+	entities := make([]any, len(sortEnt))
+	for i := range sortEnt {
+		entities[i] = sortEnt[i].Entity
+	}
+
 	b, err := json.MarshalIndent(entities, "", "  ")
 	if err != nil {
 		panic(err)
@@ -87,8 +142,38 @@ func DrawGUI() {
 	}
 }
 
+func LoadEntities(path string) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		panic(err)
+	}
+	err = Entities.UnmarshalJSON(b)
+	if err != nil {
+		panic(err)
+	}
+}
+
 func EvalEntities() {
 	for i := range Entities {
+		// TODO get rid of this!!!!!!!!!!!
+		{
+			c, ok := Entities[i].(*Cursor)
+			if ok {
+				cur = c
+			}
+		}
+		{
+			pl, ok := Entities[i].(*Player)
+			if ok {
+				p = pl
+			}
+		}
+		{
+			c, ok := Entities[i].(*Camera)
+			if ok {
+				cam = c
+			}
+		}
 		{
 			u, ok := Entities[i].(Updatable)
 			if ok {

@@ -34,7 +34,8 @@ func Run() {
 
 	rl.SetTargetFPS(60)
 
-	Entities = map[int]any{1: cur, 2: p, 3: cam, 4: le}
+	//Entities = map[int]any{1: cur, 2: p, 3: cam, 4: le}
+	LoadEntities("levels/level.json")
 	EvalEntities()
 
 	for !rl.WindowShouldClose() {

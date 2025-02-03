@@ -26,12 +26,9 @@ type Player struct {
 
 func (p *Player) MarshalJSON() ([]byte, error) {
 	type P Player
-	return json.Marshal(struct {
-		Type EntityType `json:"typ"`
-		*P
-	}{
-		Type: ENTITY_PLAYER,
-		P:    (*P)(p),
+	return json.Marshal(EntitySerde{
+		Type:   ENTITY_PLAYER,
+		Entity: (*P)(p),
 	})
 }
 
@@ -88,11 +85,6 @@ func (p *Player) Update(dt float32) {
 	p.Anim = TEXTURE_PLAYER_IDLE_1 + cur.AtkSt
 
 	p.Pos = rl.Vector2Add(p.Pos, p.Speed)
-	if p.Speed.X > 0 {
-		p.Pos.X = float32(math.Round(float64(p.Pos.X)))
-	} else {
-		p.Pos.X = float32(math.Floor(float64(p.Pos.X)))
-	}
 	p.Pos.Y = float32(math.Round(float64(p.Pos.Y)))
 }
 
