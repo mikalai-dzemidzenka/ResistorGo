@@ -15,11 +15,6 @@ const (
 	CursorFastAttackSpeed = 0.5
 )
 
-var cur = &Cursor{
-	AtkSpeed: CursorAttackSpeed,
-	GUIZ:     2,
-}
-
 type Cursor struct {
 	Pos      rl.Vector2
 	AtkPos   rl.Vector2
@@ -56,8 +51,11 @@ func (c *Cursor) Update(dt float32) {
 	c.Pos = rl.GetMousePosition()
 	c.AtkPos = rl.Vector2Lerp(c.AtkPos, c.Pos, c.AtkSpeed)
 
-	a := rl.GetWorldToScreen2D(rl.Vector2{X: p.Pos.X + p.Bound.Width/2, Y: p.Pos.Y + p.Bound.Height*1/4}, cam.Cam)
-	b := cur.AtkPos
+	a := rl.GetWorldToScreen2D(rl.Vector2{
+		X: g.Player.Pos.X + g.Player.Bound.Width/2,
+		Y: g.Player.Pos.Y + g.Player.Bound.Height*1/4,
+	}, g.Camera.Cam)
+	b := g.Cursor.AtkPos
 	angle := rl.Vector2LineAngle(a, b) // [-pi/2;pi/2]
 	angle += math.Pi / 2               // [0, pi]
 	c.AtkSt = int32(angle / (math.Pi / 4))
@@ -66,10 +64,13 @@ func (c *Cursor) Update(dt float32) {
 
 func (c *Cursor) DrawGUI() {
 	DrawCross(c.Pos, rl.Red)
-	DrawCross(cur.AtkPos, rl.Green)
+	DrawCross(g.Cursor.AtkPos, rl.Green)
 	if Debug {
-		a := rl.GetWorldToScreen2D(rl.Vector2{X: p.Pos.X + p.Bound.Width/2, Y: p.Pos.Y + p.Bound.Height*1/4}, cam.Cam)
-		b := cur.AtkPos
+		a := rl.GetWorldToScreen2D(rl.Vector2{
+			X: g.Player.Pos.X + g.Player.Bound.Width/2,
+			Y: g.Player.Pos.Y + g.Player.Bound.Height*1/4,
+		}, g.Camera.Cam)
+		b := g.Cursor.AtkPos
 		rl.DrawLineV(a, b, rl.Blue)
 	}
 }
@@ -90,5 +91,5 @@ func DrawCross(pos rl.Vector2, col color.RGBA) {
 }
 
 func (c *Cursor) Debug() string {
-	return fmt.Sprintf("pos: %v\natk_pos:%v\natk_state:%d", cur.Pos, cur.AtkPos, cur.AtkSt)
+	return fmt.Sprintf("pos: %v\natk_pos:%v\natk_state:%d", g.Cursor.Pos, g.Cursor.AtkPos, g.Cursor.AtkSt)
 }

@@ -16,15 +16,6 @@ type Camera struct {
 	ZoomSpeed float32     `json:"-"`
 }
 
-var cam = &Camera{
-	Cam: rl.Camera2D{
-		Offset:   rl.Vector2{X: SW / 2, Y: SH / 2},
-		Target:   p.Pos,
-		Rotation: 0,
-		Zoom:     MinZoom,
-	},
-}
-
 func (c *Camera) MarshalJSON() ([]byte, error) {
 	type C Camera
 	return json.Marshal(EntitySerde{
@@ -42,7 +33,7 @@ func (c *Camera) Update(dt float32) {
 	} else {
 		c.Cam.Zoom = clamp(c.Cam.Zoom, 0.5, MaxZoom)
 	}
-	c.Cam.Target = rl.Vector2Add(p.Pos, rl.Vector2{X: 50})
+	c.Cam.Target = rl.Vector2Add(g.Player.Pos, rl.Vector2{X: 50})
 }
 
 func (c *Camera) Debug() string {

@@ -9,7 +9,25 @@ import (
 	"strconv"
 )
 
-var Entities = RuntimeEntities{}
+type EntityType int16
+
+const (
+	ENTITY_NO EntityType = iota
+	ENTITY_PLAYER
+	ENTITY_CAMERA
+	ENTITY_SOLID
+	ENTITY_BG
+	ENTITY_LEVEL_EDITOR
+	ENTITY_CURSOR
+)
+
+var EntityRegistry = map[EntityType]reflect.Type{
+	ENTITY_PLAYER:       reflect.TypeOf(Player{}),
+	ENTITY_CAMERA:       reflect.TypeOf(Camera{}),
+	ENTITY_SOLID:        reflect.TypeOf(Solid{}),
+	ENTITY_LEVEL_EDITOR: reflect.TypeOf(LevelEditor{}),
+	ENTITY_CURSOR:       reflect.TypeOf(Cursor{}),
+}
 
 type RuntimeEntities map[int]any
 
@@ -38,33 +56,14 @@ func (r *RuntimeEntities) UnmarshalJSON(bytes []byte) error {
 		return err
 	}
 
+	*r = make(RuntimeEntities)
 	for i, v := range serde {
 		(*r)[i] = v.Entity
 	}
 	return nil
 }
 
-var _ json.Unmarshaler = &Entities
-
-var EntityRegistry = map[EntityType]reflect.Type{
-	ENTITY_PLAYER:       reflect.TypeOf(Player{}),
-	ENTITY_CAMERA:       reflect.TypeOf(Camera{}),
-	ENTITY_SOLID:        reflect.TypeOf(Solid{}),
-	ENTITY_LEVEL_EDITOR: reflect.TypeOf(LevelEditor{}),
-	ENTITY_CURSOR:       reflect.TypeOf(Cursor{}),
-}
-
-type EntityType int16
-
-const (
-	ENTITY_NO EntityType = iota
-	ENTITY_PLAYER
-	ENTITY_CAMERA
-	ENTITY_SOLID
-	ENTITY_BG
-	ENTITY_LEVEL_EDITOR
-	ENTITY_CURSOR
-)
+var _ json.Unmarshaler = (*RuntimeEntities)(nil)
 
 type Drawable interface {
 	GetZ() int8
@@ -89,8 +88,18 @@ func SaveEntities(path string) {
 		I      int
 		Entity any
 	}
-	sortEnt := make([]SerEnt, 0, len(Entities))
-	for i, e := range Entities {
+	sortEnt := make([]SerEnt, 0, len(g.Entities))
+	for i, e := range g.Entities {
+		if le, ok := e.(*LevelEditor); ok {
+			for _, layer := range le.LevelLayers {
+				for _, lentity := range layer.Entities { // TODO
+					sortEnt = append(sortEnt, SerEnt{
+						1,
+						lentity,
+					})
+				}
+			}
+		}
 		sortEnt = append(sortEnt, SerEnt{
 			I:      i,
 			Entity: e,
@@ -120,85 +129,13 @@ func SaveEntities(path string) {
 	}
 }
 
-var Drawables []Drawable
-var Updaters []Updatable
-var DrawGUIs []GUIDrawable
-
-func Update(dt float32) {
-	for i := range Updaters {
-		Updaters[i].Update(dt)
-	}
-}
-
-func Draw() {
-	for i := range Drawables {
-		Drawables[i].Draw()
-	}
-}
-
-func DrawGUI() {
-	for i := range DrawGUIs {
-		DrawGUIs[i].DrawGUI()
-	}
-}
-
 func LoadEntities(path string) {
 	b, err := os.ReadFile(path)
 	if err != nil {
 		panic(err)
 	}
-	err = Entities.UnmarshalJSON(b)
+	err = g.Entities.UnmarshalJSON(b)
 	if err != nil {
 		panic(err)
 	}
-}
-
-func EvalEntities() {
-	for i := range Entities {
-		// TODO get rid of this!!!!!!!!!!!
-		{
-			c, ok := Entities[i].(*Cursor)
-			if ok {
-				cur = c
-			}
-		}
-		{
-			pl, ok := Entities[i].(*Player)
-			if ok {
-				p = pl
-			}
-		}
-		{
-			c, ok := Entities[i].(*Camera)
-			if ok {
-				cam = c
-			}
-		}
-		{
-			u, ok := Entities[i].(Updatable)
-			if ok {
-				Updaters = append(Updaters, u)
-			}
-		}
-		{
-			d, ok := Entities[i].(Drawable)
-			if ok {
-				Drawables = append(Drawables, d)
-			}
-		}
-		{
-			dg, ok := Entities[i].(GUIDrawable)
-			if ok {
-				DrawGUIs = append(DrawGUIs, dg)
-			}
-		}
-	}
-
-	slices.SortFunc(Drawables, func(a, b Drawable) int {
-		return cmp.Compare(a.GetZ(), b.GetZ())
-	})
-
-	slices.SortFunc(DrawGUIs, func(a, b GUIDrawable) int {
-		return cmp.Compare(a.GetGUIZ(), b.GetGUIZ())
-	})
 }

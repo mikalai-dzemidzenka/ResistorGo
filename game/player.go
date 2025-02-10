@@ -40,17 +40,6 @@ var _ Serializable = (*Player)(nil)
 var _ Updatable = (*Player)(nil)
 var _ Drawable = (*Player)(nil)
 
-var p = &Player{
-	Pos: rl.Vector2{
-		X: 200, Y: 200,
-	},
-	Bound:    rl.Rectangle{Width: 39, Height: 44},
-	Speed:    rl.Vector2{0, 0},
-	Friction: DefaultFriction,
-	Anim:     TEXTURE_PLAYER_IDLE,
-	Orient:   1,
-}
-
 func (p *Player) Update(dt float32) {
 	var acc rl.Vector2
 
@@ -82,7 +71,7 @@ func (p *Player) Update(dt float32) {
 
 	p.Speed.X = clamp(p.Speed.X, -MaxSpeed, MaxSpeed)
 
-	p.Anim = TEXTURE_PLAYER_IDLE_1 + cur.AtkSt
+	p.Anim = TEXTURE_PLAYER_IDLE_1 + g.Cursor.AtkSt
 
 	p.Pos = rl.Vector2Add(p.Pos, p.Speed)
 	p.Pos.Y = float32(math.Round(float64(p.Pos.Y)))

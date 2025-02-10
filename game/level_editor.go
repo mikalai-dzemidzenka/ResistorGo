@@ -1,7 +1,6 @@
 package game
 
 import (
-	"encoding/json"
 	"fmt"
 	rlg "github.com/gen2brain/raylib-go/raygui"
 	rl "github.com/gen2brain/raylib-go/raylib"
@@ -9,29 +8,12 @@ import (
 	"slices"
 )
 
-var le = &LevelEditor{
-	LevelLayers: []*LevelLayer{
-		{
-			Entities:            []LevelEntity{},
-			EntityPositionIndex: make(map[LevelBlock]uint16),
-		},
-	},
-	CurEntity: LevelEntity{
-		Typ: ENTITY_SOLID,
-		Tex: TEXTURE_BLOCK_1,
-		Pos: rl.Vector2{},
-	},
-	GridSize: rl.Vector2{X: 39, Y: 83},
-	Z:        -1,
-	GUIZ:     1,
-}
-
 type LevelBlock = rl.Vector2
 
 type LevelEntity struct {
-	Typ EntityType
-	Tex uint16
-	Pos rl.Vector2
+	Type EntityType `json:"type"`
+	Tex  uint16     `json:"tex"`
+	Pos  rl.Vector2 `json:"pos"`
 }
 
 type LevelLayer struct {
@@ -51,15 +33,6 @@ type LevelEditor struct {
 	GUIZ       int8
 }
 
-func (le *LevelEditor) MarshalJSON() ([]byte, error) {
-	type LE LevelEditor
-	return json.Marshal(EntitySerde{
-		Type:   ENTITY_LEVEL_EDITOR,
-		Entity: (*LE)(le),
-	})
-}
-
-var _ Serializable = (*LevelEditor)(nil)
 var _ Updatable = (*LevelEditor)(nil)
 var _ GUIDrawable = (*LevelEditor)(nil)
 var _ Drawable = (*LevelEditor)(nil)
@@ -79,7 +52,7 @@ func (le *LevelEditor) Update(dt float32) {
 		return
 	}
 
-	le.CurEntity.Pos = rl.GetScreenToWorld2D(cur.Pos, cam.Cam)
+	le.CurEntity.Pos = rl.GetScreenToWorld2D(g.Cursor.Pos, g.Camera.Cam)
 	if le.GridSize != (rl.Vector2{}) {
 		le.CurEntity.Pos = pos2block(le.CurEntity.Pos)
 	}
@@ -222,7 +195,7 @@ func (le *LevelEditor) drawGrid() {
 }
 
 func pos2block(pos rl.Vector2) LevelBlock {
-	pos.X = float32(int32(pos.X) - int32(pos.X)%int32(le.GridSize.X)) // TODO sign error on negative pos here
-	pos.Y = float32(int32(pos.Y) - int32(pos.Y)%int32(le.GridSize.Y))
+	pos.X = float32(int32(pos.X) - int32(pos.X)%int32(g.LevelEditor.GridSize.X)) // TODO sign error on negative pos here
+	pos.Y = float32(int32(pos.Y) - int32(pos.Y)%int32(g.LevelEditor.GridSize.Y))
 	return pos
 }
