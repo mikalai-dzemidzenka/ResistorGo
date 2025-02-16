@@ -1,7 +1,6 @@
 package game
 
 import (
-	"encoding/json"
 	"fmt"
 	rl "github.com/gen2brain/raylib-go/raylib"
 	"image/color"
@@ -23,19 +22,10 @@ type Cursor struct {
 	GUIZ     int8
 }
 
-func (c *Cursor) MarshalJSON() ([]byte, error) {
-	type C Cursor
-	return json.Marshal(EntitySerde{
-		Type:   ENTITY_CURSOR,
-		Entity: (*C)(c),
-	})
-}
-
 func (c *Cursor) NoSerialize() {}
 
 var _ Updatable = (*Cursor)(nil)
 var _ GUIDrawable = (*Cursor)(nil)
-var _ Serializable = (*Cursor)(nil)
 
 func (c *Cursor) GetGUIZ() int8 {
 	return c.GUIZ
@@ -54,7 +44,7 @@ func (c *Cursor) Update(dt float32) {
 	a := rl.GetWorldToScreen2D(rl.Vector2{
 		X: g.Player.Pos.X + g.Player.Bound.Width/2,
 		Y: g.Player.Pos.Y + g.Player.Bound.Height*1/4,
-	}, g.Camera.Cam)
+	}, *g.Camera)
 	b := g.Cursor.AtkPos
 	angle := rl.Vector2LineAngle(a, b) // [-pi/2;pi/2]
 	angle += math.Pi / 2               // [0, pi]
@@ -69,7 +59,7 @@ func (c *Cursor) DrawGUI() {
 		a := rl.GetWorldToScreen2D(rl.Vector2{
 			X: g.Player.Pos.X + g.Player.Bound.Width/2,
 			Y: g.Player.Pos.Y + g.Player.Bound.Height*1/4,
-		}, g.Camera.Cam)
+		}, *g.Camera)
 		b := g.Cursor.AtkPos
 		rl.DrawLineV(a, b, rl.Blue)
 	}

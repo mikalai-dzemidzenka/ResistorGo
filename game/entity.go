@@ -1,11 +1,8 @@
 package game
 
 import (
-	"cmp"
 	"encoding/json"
-	"os"
 	"reflect"
-	"slices"
 	"strconv"
 )
 
@@ -14,19 +11,48 @@ type EntityType int16
 const (
 	ENTITY_NO EntityType = iota
 	ENTITY_PLAYER
-	ENTITY_CAMERA
 	ENTITY_SOLID
 	ENTITY_BG
-	ENTITY_LEVEL_EDITOR
-	ENTITY_CURSOR
 )
 
-var EntityRegistry = map[EntityType]reflect.Type{
-	ENTITY_PLAYER:       reflect.TypeOf(Player{}),
-	ENTITY_CAMERA:       reflect.TypeOf(Camera{}),
-	ENTITY_SOLID:        reflect.TypeOf(Solid{}),
-	ENTITY_LEVEL_EDITOR: reflect.TypeOf(LevelEditor{}),
-	ENTITY_CURSOR:       reflect.TypeOf(Cursor{}),
+type ComponentType int16
+
+const (
+	COMPONENT_TYPE_POSITION ComponentType = iota
+	COMPONENT_TYPE_TEXTURE
+)
+
+type EntityInfo struct {
+	Type           reflect.Type
+	ComponentTypes []ComponentType
+}
+
+var EntityRegistry = map[EntityType]EntityInfo{
+	ENTITY_PLAYER: {
+		Type: reflect.TypeOf(Player{}),
+		ComponentTypes: []ComponentType{
+			COMPONENT_TYPE_POSITION,
+			COMPONENT_TYPE_TEXTURE,
+		},
+	},
+	ENTITY_SOLID: {
+		Type: reflect.TypeOf(Solid{}),
+		ComponentTypes: []ComponentType{
+			COMPONENT_TYPE_POSITION,
+			COMPONENT_TYPE_TEXTURE,
+		},
+	},
+}
+
+func HasComponent(t EntityType, want ComponentType) bool {
+	if inf, ok := EntityRegistry[t]; ok {
+		for _, got := range inf.ComponentTypes {
+			if got == want {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 type RuntimeEntities map[int]any
@@ -43,11 +69,11 @@ func (r *RuntimeEntities) UnmarshalJSON(bytes []byte) error {
 		return err
 	}
 	for i, s := range serde {
-		typ, ok := EntityRegistry[s.Type]
+		info, ok := EntityRegistry[s.Type]
 		if !ok {
 			panic("missing type" + strconv.Itoa(int(s.Type)))
 		}
-		v := reflect.New(typ)
+		v := reflect.New(info.Type)
 		iface := v.Interface()
 		serde[i].Entity = iface
 	}
@@ -81,61 +107,4 @@ type Serializable interface {
 type GUIDrawable interface {
 	GetGUIZ() int8
 	DrawGUI()
-}
-
-func SaveEntities(path string) {
-	type SerEnt struct {
-		I      int
-		Entity any
-	}
-	sortEnt := make([]SerEnt, 0, len(g.Entities))
-	for i, e := range g.Entities {
-		if le, ok := e.(*LevelEditor); ok {
-			for _, layer := range le.LevelLayers {
-				for _, lentity := range layer.Entities { // TODO
-					sortEnt = append(sortEnt, SerEnt{
-						1,
-						lentity,
-					})
-				}
-			}
-		}
-		sortEnt = append(sortEnt, SerEnt{
-			I:      i,
-			Entity: e,
-		})
-	}
-	slices.SortFunc(sortEnt, func(a, b SerEnt) int {
-		return cmp.Compare(a.I, b.I)
-	})
-	entities := make([]any, len(sortEnt))
-	for i := range sortEnt {
-		entities[i] = sortEnt[i].Entity
-	}
-
-	b, err := json.MarshalIndent(entities, "", "  ")
-	if err != nil {
-		panic(err)
-	}
-	f, err := os.Create(path)
-	if err != nil {
-		panic(err)
-	}
-	defer f.Close()
-
-	_, err = f.Write(b)
-	if err != nil {
-		panic(err)
-	}
-}
-
-func LoadEntities(path string) {
-	b, err := os.ReadFile(path)
-	if err != nil {
-		panic(err)
-	}
-	err = g.Entities.UnmarshalJSON(b)
-	if err != nil {
-		panic(err)
-	}
 }

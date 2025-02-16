@@ -28,63 +28,65 @@ var g struct {
 	Player      *Player
 	LevelEditor *LevelEditor
 	Cursor      *Cursor
-	Camera      *Camera
+	Camera      *rl.Camera2D
 	Entities    RuntimeEntities
 	Drawables   []Drawable
 	Updaters    []Updatable
 	DrawGUIs    []GUIDrawable
 }
 
-func Update(dt float32) {
-	for i := range g.Updaters {
-		g.Updaters[i].Update(dt)
-	}
-}
-
-func Draw() {
-	for i := range g.Drawables {
-		g.Drawables[i].Draw()
-	}
-}
-
-func DrawGUI() {
-	for i := range g.DrawGUIs {
-		g.DrawGUIs[i].DrawGUI()
-	}
-}
-
-func EvalEntities() {
+func InitGameState() {
 	if g.Level == LEVEL_EDITOR {
-		le := &LevelEditor{
+		g.LevelEditor = &LevelEditor{
 			LevelLayers: []*LevelLayer{
 				{
 					Entities:            []LevelEntity{},
 					EntityPositionIndex: make(map[LevelBlock]uint16),
 				},
 			},
+			Camera: rl.NewCamera2D(rl.Vector2{}, rl.Vector2{}, 0, 1),
 			CurEntity: LevelEntity{
 				Type: ENTITY_SOLID,
 				Tex:  TEXTURE_BLOCK_1,
-				Pos:  rl.Vector2{},
 			},
 			GridSize: rl.Vector2{X: 39, Y: 83},
 			Z:        -1,
 			GUIZ:     1,
 		}
-		g.Entities[1337] = le
-	}
-	for i := range g.Entities {
-		switch v := g.Entities[i].(type) {
-		case *Cursor:
-			g.Cursor = v
-		case *Player:
-			g.Player = v
-		case *Camera:
-			g.Camera = v
-		case *LevelEditor:
-			g.LevelEditor = v
-		}
 
+		g.Camera = &g.LevelEditor.Camera
+	}
+}
+
+func Update(dt float32) {
+	if g.LevelEditor != nil {
+		g.LevelEditor.Update(dt)
+	}
+	for i := range g.Updaters {
+		g.Updaters[i].Update(dt)
+	}
+}
+
+func Draw() {
+	if g.LevelEditor != nil {
+		g.LevelEditor.Draw()
+	}
+	for i := range g.Drawables {
+		g.Drawables[i].Draw()
+	}
+}
+
+func DrawGUI() {
+	if g.LevelEditor != nil {
+		g.LevelEditor.DrawGUI()
+	}
+	for i := range g.DrawGUIs {
+		g.DrawGUIs[i].DrawGUI()
+	}
+}
+
+func EvalEntities() {
+	for i := range g.Entities {
 		{
 			u, ok := g.Entities[i].(Updatable)
 			if ok {
@@ -127,7 +129,7 @@ func Run() {
 
 	rl.SetTargetFPS(60)
 
-	//Entities = map[int]any{1: cur, 2: p, 3: cam, 4: le}
+	InitGameState()
 	LoadEntities("levels/level.json")
 	EvalEntities()
 
@@ -143,7 +145,7 @@ func Run() {
 		rl.BeginDrawing()
 		{
 			rl.ClearBackground(rl.Black)
-			rl.BeginMode2D(g.Camera.Cam)
+			rl.BeginMode2D(*g.Camera)
 			{
 				Draw()
 			}
@@ -155,11 +157,10 @@ func Run() {
 				fps := strconv.Itoa(int(rl.GetFPS()))
 				rl.DrawText("fps:"+fps, 20, 20, 2, rl.White)
 				rl.DrawText(g.Player.Debug(), 40, 40, 1, rl.Red)
-				rl.DrawText(g.Camera.Debug(), 40, 78, 1, rl.Green)
 				rl.DrawText(g.Cursor.Debug(), 40, 116, 1, rl.Blue)
 			}
 		}
 		rl.EndDrawing()
 	}
-	//SaveEntities("levels/level.json")
+	SaveEntities("levels/level.json")
 }

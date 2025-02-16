@@ -1,10 +1,12 @@
 package game
 
 import (
+	"encoding/json"
 	"fmt"
 	rlg "github.com/gen2brain/raylib-go/raygui"
 	rl "github.com/gen2brain/raylib-go/raylib"
 	"image/color"
+	"os"
 	"slices"
 )
 
@@ -16,15 +18,49 @@ type LevelEntity struct {
 	Pos  rl.Vector2 `json:"pos"`
 }
 
+func SaveEntities(path string) {
+	b, err := json.MarshalIndent(g.LevelEditor.LevelLayers, "", "  ")
+	if err != nil {
+		panic(err)
+	}
+	f, err := os.Create(path)
+	if err != nil {
+		panic(err)
+	}
+	defer f.Close()
+
+	_, err = f.Write(b)
+	if err != nil {
+		panic(err)
+	}
+}
+
+func LoadEntities(path string) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		panic(err)
+	}
+	var layers []*LevelLayer
+	err = json.Unmarshal(b, &layers)
+	if err != nil {
+		panic(err)
+	}
+	if len(layers) != 0 {
+		g.LevelEditor.LevelLayers = layers
+	}
+}
+
 type LevelLayer struct {
 	Z                   int
 	Entities            []LevelEntity
 	EntityPositionIndex map[LevelBlock]uint16 `json:"-"`
 }
 
+type LevelLayerID int8
 type LevelEditor struct {
 	LevelLayers  []*LevelLayer
-	CurrentLayer int
+	CurrentLayer LevelLayerID
+	Camera       rl.Camera2D
 
 	GridSize   rl.Vector2
 	CurEntity  LevelEntity
@@ -52,7 +88,7 @@ func (le *LevelEditor) Update(dt float32) {
 		return
 	}
 
-	le.CurEntity.Pos = rl.GetScreenToWorld2D(g.Cursor.Pos, g.Camera.Cam)
+	le.CurEntity.Pos = rl.GetScreenToWorld2D(rl.GetMousePosition(), le.Camera)
 	if le.GridSize != (rl.Vector2{}) {
 		le.CurEntity.Pos = pos2block(le.CurEntity.Pos)
 	}
@@ -61,6 +97,20 @@ func (le *LevelEditor) Update(dt float32) {
 		le.addEntity()
 	case rl.IsMouseButtonPressed(rl.MouseButtonRight):
 		le.delEntity()
+	}
+
+	const speed = 0.5
+	if rl.IsKeyDown(rl.KeyA) {
+		le.Camera.Target.X -= speed
+	}
+	if rl.IsKeyDown(rl.KeyD) {
+		le.Camera.Target.X += speed
+	}
+	if rl.IsKeyDown(rl.KeyW) {
+		le.Camera.Target.Y -= speed
+	}
+	if rl.IsKeyDown(rl.KeyS) {
+		le.Camera.Target.Y += speed
 	}
 }
 
@@ -71,6 +121,9 @@ func (le *LevelEditor) Draw() {
 
 	rl.DrawRectangle(int32(le.CurEntity.Pos.X), int32(le.CurEntity.Pos.Y), 2, 2, rl.Red)
 	rl.DrawText(fmt.Sprintf("%v", le.CurEntity.Pos), int32(le.CurEntity.Pos.X), int32(le.CurEntity.Pos.Y), 2, rl.White)
+	if !le.ViewOpened {
+		DrawCross(le.CurEntity.Pos, rl.Red)
+	}
 }
 
 func (le *LevelEditor) DrawGUI() {
@@ -91,7 +144,7 @@ func (le *LevelEditor) DrawGUI() {
 				le.CurEntity.Tex = uint16(i)
 			}
 		}
-
+		DrawCross(rl.GetMousePosition(), rl.Red)
 	}
 }
 
