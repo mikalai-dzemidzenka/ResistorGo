@@ -18,8 +18,8 @@ type LevelEntity struct {
 	Pos  rl.Vector2 `json:"pos"`
 }
 
-func SaveEntities(path string) {
-	b, err := json.MarshalIndent(g.LevelEditor.LevelLayers, "", "  ")
+func (le *LevelEditor) SaveEntities(path string) {
+	b, err := json.MarshalIndent(le.LevelLayers, "", "  ")
 	if err != nil {
 		panic(err)
 	}
@@ -35,7 +35,7 @@ func SaveEntities(path string) {
 	}
 }
 
-func LoadEntities(path string) {
+func (le *LevelEditor) LoadLevel(path string) {
 	b, err := os.ReadFile(path)
 	if err != nil {
 		panic(err)
@@ -46,7 +46,7 @@ func LoadEntities(path string) {
 		panic(err)
 	}
 	if len(layers) != 0 {
-		g.LevelEditor.LevelLayers = layers
+		le.LevelLayers = layers
 	}
 }
 

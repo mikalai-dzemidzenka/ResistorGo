@@ -14,14 +14,16 @@ const (
 )
 
 type Player struct {
-	Bound    rl.Rectangle `json:"bound"`
-	Pos      rl.Vector2   `json:"pos"`
-	Speed    rl.Vector2   `json:"speed"`
-	Friction float32      `json:"friction,omitempty"`
-	Anim     int32        `json:"anim,omitempty"`
-	Orient   int8         `json:"orient,omitempty"`
-	Z        int8         `json:"z,omitempty"`
-	Paused   bool         `json:"paused,omitempty"`
+	Camera          rl.Camera2D
+	Bound           rl.Rectangle `json:"bound"`
+	Pos             rl.Vector2   `json:"pos"`
+	Speed           rl.Vector2   `json:"speed"`
+	CameraZoomSpeed float32
+	Friction        float32 `json:"friction,omitempty"`
+	Anim            int32   `json:"anim,omitempty"`
+	// Orient 1 right, -1 left
+	Orient int8 `json:"orient,omitempty"`
+	Z      int8 `json:"z,omitempty"`
 }
 
 func (p *Player) MarshalJSON() ([]byte, error) {
@@ -39,6 +41,11 @@ func (p *Player) GetZ() int8 {
 var _ Serializable = (*Player)(nil)
 var _ Updatable = (*Player)(nil)
 var _ Drawable = (*Player)(nil)
+
+const (
+	MinZoom = 4
+	MaxZoom = 6
+)
 
 func (p *Player) Update(dt float32) {
 	var acc rl.Vector2
@@ -71,10 +78,31 @@ func (p *Player) Update(dt float32) {
 
 	p.Speed.X = clamp(p.Speed.X, -MaxSpeed, MaxSpeed)
 
-	p.Anim = TEXTURE_PLAYER_IDLE_1 + g.Cursor.AtkSt
+	a := rl.GetWorldToScreen2D(rl.Vector2{
+		X: g.Player.Pos.X + g.Player.Bound.Width/2,
+		Y: g.Player.Pos.Y + g.Player.Bound.Height*1/4,
+	}, *g.Camera)
+	b := g.Cursor.atkPos
+	angle := rl.Vector2LineAngle(a, b) // [-pi/2;pi/2]
+	angle += math.Pi / 2               // [0, pi]
+	p.Anim = TEXTURE_PLAYER_IDLE_1 + clamp(int32(angle/(math.Pi/4)), 0, 3)
 
 	p.Pos = rl.Vector2Add(p.Pos, p.Speed)
 	p.Pos.Y = float32(math.Round(float64(p.Pos.Y)))
+
+	p.UpdateCamera(dt)
+}
+
+func (p *Player) UpdateCamera(dt float32) {
+	p.CameraZoomSpeed += rl.GetMouseWheelMove() * dt * 5
+	p.Camera.Zoom += p.CameraZoomSpeed
+	p.CameraZoomSpeed = moveTo0(p.CameraZoomSpeed, 1.2*dt)
+	if !Debug {
+		p.Camera.Zoom = clamp(p.Camera.Zoom, MinZoom, MaxZoom)
+	} else {
+		p.Camera.Zoom = clamp(p.Camera.Zoom, 0.5, MaxZoom)
+	}
+	p.Camera.Target = rl.Vector2Add(g.Player.Pos, rl.Vector2{X: 50})
 }
 
 func (p *Player) Draw() {
@@ -101,5 +129,8 @@ func (p *Player) Draw() {
 }
 
 func (p *Player) Debug() string {
+	if p == nil {
+		return ""
+	}
 	return fmt.Sprintf("speed: %v\npos: %v\n", p.Speed, p.Pos)
 }

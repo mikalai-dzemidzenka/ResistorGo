@@ -14,13 +14,17 @@ const (
 	SH = 720
 )
 
-var CurrentLevel int
-
 const (
 	LEVEL_1 = iota
 	LEVEL_EDITOR
 	LEVEL_EDITOR_PLAY
 	LEVELS
+)
+
+const (
+	ID_CURSOR = iota
+	ID_PLAYER
+	ID_LEVEL_EDITOR
 )
 
 var g struct {
@@ -36,7 +40,10 @@ var g struct {
 }
 
 func InitGameState() {
-	if g.Level == LEVEL_EDITOR {
+	g.Entities = make(RuntimeEntities)
+
+	switch g.Level {
+	case LEVEL_EDITOR:
 		g.LevelEditor = &LevelEditor{
 			LevelLayers: []*LevelLayer{
 				{
@@ -53,33 +60,48 @@ func InitGameState() {
 			Z:        -1,
 			GUIZ:     1,
 		}
-
+		g.LevelEditor.LoadLevel("levels/level.json")
 		g.Camera = &g.LevelEditor.Camera
+		g.Entities[ID_LEVEL_EDITOR] = g.LevelEditor
+	default:
+		g.Cursor = &Cursor{
+			Pos:    rl.Vector2{},
+			atkPos: rl.Vector2{},
+			GUIZ:   0,
+		}
+		g.Entities[ID_CURSOR] = g.Cursor
+
+		g.Player = &Player{
+			Camera:   rl.NewCamera2D(rl.Vector2{X: SW / 2, Y: SH / 2}, rl.Vector2{}, 0, 1),
+			Bound:    rl.Rectangle{Width: 39, Height: 44},
+			Pos:      rl.Vector2{0, 0},
+			Speed:    rl.Vector2{},
+			Friction: DefaultFriction,
+			Anim:     TEXTURE_PLAYER_IDLE,
+			Orient:   1,
+			Z:        0,
+		}
+
+		g.Camera = &g.Player.Camera
+		g.Entities[ID_PLAYER] = g.Player
 	}
+
+	EvalEntities()
 }
 
 func Update(dt float32) {
-	if g.LevelEditor != nil {
-		g.LevelEditor.Update(dt)
-	}
 	for i := range g.Updaters {
 		g.Updaters[i].Update(dt)
 	}
 }
 
 func Draw() {
-	if g.LevelEditor != nil {
-		g.LevelEditor.Draw()
-	}
 	for i := range g.Drawables {
 		g.Drawables[i].Draw()
 	}
 }
 
 func DrawGUI() {
-	if g.LevelEditor != nil {
-		g.LevelEditor.DrawGUI()
-	}
 	for i := range g.DrawGUIs {
 		g.DrawGUIs[i].DrawGUI()
 	}
@@ -120,7 +142,7 @@ func Run() {
 	rl.InitWindow(SW, SH, "Resistor")
 	defer rl.CloseWindow()
 
-	flag.IntVar(&g.Level, "l", LEVEL_EDITOR, "level to load")
+	flag.IntVar(&g.Level, "l", LEVEL_EDITOR_PLAY, "level to load")
 
 	rl.DisableCursor()
 
@@ -130,8 +152,6 @@ func Run() {
 	rl.SetTargetFPS(60)
 
 	InitGameState()
-	LoadEntities("levels/level.json")
-	EvalEntities()
 
 	for !rl.WindowShouldClose() {
 		if rl.IsKeyPressed(rl.KeyGrave) {
@@ -162,5 +182,7 @@ func Run() {
 		}
 		rl.EndDrawing()
 	}
-	SaveEntities("levels/level.json")
+	if g.LevelEditor != nil {
+		g.LevelEditor.SaveEntities("levels/level.json")
+	}
 }
