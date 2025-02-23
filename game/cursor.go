@@ -9,14 +9,14 @@ import (
 const (
 	CursorLen             = 6
 	CursorThick           = 2
-	CursorAttackSpeed     = 0.1
-	CursorFastAttackSpeed = 0.5
+	CursorAttackSpeed     = 0.05
+	CursorFastAttackSpeed = 0.1
 )
 
 type Cursor struct {
 	Pos      rl.Vector2
-	atkPos   rl.Vector2
-	atkSpeed float32
+	AtkPos   rl.Vector2
+	AtkSpeed float32
 	GUIZ     int8
 }
 
@@ -29,24 +29,24 @@ func (c *Cursor) GetGUIZ() int8 {
 
 func (c *Cursor) Update(dt float32) {
 	if rl.IsMouseButtonDown(rl.MouseButtonRight) {
-		c.atkSpeed = CursorFastAttackSpeed
+		c.AtkSpeed = CursorFastAttackSpeed
 	} else {
-		c.atkSpeed = CursorAttackSpeed
+		c.AtkSpeed = CursorAttackSpeed
 	}
 
 	c.Pos = rl.GetMousePosition()
-	c.atkPos = rl.Vector2Lerp(c.atkPos, c.Pos, c.atkSpeed)
+	c.AtkPos = rl.Vector2Lerp(c.AtkPos, c.Pos, c.AtkSpeed)
 }
 
 func (c *Cursor) DrawGUI() {
 	DrawCross(c.Pos, rl.Red)
-	DrawCross(g.Cursor.atkPos, rl.Green)
+	DrawCross(g.Cursor.AtkPos, rl.Green)
 	if Debug {
 		a := rl.GetWorldToScreen2D(rl.Vector2{
 			X: g.Player.Pos.X + g.Player.Bound.Width/2,
 			Y: g.Player.Pos.Y + g.Player.Bound.Height*1/4,
 		}, *g.Camera)
-		b := g.Cursor.atkPos
+		b := g.Cursor.AtkPos
 		rl.DrawLineV(a, b, rl.Blue)
 	}
 }
@@ -70,5 +70,5 @@ func (c *Cursor) Debug() string {
 	if c == nil {
 		return ""
 	}
-	return fmt.Sprintf("pos: %v\natk_pos:%v\n", g.Cursor.Pos, g.Cursor.atkPos)
+	return fmt.Sprintf("pos: %v\natk_pos:%v\n", g.Cursor.Pos, g.Cursor.AtkPos)
 }

@@ -25,6 +25,7 @@ const (
 	ID_CURSOR = iota
 	ID_PLAYER
 	ID_LEVEL_EDITOR
+	ID_SOLID_BASE = 100
 )
 
 var g struct {
@@ -66,7 +67,7 @@ func InitGameState() {
 	default:
 		g.Cursor = &Cursor{
 			Pos:    rl.Vector2{},
-			atkPos: rl.Vector2{},
+			AtkPos: rl.Vector2{},
 			GUIZ:   0,
 		}
 		g.Entities[ID_CURSOR] = g.Cursor
@@ -80,10 +81,29 @@ func InitGameState() {
 			Anim:     TEXTURE_PLAYER_IDLE,
 			Orient:   1,
 			Z:        0,
+			Gravity:  0.2,
 		}
 
 		g.Camera = &g.Player.Camera
 		g.Entities[ID_PLAYER] = g.Player
+
+		{
+			tex := Textures[TEXTURE_BLOCK_1]
+			p := rl.Vector2{0, -30}
+			var c int32 = 87
+			g.Entities[ID_SOLID_BASE] = &Solid{
+				Z:   -1,
+				Tex: TEXTURE_BLOCK_1,
+				Pos: p,
+				Col: rl.Rectangle{
+					X:      p.X,
+					Y:      p.Y + float32(c),
+					Width:  float32(tex.Width),
+					Height: float32(tex.Height - c),
+				},
+			}
+		}
+
 	}
 
 	EvalEntities()

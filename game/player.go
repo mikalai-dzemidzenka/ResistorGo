@@ -14,10 +14,15 @@ const (
 )
 
 type Player struct {
-	Camera          rl.Camera2D
-	Bound           rl.Rectangle `json:"bound"`
-	Pos             rl.Vector2   `json:"pos"`
-	Speed           rl.Vector2   `json:"speed"`
+	Camera   rl.Camera2D
+	Bound    rl.Rectangle `json:"bound"`
+	Pos      rl.Vector2   `json:"pos"`
+	Speed    rl.Vector2   `json:"speed"`
+	Collider *rl.Rectangle
+	Gravity  float32
+	topRay   rl.Vector2
+	botRay   rl.Vector2
+
 	CameraZoomSpeed float32
 	Friction        float32 `json:"friction,omitempty"`
 	Anim            int32   `json:"anim,omitempty"`
@@ -51,6 +56,12 @@ func (p *Player) Update(dt float32) {
 	var acc rl.Vector2
 
 	var noInput bool
+	var jump bool
+	switch {
+	case rl.IsKeyDown(rl.KeySpace):
+		p.Speed.Y -= 0.5
+		jump = true
+	}
 	switch {
 	case rl.IsKeyDown(rl.KeyLeft), rl.IsKeyDown(rl.KeyA):
 		acc.X -= DefaultAcc
@@ -60,6 +71,19 @@ func (p *Player) Update(dt float32) {
 		p.Orient = 1
 	default:
 		noInput = true
+	}
+	p.Bound.X = p.Pos.X
+	p.Bound.Y = p.Pos.Y
+
+	s := g.Entities[ID_SOLID_BASE].(*Solid)
+	if rl.CheckCollisionRecs(p.Bound, s.Col) && !jump {
+		p.Speed.Y = 0
+
+		p.Collider = new(rl.Rectangle)
+		*p.Collider = rl.GetCollisionRec(p.Bound, s.Col)
+	} else {
+		p.Speed.Y += p.Gravity
+		p.Collider = nil
 	}
 
 	if noInput {
@@ -78,14 +102,13 @@ func (p *Player) Update(dt float32) {
 
 	p.Speed.X = clamp(p.Speed.X, -MaxSpeed, MaxSpeed)
 
-	a := rl.GetWorldToScreen2D(rl.Vector2{
-		X: g.Player.Pos.X + g.Player.Bound.Width/2,
-		Y: g.Player.Pos.Y + g.Player.Bound.Height*1/4,
-	}, *g.Camera)
-	b := g.Cursor.atkPos
-	angle := rl.Vector2LineAngle(a, b) // [-pi/2;pi/2]
-	angle += math.Pi / 2               // [0, pi]
-	p.Anim = TEXTURE_PLAYER_IDLE_1 + clamp(int32(angle/(math.Pi/4)), 0, 3)
+	p.topRay = rl.Vector2{p.Pos.X + p.Bound.Width/2, p.Pos.Y}
+	p.botRay = rl.Vector2{p.Pos.X + p.Bound.Width/2, p.Pos.Y + p.Bound.Height}
+	i := (p.botRay.Y - p.topRay.Y) / AttackIdleLen
+	h := rl.GetScreenToWorld2D(g.Cursor.AtkPos, *g.Camera).Y - p.topRay.Y
+
+	idx := clamp(h/i, TEXTURE_PLAYER_IDLE_1, TEXTURE_PLAYER_IDLE_4)
+	p.Anim = int32(idx)
 
 	p.Pos = rl.Vector2Add(p.Pos, p.Speed)
 	p.Pos.Y = float32(math.Round(float64(p.Pos.Y)))
@@ -107,10 +130,7 @@ func (p *Player) UpdateCamera(dt float32) {
 
 func (p *Player) Draw() {
 	anim := Textures[p.Anim]
-	if Debug {
-		rl.DrawRectangle(int32(p.Pos.X), int32(p.Pos.Y), 39, 44, DebugColor1)
-		rl.DrawRectangleLines(int32(p.Pos.X), int32(p.Pos.Y), 39, 44, DebugColor2)
-	}
+
 	rl.DrawTextureRec(
 		anim,
 		rl.Rectangle{
@@ -123,8 +143,20 @@ func (p *Player) Draw() {
 		rl.White,
 	)
 	if Debug {
+		// collision
+		rl.DrawRectangle(int32(p.Pos.X), int32(p.Pos.Y), 39, 44, DebugColor1)
+		rl.DrawRectangleLinesEx(p.Bound, 1, DebugColor2)
+		if p.Collider != nil {
+			rl.DrawRectangleLinesEx(*p.Collider, 1, rl.Red)
+		}
+
+		// player centers
 		rl.DrawCircle(int32(p.Pos.X+p.Bound.Width/2), int32(p.Pos.Y+p.Bound.Height/2), 2, rl.Red)
 		rl.DrawCircle(int32(p.Pos.X+p.Bound.Width/2), int32(p.Pos.Y+p.Bound.Height*1/4), 1, rl.Green)
+
+		// top and bottom attack ray bound
+		rl.DrawCircle(int32(p.topRay.X), int32(p.botRay.Y), 0.5, rl.Blue)
+		rl.DrawCircle(int32(p.botRay.X), int32(p.botRay.Y), 0.5, rl.Blue)
 	}
 }
 

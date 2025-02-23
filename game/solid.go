@@ -9,6 +9,7 @@ type Solid struct {
 	Z   int8
 	Tex int32
 	Pos rl.Vector2
+	Col rl.Rectangle
 }
 
 func (s *Solid) GetZ() int8 {
@@ -16,7 +17,13 @@ func (s *Solid) GetZ() int8 {
 }
 
 func (s *Solid) Draw() {
-	rl.DrawTexture(Textures[s.Tex], int32(s.Pos.X), int32(s.Pos.Y), rl.White)
+	tex := Textures[s.Tex]
+	rl.DrawTexture(tex, int32(s.Pos.X), int32(s.Pos.Y), rl.White)
+	if Debug {
+		var c int32 = 87
+		rl.DrawRectangle(int32(s.Pos.X), int32(s.Pos.Y)+c, tex.Width, tex.Height-c, DebugColor1)
+		rl.DrawRectangleLinesEx(s.Col, 1, DebugColor2)
+	}
 }
 
 func (s *Solid) MarshalJSON() ([]byte, error) {
