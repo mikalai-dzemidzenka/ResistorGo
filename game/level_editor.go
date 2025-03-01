@@ -18,7 +18,7 @@ type LevelEntity struct {
 	Pos  rl.Vector2 `json:"pos"`
 }
 
-func (le *LevelEditor) SaveEntities(path string) {
+func (le *LevelEditor) SaveLevel(path string) {
 	b, err := json.MarshalIndent(le.LevelLayers, "", "  ")
 	if err != nil {
 		panic(err)
@@ -67,6 +67,25 @@ type LevelEditor struct {
 	ViewOpened bool
 	Z          int8
 	GUIZ       int8
+}
+
+func NewLevelEditor() *LevelEditor {
+	return &LevelEditor{
+		LevelLayers: []*LevelLayer{
+			{
+				Entities:            []LevelEntity{},
+				EntityPositionIndex: make(map[LevelBlock]uint16),
+			},
+		},
+		Camera: rl.NewCamera2D(rl.Vector2{}, rl.Vector2{}, 0, 1),
+		CurEntity: LevelEntity{
+			Type: ENTITY_SOLID,
+			Tex:  TEXTURE_BLOCK_1,
+		},
+		GridSize: rl.Vector2{X: 39, Y: 83},
+		Z:        -1,
+		GUIZ:     1,
+	}
 }
 
 var _ Updatable = (*LevelEditor)(nil)

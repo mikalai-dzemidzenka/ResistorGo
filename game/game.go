@@ -35,48 +35,42 @@ var g struct {
 	Cursor      *Cursor
 	Camera      *rl.Camera2D
 	Entities    RuntimeEntities
+	Solids      []*Solid
 	Drawables   []Drawable
 	Updaters    []Updatable
 	DrawGUIs    []GUIDrawable
 }
 
-func InitGameState() {
+func LoadLevel(level int) {
+	prevLevel := g.Level
+
+	g.Level = level
 	g.Entities = make(RuntimeEntities)
+	if g.Solids != nil {
+		g.Solids = g.Solids[:0]
+	}
+	g.Cursor = nil
+
+	if prevLevel != level && prevLevel == LEVEL_EDITOR {
+		g.LevelEditor.SaveLevel("levels/level.json")
+	}
 
 	switch g.Level {
 	case LEVEL_EDITOR:
-		g.LevelEditor = &LevelEditor{
-			LevelLayers: []*LevelLayer{
-				{
-					Entities:            []LevelEntity{},
-					EntityPositionIndex: make(map[LevelBlock]uint16),
-				},
-			},
-			Camera: rl.NewCamera2D(rl.Vector2{}, rl.Vector2{}, 0, 1),
-			CurEntity: LevelEntity{
-				Type: ENTITY_SOLID,
-				Tex:  TEXTURE_BLOCK_1,
-			},
-			GridSize: rl.Vector2{X: 39, Y: 83},
-			Z:        -1,
-			GUIZ:     1,
-		}
+		g.LevelEditor = NewLevelEditor()
 		g.LevelEditor.LoadLevel("levels/level.json")
 		g.Camera = &g.LevelEditor.Camera
 		g.Entities[ID_LEVEL_EDITOR] = g.LevelEditor
 	default:
-		g.Cursor = &Cursor{
-			Pos:    rl.Vector2{},
-			AtkPos: rl.Vector2{},
-			GUIZ:   0,
-		}
+		g.Cursor = &Cursor{}
 		g.Entities[ID_CURSOR] = g.Cursor
 
 		g.Player = &Player{
-			Camera:   rl.NewCamera2D(rl.Vector2{X: SW / 2, Y: SH / 2}, rl.Vector2{}, 0, 1),
+			Camera:   rl.NewCamera2D(rl.Vector2{X: SW / 2, Y: SH / 2}, rl.Vector2{}, 0, MinZoom),
 			Bound:    rl.Rectangle{Width: 39, Height: 44},
 			Pos:      rl.Vector2{0, 0},
 			Speed:    rl.Vector2{},
+			Acc:      DefaultAcc,
 			Friction: DefaultFriction,
 			Anim:     TEXTURE_PLAYER_IDLE,
 			Orient:   1,
@@ -91,7 +85,7 @@ func InitGameState() {
 			tex := Textures[TEXTURE_BLOCK_1]
 			p := rl.Vector2{0, -30}
 			var c int32 = 87
-			g.Entities[ID_SOLID_BASE] = &Solid{
+			g.Solids = append(g.Solids, &Solid{
 				Z:   -1,
 				Tex: TEXTURE_BLOCK_1,
 				Pos: p,
@@ -101,7 +95,7 @@ func InitGameState() {
 					Width:  float32(tex.Width),
 					Height: float32(tex.Height - c),
 				},
-			}
+			})
 		}
 
 	}
@@ -110,6 +104,12 @@ func InitGameState() {
 }
 
 func Update(dt float32) {
+	if rl.IsKeyPressed(rl.KeyOne) {
+		LoadLevel(LEVEL_EDITOR)
+	}
+	if rl.IsKeyPressed(rl.KeyTwo) {
+		LoadLevel(LEVEL_EDITOR_PLAY)
+	}
 	for i := range g.Updaters {
 		g.Updaters[i].Update(dt)
 	}
@@ -128,6 +128,16 @@ func DrawGUI() {
 }
 
 func EvalEntities() {
+	if g.Updaters != nil {
+		g.Updaters = g.Updaters[:0]
+	}
+	if g.Drawables != nil {
+		g.Drawables = g.Drawables[:0]
+	}
+	if g.DrawGUIs != nil {
+		g.DrawGUIs = g.DrawGUIs[:0]
+	}
+
 	for i := range g.Entities {
 		{
 			u, ok := g.Entities[i].(Updatable)
@@ -147,6 +157,9 @@ func EvalEntities() {
 				g.DrawGUIs = append(g.DrawGUIs, dg)
 			}
 		}
+	}
+	for i := range g.Solids {
+		g.Drawables = append(g.Drawables, g.Solids[i])
 	}
 
 	slices.SortFunc(g.Drawables, func(a, b Drawable) int {
@@ -171,7 +184,7 @@ func Run() {
 
 	rl.SetTargetFPS(60)
 
-	InitGameState()
+	LoadLevel(g.Level)
 
 	for !rl.WindowShouldClose() {
 		if rl.IsKeyPressed(rl.KeyGrave) {
@@ -203,6 +216,6 @@ func Run() {
 		rl.EndDrawing()
 	}
 	if g.LevelEditor != nil {
-		g.LevelEditor.SaveEntities("levels/level.json")
+		g.LevelEditor.SaveLevel("levels/level.json")
 	}
 }

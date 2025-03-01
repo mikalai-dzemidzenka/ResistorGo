@@ -14,15 +14,16 @@ const (
 )
 
 type Player struct {
-	Camera   rl.Camera2D
-	Bound    rl.Rectangle `json:"bound"`
-	Pos      rl.Vector2   `json:"pos"`
-	Speed    rl.Vector2   `json:"speed"`
-	Collider *rl.Rectangle
-	Gravity  float32
-	topRay   rl.Vector2
-	botRay   rl.Vector2
-
+	Camera          rl.Camera2D
+	Bound           rl.Rectangle `json:"bound"`
+	Pos             rl.Vector2   `json:"pos"`
+	Speed           rl.Vector2   `json:"speed"`
+	topRay          rl.Vector2
+	botRay          rl.Vector2
+	Collider        rl.Rectangle
+	Gravity         float32
+	Acc             float32
+	OnGround        bool
 	CameraZoomSpeed float32
 	Friction        float32 `json:"friction,omitempty"`
 	Anim            int32   `json:"anim,omitempty"`
@@ -53,54 +54,49 @@ const (
 )
 
 func (p *Player) Update(dt float32) {
+	in := p.handleInput()
 	var acc rl.Vector2
-
-	var noInput bool
-	var jump bool
-	switch {
-	case rl.IsKeyDown(rl.KeySpace):
+	if in.jumpPressed && p.OnGround {
 		p.Speed.Y -= 0.5
-		jump = true
-	}
-	switch {
-	case rl.IsKeyDown(rl.KeyLeft), rl.IsKeyDown(rl.KeyA):
-		acc.X -= DefaultAcc
-		p.Orient = -1
-	case rl.IsKeyDown(rl.KeyRight), rl.IsKeyDown(rl.KeyD):
-		acc.X += DefaultAcc
-		p.Orient = 1
-	default:
-		noInput = true
-	}
-	p.Bound.X = p.Pos.X
-	p.Bound.Y = p.Pos.Y
-
-	s := g.Entities[ID_SOLID_BASE].(*Solid)
-	if rl.CheckCollisionRecs(p.Bound, s.Col) && !jump {
-		p.Speed.Y = 0
-
-		p.Collider = new(rl.Rectangle)
-		*p.Collider = rl.GetCollisionRec(p.Bound, s.Col)
-	} else {
-		p.Speed.Y += p.Gravity
-		p.Collider = nil
+		p.OnGround = false
 	}
 
-	if noInput {
+	acc.X += p.Acc * in.moveX
+
+	if in.moveX != 0 { // move
+		p.Orient = int8(in.moveX)
+		p.Speed = rl.Vector2Add(p.Speed, acc)
+	} else { // slowdown
 		switch {
+		case abs(p.Speed.X) < 0.2:
+			p.Speed.X = 0
 		case p.Speed.X > 0:
 			p.Speed.X -= p.Friction
 		case p.Speed.X < 0:
 			p.Speed.X += p.Friction
 		}
-		if abs(p.Speed.X) < 0.2 {
-			p.Speed.X = 0
-		}
-	} else {
-		p.Speed = rl.Vector2Add(p.Speed, acc)
+
 	}
 
 	p.Speed.X = clamp(p.Speed.X, -MaxSpeed, MaxSpeed)
+
+	s := g.Solids[0]
+	if p.OnGround {
+		p.Speed.Y = 0
+
+		p.Collider = rl.GetCollisionRec(p.Bound, s.Col)
+	} else {
+		if !DebugDisableGravity {
+			p.Speed.Y += p.Gravity
+		}
+		p.Collider = rl.Rectangle{}
+	}
+
+	p.Pos = rl.Vector2Add(p.Pos, p.Speed)
+	p.Pos.Y = float32(math.Round(float64(p.Pos.Y)))
+
+	p.Bound.X = p.Pos.X
+	p.Bound.Y = p.Pos.Y
 
 	p.topRay = rl.Vector2{p.Pos.X + p.Bound.Width/2, p.Pos.Y}
 	p.botRay = rl.Vector2{p.Pos.X + p.Bound.Width/2, p.Pos.Y + p.Bound.Height}
@@ -110,10 +106,28 @@ func (p *Player) Update(dt float32) {
 	idx := clamp(h/i, TEXTURE_PLAYER_IDLE_1, TEXTURE_PLAYER_IDLE_4)
 	p.Anim = int32(idx)
 
-	p.Pos = rl.Vector2Add(p.Pos, p.Speed)
-	p.Pos.Y = float32(math.Round(float64(p.Pos.Y)))
-
 	p.UpdateCamera(dt)
+}
+
+func (p *Player) handleInput() (result inputs) {
+	switch {
+	case rl.IsKeyDown(rl.KeySpace):
+		result.jumpPressed = true
+	}
+	switch {
+	case rl.IsKeyDown(rl.KeyLeft), rl.IsKeyDown(rl.KeyA):
+		result.moveX -= 1
+	}
+	switch {
+	case rl.IsKeyDown(rl.KeyRight), rl.IsKeyDown(rl.KeyD):
+		result.moveX += 1
+	}
+	return result
+}
+
+type inputs struct {
+	moveX       float32
+	jumpPressed bool
 }
 
 func (p *Player) UpdateCamera(dt float32) {
@@ -146,17 +160,16 @@ func (p *Player) Draw() {
 		// collision
 		rl.DrawRectangle(int32(p.Pos.X), int32(p.Pos.Y), 39, 44, DebugColor1)
 		rl.DrawRectangleLinesEx(p.Bound, 1, DebugColor2)
-		if p.Collider != nil {
-			rl.DrawRectangleLinesEx(*p.Collider, 1, rl.Red)
+		if p.Collider != (rl.Rectangle{}) {
+			rl.DrawRectangleLinesEx(p.Collider, 1, rl.Red)
 		}
 
 		// player centers
 		rl.DrawCircle(int32(p.Pos.X+p.Bound.Width/2), int32(p.Pos.Y+p.Bound.Height/2), 2, rl.Red)
-		rl.DrawCircle(int32(p.Pos.X+p.Bound.Width/2), int32(p.Pos.Y+p.Bound.Height*1/4), 1, rl.Green)
 
 		// top and bottom attack ray bound
-		rl.DrawCircle(int32(p.topRay.X), int32(p.botRay.Y), 0.5, rl.Blue)
-		rl.DrawCircle(int32(p.botRay.X), int32(p.botRay.Y), 0.5, rl.Blue)
+		rl.DrawCircle(int32(p.topRay.X), int32(p.topRay.Y), 0.5, rl.SkyBlue)
+		rl.DrawCircle(int32(p.botRay.X), int32(p.botRay.Y), 0.5, rl.SkyBlue)
 	}
 }
 
