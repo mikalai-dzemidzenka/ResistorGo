@@ -13,6 +13,7 @@ const (
 	ENTITY_PLAYER
 	ENTITY_SOLID
 	ENTITY_BG
+	ENTITY_LEN
 )
 
 type ComponentType int16

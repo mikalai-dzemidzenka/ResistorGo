@@ -3,8 +3,8 @@ module resistor
 go 1.23.2
 
 require (
-	github.com/gen2brain/raylib-go/raygui v0.0.0-20250109172833-6dbba4f81a9b
-	github.com/gen2brain/raylib-go/raylib v0.0.0-20241217185605-453bad276990
+	github.com/gen2brain/raylib-go/raygui v0.0.0-20250215042252-db8e47f0e5c5
+	github.com/gen2brain/raylib-go/raylib v0.0.0-20250215042252-db8e47f0e5c5
 )
 
 require (

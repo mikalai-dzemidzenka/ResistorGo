@@ -13,6 +13,21 @@ const (
 	DefaultFriction = 0.4
 )
 
+func NewPlayer() *Player {
+	return &Player{
+		Camera:   rl.NewCamera2D(rl.Vector2{X: SW / 2, Y: SH / 2}, rl.Vector2{}, 0, MinZoom),
+		Bound:    rl.Rectangle{Width: 39, Height: 44},
+		Pos:      rl.Vector2{0, 0},
+		Speed:    rl.Vector2{},
+		Acc:      DefaultAcc,
+		Friction: DefaultFriction,
+		Anim:     TEXTURE_PLAYER_IDLE,
+		Orient:   1,
+		Z:        1,
+		Gravity:  0.2,
+	}
+}
+
 type Player struct {
 	Camera          rl.Camera2D
 	Bound           rl.Rectangle `json:"bound"`

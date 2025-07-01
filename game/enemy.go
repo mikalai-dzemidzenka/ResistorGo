@@ -2,6 +2,20 @@ package game
 
 import rl "github.com/gen2brain/raylib-go/raylib"
 
+func NewEnemy() *Enemy {
+	return &Enemy{
+		Bound:    rl.Rectangle{Width: 39, Height: 44},
+		Pos:      rl.Vector2{0, 0},
+		Speed:    rl.Vector2{},
+		Acc:      DefaultAcc,
+		Friction: DefaultFriction,
+		Anim:     TEXTURE_PLAYER_IDLE,
+		Orient:   1,
+		Z:        1,
+		Gravity:  0.2,
+	}
+}
+
 type Enemy struct {
 	Bound    rl.Rectangle `json:"bound"`
 	Pos      rl.Vector2   `json:"pos"`

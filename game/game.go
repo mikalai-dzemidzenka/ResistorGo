@@ -2,9 +2,11 @@ package game
 
 import (
 	"cmp"
+	"encoding/json"
 	"flag"
 	rlg "github.com/gen2brain/raylib-go/raygui"
 	rl "github.com/gen2brain/raylib-go/raylib"
+	"os"
 	"slices"
 	"strconv"
 )
@@ -61,41 +63,51 @@ func LoadLevel(level int) {
 		g.LevelEditor.LoadLevel("levels/level.json")
 		g.Camera = &g.LevelEditor.Camera
 		g.Entities[ID_LEVEL_EDITOR] = g.LevelEditor
+	case LEVEL_EDITOR_PLAY:
+		path := "levels/level.json"
+		// func
+		b, err := os.ReadFile(path)
+		if err != nil {
+			panic(err)
+		}
+		var layers []*LevelLayer
+		err = json.Unmarshal(b, &layers)
+		if err != nil {
+			panic(err)
+		}
+
+		g.Cursor = &Cursor{}
+		g.Entities[ID_CURSOR] = g.Cursor
+
+		g.Player = NewPlayer()
+		g.Camera = &g.Player.Camera
+		g.Entities[ID_PLAYER] = g.Player
+
+		solidID := ID_SOLID_BASE
+		for _, layer := range layers {
+			for _, e := range layer.Entities {
+				switch e.Type {
+				case ENTITY_SOLID:
+					g.Solids = append(g.Solids, &Solid{
+						Z:   layer.Z,
+						Tex: e.Tex,
+						Pos: e.Pos,
+						Col: rl.Rectangle{},
+					})
+					solidID += 1
+				}
+			}
+		}
 	default:
 		g.Cursor = &Cursor{}
 		g.Entities[ID_CURSOR] = g.Cursor
 
-		g.Player = &Player{
-			Camera:   rl.NewCamera2D(rl.Vector2{X: SW / 2, Y: SH / 2}, rl.Vector2{}, 0, MinZoom),
-			Bound:    rl.Rectangle{Width: 39, Height: 44},
-			Pos:      rl.Vector2{0, 0},
-			Speed:    rl.Vector2{},
-			Acc:      DefaultAcc,
-			Friction: DefaultFriction,
-			Anim:     TEXTURE_PLAYER_IDLE,
-			Orient:   1,
-			Z:        0,
-			Gravity:  0.2,
-		}
-
+		g.Player = NewPlayer()
 		g.Camera = &g.Player.Camera
 		g.Entities[ID_PLAYER] = g.Player
 
 		{
-			tex := Textures[TEXTURE_BLOCK_1]
-			p := rl.Vector2{0, -30}
-			var c int32 = 87
-			g.Solids = append(g.Solids, &Solid{
-				Z:   -1,
-				Tex: TEXTURE_BLOCK_1,
-				Pos: p,
-				Col: rl.Rectangle{
-					X:      p.X,
-					Y:      p.Y + float32(c),
-					Width:  float32(tex.Width),
-					Height: float32(tex.Height - c),
-				},
-			})
+			g.Solids = append(g.Solids, NewSolid(rl.Vector2{0, -30}))
 		}
 
 	}

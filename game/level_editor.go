@@ -14,7 +14,7 @@ type LevelBlock = rl.Vector2
 
 type LevelEntity struct {
 	Type EntityType `json:"type"`
-	Tex  uint16     `json:"tex"`
+	Tex  int32      `json:"tex"`
 	Pos  rl.Vector2 `json:"pos"`
 }
 
@@ -51,7 +51,7 @@ func (le *LevelEditor) LoadLevel(path string) {
 }
 
 type LevelLayer struct {
-	Z                   int
+	Z                   int8
 	Entities            []LevelEntity
 	EntityPositionIndex map[LevelBlock]uint16 `json:"-"`
 }
@@ -118,7 +118,7 @@ func (le *LevelEditor) Update(dt float32) {
 		le.delEntity()
 	}
 
-	const speed = 0.5
+	const speed = 2
 	if rl.IsKeyDown(rl.KeyA) {
 		le.Camera.Target.X -= speed
 	}
@@ -135,14 +135,9 @@ func (le *LevelEditor) Update(dt float32) {
 
 func (le *LevelEditor) Draw() {
 	le.drawEntities()
-	le.drawCurEntity()
 	le.drawGrid()
+	le.drawCurEntity()
 
-	rl.DrawRectangle(int32(le.CurEntity.Pos.X), int32(le.CurEntity.Pos.Y), 2, 2, rl.Red)
-	rl.DrawText(fmt.Sprintf("%v", le.CurEntity.Pos), int32(le.CurEntity.Pos.X), int32(le.CurEntity.Pos.Y), 2, rl.White)
-	if !le.ViewOpened {
-		DrawCross(le.CurEntity.Pos, rl.Red)
-	}
 }
 
 func (le *LevelEditor) DrawGUI() {
@@ -150,8 +145,17 @@ func (le *LevelEditor) DrawGUI() {
 		col := rl.GetColor(uint(rlg.GetStyle(rlg.DEFAULT, rlg.BACKGROUND_COLOR)))
 		col.A = 127
 		rl.DrawRectangle(25, 25, SW-50, SH-50, col)
-		for i := 0; i < TEXTURE_LEN; i++ { // TODO editor entities
-			tex := Textures[i]
+		for i := EntityType(0); i < ENTITY_LEN; i++ {
+			var texID int32
+			switch i {
+			case ENTITY_PLAYER:
+				texID = TEXTURE_PLAYER_IDLE
+			case ENTITY_SOLID:
+				texID = TEXTURE_BLOCK_1
+			default:
+				continue
+			}
+			tex := Textures[texID]
 			rl.DrawTexturePro(tex,
 				rl.Rectangle{0, 0, float32(tex.Width), float32(tex.Height)},
 				rl.Rectangle{float32((i * 100) + 25), 35, 100, 100},
@@ -160,7 +164,8 @@ func (le *LevelEditor) DrawGUI() {
 			rlg.SetStyle(rlg.BUTTON, rlg.BASE_COLOR_FOCUSED, int64(rl.ColorToInt(color.RGBA{0, 0, 0, 25})))
 
 			if rlg.Button(rl.Rectangle{float32((i * 100) + 25), 35, 100, 100}, "") {
-				le.CurEntity.Tex = uint16(i)
+				le.CurEntity.Type = i
+				le.CurEntity.Tex = texID
 			}
 		}
 		DrawCross(rl.GetMousePosition(), rl.Red)
@@ -249,6 +254,12 @@ func (le *LevelEditor) drawCurEntity() {
 		le.CurEntity.Pos,
 		color.RGBA{255, 255, 255, 128},
 	)
+
+	rl.DrawRectangle(int32(le.CurEntity.Pos.X), int32(le.CurEntity.Pos.Y), 2, 2, rl.Red)
+	rl.DrawText(fmt.Sprintf("%v", le.CurEntity.Pos), int32(le.CurEntity.Pos.X), int32(le.CurEntity.Pos.Y), 2, rl.White)
+	if !le.ViewOpened {
+		DrawCross(le.CurEntity.Pos, rl.Red)
+	}
 }
 
 func (le *LevelEditor) drawGrid() {

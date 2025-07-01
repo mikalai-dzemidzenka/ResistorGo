@@ -5,6 +5,22 @@ import (
 	rl "github.com/gen2brain/raylib-go/raylib"
 )
 
+func NewSolid(p rl.Vector2) *Solid {
+	tex := Textures[TEXTURE_BLOCK_1]
+	var c int32 = 87
+	return &Solid{
+		Z:   -1,
+		Tex: TEXTURE_BLOCK_1,
+		Pos: p,
+		Col: rl.Rectangle{
+			X:      p.X,
+			Y:      p.Y + float32(c),
+			Width:  float32(tex.Width),
+			Height: float32(tex.Height - c),
+		},
+	}
+}
+
 type Solid struct {
 	Z   int8
 	Tex int32
