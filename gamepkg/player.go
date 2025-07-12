@@ -69,7 +69,7 @@ func NewPlayer(position rl.Vector2, isHuman bool) Player {
 		TargetPosition:     position,
 		Velocity:           0.0,
 		Size:               rl.NewVector2(SpriteSize*SpriteScale, SpriteSize*SpriteScale), // 48x48
-		Speed:              MaxSpeed,                                                      // 20.0
+		Speed:              MaxSpeed,                                                      // 25.0
 		Health:             100,
 		TargetPart:         None,
 		HeadBox:            rl.NewRectangle(0, 0, 9*SpriteScale, 10*SpriteScale),  // 9x10
@@ -244,16 +244,16 @@ func UpdatePlayer(player *Player, ai *Player, isHuman bool, camera *rl.Camera2D)
 	}
 
 	// Интерполяция скорости
-	player.Velocity = Lerp(player.Velocity, targetVelocity, MoveAcceleration) // 0.9
+	player.Velocity = Lerp(player.Velocity, targetVelocity, MoveAcceleration) // 0.95
 	if targetVelocity == 0 {
-		player.Velocity = Lerp(player.Velocity, 0, MoveDeceleration) // 0.95
+		player.Velocity = Lerp(player.Velocity, 0, MoveDeceleration) // 0.98
 	}
 
 	// Обновляем целевую позицию
 	player.TargetPosition.X += player.Velocity * rl.GetFrameTime()
 
 	// Интерполяция позиции
-	player.Position.X = Lerp(player.Position.X, player.TargetPosition.X, 0.9) // Увеличено с 0.7 до 0.9
+	player.Position.X = Lerp(player.Position.X, player.TargetPosition.X, 0.95) // Увеличено с 0.9 до 0.95
 
 	// Ограничиваем позицию
 	if player.Position.X < 0 {
@@ -342,16 +342,16 @@ func UpdateAI(ai *Player, player *Player, attackInterval float32) {
 	}
 
 	// Интерполяция скорости
-	ai.Velocity = Lerp(ai.Velocity, targetVelocity, MoveAcceleration) // 0.9
+	ai.Velocity = Lerp(ai.Velocity, targetVelocity, MoveAcceleration) // 0.95
 	if targetVelocity == 0 {
-		ai.Velocity = Lerp(ai.Velocity, 0, MoveDeceleration) // 0.95
+		ai.Velocity = Lerp(ai.Velocity, 0, MoveDeceleration) // 0.98
 	}
 
 	// Обновляем целевую позицию
 	ai.TargetPosition.X += ai.Velocity * rl.GetFrameTime()
 
 	// Интерполяция позиции
-	ai.Position.X = Lerp(ai.Position.X, ai.TargetPosition.X, 0.9) // Увеличено с 0.7 до 0.9
+	ai.Position.X = Lerp(ai.Position.X, ai.TargetPosition.X, 0.95) // Увеличено с 0.9 до 0.95
 
 	// Ограничиваем позицию
 	if ai.Position.X < 0 {

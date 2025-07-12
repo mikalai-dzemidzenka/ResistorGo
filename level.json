@@ -1,0 +1,287 @@
+{
+  "Blocks": [
+    {
+      "Position": {
+        "X": 144,
+        "Y": 336
+      },
+      "Size": {
+        "X": 48,
+        "Y": 48
+      }
+    },
+    {
+      "Position": {
+        "X": 192,
+        "Y": 336
+      },
+      "Size": {
+        "X": 48,
+        "Y": 48
+      }
+    },
+    {
+      "Position": {
+        "X": 336,
+        "Y": 336
+      },
+      "Size": {
+        "X": 48,
+        "Y": 48
+      }
+    },
+    {
+      "Position": {
+        "X": 240,
+        "Y": 288
+      },
+      "Size": {
+        "X": 48,
+        "Y": 48
+      }
+    },
+    {
+      "Position": {
+        "X": 48,
+        "Y": 288
+      },
+      "Size": {
+        "X": 48,
+        "Y": 48
+      }
+    },
+    {
+      "Position": {
+        "X": 48,
+        "Y": 384
+      },
+      "Size": {
+        "X": 48,
+        "Y": 48
+      }
+    },
+    {
+      "Position": {
+        "X": 192,
+        "Y": 432
+      },
+      "Size": {
+        "X": 48,
+        "Y": 48
+      }
+    }
+  ],
+  "Enemies": [
+    {
+      "Position": {
+        "X": 412.50027,
+        "Y": 360
+      },
+      "TargetPosition": {
+        "X": 412.47833,
+        "Y": 360
+      },
+      "Velocity": -25,
+      "Size": {
+        "X": 48,
+        "Y": 48
+      },
+      "Speed": 25,
+      "Health": 100,
+      "TargetPart": 0,
+      "HeadBox": {
+        "X": 431.00027,
+        "Y": 364,
+        "Width": 9,
+        "Height": 10
+      },
+      "TorsoBox": {
+        "X": 426.00027,
+        "Y": 374,
+        "Width": 19,
+        "Height": 12
+      },
+      "LegsBox": {
+        "X": 427.50027,
+        "Y": 386,
+        "Width": 16,
+        "Height": 22
+      },
+      "IsAttacking": true,
+      "AttackPart": 1,
+      "AttackBox": {
+        "X": 430.50027,
+        "Y": 377,
+        "Width": 24,
+        "Height": 6
+      },
+      "PendingAttackPart": 3,
+      "HasPendingAttack": false,
+      "LastAttackTime": 0,
+      "IsMoving": true,
+      "FacingRight": false,
+      "IsHit": false,
+      "HitTimer": 0,
+      "HitDuration": 0.3333,
+      "IdleAnim": {
+        "Texture": {
+          "ID": 14,
+          "Width": 48,
+          "Height": 48,
+          "Mipmaps": 1,
+          "Format": 7
+        },
+        "FrameCount": 1,
+        "FrameWidth": 48,
+        "CurrentFrame": 0,
+        "FrameTime": 0.1,
+        "Timer": 0
+      },
+      "RunAnim": {
+        "Texture": {
+          "ID": 15,
+          "Width": 480,
+          "Height": 48,
+          "Mipmaps": 1,
+          "Format": 7
+        },
+        "FrameCount": 10,
+        "FrameWidth": 48,
+        "CurrentFrame": 2,
+        "FrameTime": 0.055555556,
+        "Timer": 0.0166668
+      },
+      "AttackHighAnim": {
+        "Texture": {
+          "ID": 16,
+          "Width": 384,
+          "Height": 48,
+          "Mipmaps": 1,
+          "Format": 7
+        },
+        "FrameCount": 8,
+        "FrameWidth": 48,
+        "CurrentFrame": 0,
+        "FrameTime": 0.05625,
+        "Timer": 0
+      },
+      "AttackMidAnim": {
+        "Texture": {
+          "ID": 17,
+          "Width": 384,
+          "Height": 48,
+          "Mipmaps": 1,
+          "Format": 7
+        },
+        "FrameCount": 8,
+        "FrameWidth": 48,
+        "CurrentFrame": 0,
+        "FrameTime": 0.05625,
+        "Timer": 0.0333334
+      },
+      "AttackLowAnim": {
+        "Texture": {
+          "ID": 18,
+          "Width": 384,
+          "Height": 48,
+          "Mipmaps": 1,
+          "Format": 7
+        },
+        "FrameCount": 8,
+        "FrameWidth": 48,
+        "CurrentFrame": 0,
+        "FrameTime": 0.05625,
+        "Timer": 0
+      },
+      "BackAttackHighAnim": {
+        "Texture": {
+          "ID": 19,
+          "Width": 192,
+          "Height": 48,
+          "Mipmaps": 1,
+          "Format": 7
+        },
+        "FrameCount": 4,
+        "FrameWidth": 48,
+        "CurrentFrame": 1,
+        "FrameTime": 0.16666667,
+        "Timer": 0
+      },
+      "BackAttackMidAnim": {
+        "Texture": {
+          "ID": 20,
+          "Width": 192,
+          "Height": 48,
+          "Mipmaps": 1,
+          "Format": 7
+        },
+        "FrameCount": 4,
+        "FrameWidth": 48,
+        "CurrentFrame": 0,
+        "FrameTime": 0.16666667,
+        "Timer": 0
+      },
+      "BackAttackLowAnim": {
+        "Texture": {
+          "ID": 21,
+          "Width": 192,
+          "Height": 48,
+          "Mipmaps": 1,
+          "Format": 7
+        },
+        "FrameCount": 4,
+        "FrameWidth": 48,
+        "CurrentFrame": 0,
+        "FrameTime": 0.16666667,
+        "Timer": 0
+      },
+      "HitHighAnim": {
+        "Texture": {
+          "ID": 22,
+          "Width": 192,
+          "Height": 48,
+          "Mipmaps": 1,
+          "Format": 7
+        },
+        "FrameCount": 4,
+        "FrameWidth": 48,
+        "CurrentFrame": 0,
+        "FrameTime": 0.083325,
+        "Timer": 0
+      },
+      "HitMidAnim": {
+        "Texture": {
+          "ID": 23,
+          "Width": 192,
+          "Height": 48,
+          "Mipmaps": 1,
+          "Format": 7
+        },
+        "FrameCount": 4,
+        "FrameWidth": 48,
+        "CurrentFrame": 0,
+        "FrameTime": 0.083325,
+        "Timer": 0
+      },
+      "HitLowAnim": {
+        "Texture": {
+          "ID": 24,
+          "Width": 192,
+          "Height": 48,
+          "Mipmaps": 1,
+          "Format": 7
+        },
+        "FrameCount": 4,
+        "FrameWidth": 48,
+        "CurrentFrame": 0,
+        "FrameTime": 0.083325,
+        "Timer": 0
+      },
+      "AttackDuration": 0.45,
+      "AttackTimer": 0.0166667,
+      "IsBackAttacking": false,
+      "BackAttackDuration": 0.16666667,
+      "BackAttackTimer": 0
+    }
+  ]
+}
