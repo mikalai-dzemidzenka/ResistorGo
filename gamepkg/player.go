@@ -1,8 +1,9 @@
 package gamepkg
 
 import (
-	rl "github.com/gen2brain/raylib-go/raylib"
 	"math/rand"
+
+	rl "github.com/gen2brain/raylib-go/raylib"
 )
 
 type BodyPart int
@@ -198,7 +199,7 @@ func Lerp(start, end, t float32) float32 {
 	return start + t*(end-start)
 }
 
-func UpdatePlayer(player *Player, ai *Player, isHuman bool, camera *rl.Camera2D) {
+func UpdatePlayer(player *Player, ai *Player, isHuman bool, camera *rl.Camera2D, mousePos rl.Vector2) {
 	if player.IsHit {
 		player.HitTimer += rl.GetFrameTime()
 		HandleAnimationEnd(player, player.HitTimer, player.HitDuration, isHuman, func() {
@@ -255,20 +256,12 @@ func UpdatePlayer(player *Player, ai *Player, isHuman bool, camera *rl.Camera2D)
 	// Интерполяция позиции
 	player.Position.X = Lerp(player.Position.X, player.TargetPosition.X, 0.95) // Увеличено с 0.9 до 0.95
 
-	// Ограничиваем позицию
-	if player.Position.X < 0 {
-		player.Position.X = 0
-		player.TargetPosition.X = 0
-	}
-	if player.Position.X > ScreenWidth-player.Size.X {
-		player.Position.X = ScreenWidth - player.Size.X
-		player.TargetPosition.X = ScreenWidth - player.Size.X
-	}
+	// Убираем ограничения позиции - теперь камера следует за игроком
+	// Игрок может свободно двигаться по всей сцене
 
 	UpdateHitboxes(player, isHuman)
 
 	if isHuman && ai != nil {
-		mousePos := rl.GetScreenToWorld2D(rl.GetMousePosition(), *camera)
 		player.TargetPart = None
 		if rl.CheckCollisionPointRec(mousePos, ai.HeadBox) {
 			player.TargetPart = Head
@@ -353,15 +346,8 @@ func UpdateAI(ai *Player, player *Player, attackInterval float32) {
 	// Интерполяция позиции
 	ai.Position.X = Lerp(ai.Position.X, ai.TargetPosition.X, 0.95) // Увеличено с 0.9 до 0.95
 
-	// Ограничиваем позицию
-	if ai.Position.X < 0 {
-		ai.Position.X = 0
-		ai.TargetPosition.X = 0
-	}
-	if ai.Position.X > ScreenWidth-ai.Size.X {
-		ai.Position.X = ScreenWidth - ai.Size.X
-		ai.TargetPosition.X = ScreenWidth - ai.Size.X
-	}
+	// Убираем ограничения позиции для ИИ - теперь камера следует за игроком
+	// ИИ может свободно двигаться по всей сцене
 
 	UpdateHitboxes(ai, false)
 
