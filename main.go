@@ -2,6 +2,9 @@ package main
 
 import (
 	rl "github.com/gen2brain/raylib-go/raylib"
+	"math/rand"
+	"strconv"
+	"time"
 )
 
 const (
@@ -12,72 +15,92 @@ const (
 	jumpSpeed = float32(-12.0)
 )
 
+type BodyPart int
+
+const (
+	Head BodyPart = iota
+	Torso
+	Legs
+	None
+)
+
 type Player struct {
-	Position    rl.Vector2   // Позиция игрока (x, y)
-	Size        rl.Vector2   // Размер (ширина, высота)
-	Speed       float32      // Скорость движения
-	Health      int          // Здоровье
-	IsJumping   bool         // Флаг прыжка
-	IsAttacking bool         // Флаг атаки
-	IsBlocking  bool         // Флаг блока
-	AttackBox   rl.Rectangle // Хитбокс атаки
+	Position       rl.Vector2   // Позиция
+	Size           rl.Vector2   // Размер
+	Speed          float32      // Скорость
+	Health         int          // Здоровье
+	IsJumping      bool         // Флаг прыжка
+	TargetPart     BodyPart     // Целевая часть тела (для атаки/блока)
+	HeadBox        rl.Rectangle // Хитбокс головы
+	TorsoBox       rl.Rectangle // Хитбокс торса
+	LegsBox        rl.Rectangle // Хитбокс ног
+	IsAttacking    bool         // Флаг атаки
+	AttackPart     BodyPart     // Часть тела для атаки
+	AttackBox      rl.Rectangle // Хитбокс атаки
+	LastAttackTime float32      // Время последней атаки (для ИИ)
 }
 
 func main() {
-	// Инициализация окна
-	rl.InitWindow(screenWidth, screenHeight, "Fist Fight Prototype")
+	// Инициализация
+	rl.InitWindow(screenWidth, screenHeight, "Fist Fight with AI")
 	rl.SetTargetFPS(60)
+	rand.Seed(time.Now().UnixNano())
 
-	// Создание игроков
-	player1 := Player{
-		Position:    rl.NewVector2(100, screenHeight-50),
-		Size:        rl.NewVector2(40, 60),
+	// Игрок
+	player := Player{
+		Position:    rl.NewVector2(100, screenHeight-90),
+		Size:        rl.NewVector2(40, 90),
 		Speed:       5.0,
 		Health:      100,
 		IsJumping:   false,
+		TargetPart:  None,
+		HeadBox:     rl.NewRectangle(100, screenHeight-90, 40, 30),
+		TorsoBox:    rl.NewRectangle(100, screenHeight-60, 40, 30),
+		LegsBox:     rl.NewRectangle(100, screenHeight-30, 40, 30),
 		IsAttacking: false,
-		IsBlocking:  false,
+		AttackPart:  None,
 		AttackBox:   rl.NewRectangle(0, 0, 50, 30),
 	}
-	player2 := Player{
-		Position:    rl.NewVector2(screenWidth-140, screenHeight-50),
-		Size:        rl.NewVector2(40, 60),
-		Speed:       5.0,
-		Health:      100,
-		IsJumping:   false,
-		IsAttacking: false,
-		IsBlocking:  false,
-		AttackBox:   rl.NewRectangle(0, 0, 50, 30),
+
+	// Противник (ИИ)
+	ai := Player{
+		Position:       rl.NewVector2(screenWidth-140, screenHeight-90),
+		Size:           rl.NewVector2(40, 90),
+		Speed:          4.0,
+		Health:         100,
+		IsJumping:      false,
+		TargetPart:     None,
+		HeadBox:        rl.NewRectangle(screenWidth-140, screenHeight-90, 40, 30),
+		TorsoBox:       rl.NewRectangle(screenWidth-140, screenHeight-60, 40, 30),
+		LegsBox:        rl.NewRectangle(screenWidth-140, screenHeight-30, 40, 30),
+		IsAttacking:    false,
+		AttackPart:     None,
+		AttackBox:      rl.NewRectangle(0, 0, 50, 30),
+		LastAttackTime: 0,
 	}
+
+	aiAttackInterval := float32(1.5) // Интервал атаки ИИ (в секундах)
 
 	for !rl.WindowShouldClose() {
 		// Обновление
-		updatePlayer(&player1, rl.KeyA, rl.KeyD, rl.KeyW, rl.KeyS, true)
-		updatePlayer(&player2, rl.KeyLeft, rl.KeyRight, rl.KeyUp, rl.KeyDown, false)
+		updatePlayer(&ai, &player, true)
+		updateAI(&ai, &player, aiAttackInterval)
 
-		// Проверка столкновений и атаки
-		checkAttack(&player1, &player2)
-		checkAttack(&player2, &player1)
+		// Проверка атак
+		checkAttack(&player, &ai, true)
+		checkAttack(&ai, &player, false)
 
 		// Отрисовка
 		rl.BeginDrawing()
 		rl.ClearBackground(rl.RayWhite)
 
 		// Рисуем игроков
-		rl.DrawRectangleV(player1.Position, player1.Size, rl.Red)
-		rl.DrawRectangleV(player2.Position, player2.Size, rl.Blue)
-
-		// Рисуем хитбоксы атаки, если активны
-		if player1.IsAttacking {
-			rl.DrawRectangleRec(player1.AttackBox, rl.Fade(rl.Red, 0.5))
-		}
-		if player2.IsAttacking {
-			rl.DrawRectangleRec(player2.AttackBox, rl.Fade(rl.Blue, 0.5))
-		}
+		drawPlayer(&player, rl.Red, true)
+		drawPlayer(&ai, rl.Blue, false)
 
 		// Отображаем здоровье
-		rl.DrawText("Player 1 HP: "+string(rune(player1.Health)), 10, 10, 20, rl.Black)
-		rl.DrawText("Player 2 HP: "+string(rune(player2.Health)), screenWidth-150, 10, 20, rl.Black)
+		rl.DrawText("Player HP: "+strconv.Itoa(player.Health), 10, 10, 20, rl.Black)
+		rl.DrawText("AI HP: "+strconv.Itoa(ai.Health), screenWidth-150, 10, 20, rl.Black)
 
 		rl.EndDrawing()
 	}
@@ -85,17 +108,17 @@ func main() {
 	rl.CloseWindow()
 }
 
-func updatePlayer(player *Player, leftKey, rightKey, jumpKey, attackKey int32, isPlayer1 bool) {
-	// Движение влево/вправо
-	if rl.IsKeyDown(leftKey) {
+func updatePlayer(ai *Player, player *Player, isHuman bool) {
+	// Движение
+	if rl.IsKeyDown(rl.KeyA) {
 		player.Position.X -= player.Speed
 	}
-	if rl.IsKeyDown(rightKey) {
+	if rl.IsKeyDown(rl.KeyD) {
 		player.Position.X += player.Speed
 	}
 
 	// Прыжок
-	if rl.IsKeyPressed(jumpKey) && !player.IsJumping {
+	if rl.IsKeyPressed(rl.KeyW) && !player.IsJumping {
 		player.IsJumping = true
 		player.Position.Y += jumpSpeed
 	}
@@ -109,27 +132,38 @@ func updatePlayer(player *Player, leftKey, rightKey, jumpKey, attackKey int32, i
 		}
 	}
 
-	// Атака и блок
-	if rl.IsKeyPressed(attackKey) {
-		player.IsAttacking = true
-		// Устанавливаем хитбокс атаки
-		if isPlayer1 {
-			player.AttackBox = rl.NewRectangle(player.Position.X+player.Size.X, player.Position.Y, 50, 30)
-		} else {
-			player.AttackBox = rl.NewRectangle(player.Position.X-50, player.Position.Y, 50, 30)
+	// Обновление хитбоксов
+	player.HeadBox.X = player.Position.X
+	player.HeadBox.Y = player.Position.Y
+	player.TorsoBox.X = player.Position.X
+	player.TorsoBox.Y = player.Position.Y + 30
+	player.LegsBox.X = player.Position.X
+	player.LegsBox.Y = player.Position.Y + 60
+
+	// Управление мышью (только для игрока)
+	if isHuman {
+		mousePos := rl.GetMousePosition()
+		player.TargetPart = None
+		if rl.CheckCollisionPointRec(mousePos, ai.HeadBox) {
+			player.TargetPart = Head
+		} else if rl.CheckCollisionPointRec(mousePos, ai.TorsoBox) {
+			player.TargetPart = Torso
+		} else if rl.CheckCollisionPointRec(mousePos, ai.LegsBox) {
+			player.TargetPart = Legs
 		}
-	} else if rl.IsKeyReleased(attackKey) {
-		player.IsAttacking = false
+
+		// Атака
+		if rl.IsMouseButtonPressed(rl.MouseLeftButton) && player.TargetPart != None {
+			player.IsAttacking = true
+			player.AttackPart = player.TargetPart
+			player.AttackBox = rl.NewRectangle(player.Position.X+player.Size.X, player.Position.Y+float32(player.AttackPart)*30, 50, 30)
+		} else if rl.IsMouseButtonReleased(rl.MouseLeftButton) {
+			player.IsAttacking = false
+			player.AttackPart = None
+		}
 	}
 
-	// Блок (используем Shift для игрока 1 и Ctrl для игрока 2)
-	if isPlayer1 && rl.IsKeyDown(rl.KeyLeftShift) || !isPlayer1 && rl.IsKeyDown(rl.KeyLeftControl) {
-		player.IsBlocking = true
-	} else {
-		player.IsBlocking = false
-	}
-
-	// Ограничение по границам экрана
+	// Ограничение по границам
 	if player.Position.X < 0 {
 		player.Position.X = 0
 	}
@@ -138,15 +172,112 @@ func updatePlayer(player *Player, leftKey, rightKey, jumpKey, attackKey int32, i
 	}
 }
 
-func checkAttack(attacker, defender *Player) {
-	if attacker.IsAttacking && !defender.IsBlocking {
-		playerRect := rl.NewRectangle(defender.Position.X, defender.Position.Y, defender.Size.X, defender.Size.Y)
-		if rl.CheckCollisionRecs(attacker.AttackBox, playerRect) {
+func updateAI(ai *Player, player *Player, attackInterval float32) {
+	// Движение ИИ: следовать за игроком
+	if player.Position.X > ai.Position.X+50 {
+		ai.Position.X += ai.Speed
+	} else if player.Position.X < ai.Position.X-50 {
+		ai.Position.X -= ai.Speed
+	}
+
+	// Случайный прыжок
+	if !ai.IsJumping && rand.Float32() < 0.01 {
+		ai.IsJumping = true
+		ai.Position.Y += jumpSpeed
+	}
+
+	// Гравитация
+	if ai.IsJumping {
+		ai.Position.Y += gravity
+		if ai.Position.Y >= screenHeight-ai.Size.Y {
+			ai.Position.Y = screenHeight - ai.Size.Y
+			ai.IsJumping = false
+		}
+	}
+
+	// Обновление хитбоксов
+	ai.HeadBox.X = ai.Position.X
+	ai.HeadBox.Y = ai.Position.Y
+	ai.TorsoBox.X = ai.Position.X
+	ai.TorsoBox.Y = ai.Position.Y + 30
+	ai.LegsBox.X = ai.Position.X
+	ai.LegsBox.Y = ai.Position.Y + 60
+
+	// ИИ: выбор части тела для атаки и блока
+	ai.LastAttackTime += rl.GetFrameTime()
+	if ai.LastAttackTime >= attackInterval {
+		ai.LastAttackTime = 0
+		ai.IsAttacking = true
+		ai.AttackPart = BodyPart(rand.Intn(3)) // Случайная часть тела
+		ai.AttackBox = rl.NewRectangle(ai.Position.X-50, ai.Position.Y+float32(ai.AttackPart)*30, 50, 30)
+		ai.TargetPart = BodyPart(rand.Intn(3)) // Случайный блок
+	} else if ai.IsAttacking && ai.LastAttackTime > 0.3 {
+		ai.IsAttacking = false
+		ai.AttackPart = None
+	}
+
+	// Ограничение по границам
+	if ai.Position.X < 0 {
+		ai.Position.X = 0
+	}
+	if ai.Position.X > screenWidth-ai.Size.X {
+		ai.Position.X = screenWidth - ai.Size.X
+	}
+}
+
+func checkAttack(attacker, defender *Player, isHuman bool) {
+	if attacker.IsAttacking {
+		var defenderBox rl.Rectangle
+		switch attacker.AttackPart {
+		case Head:
+			defenderBox = defender.HeadBox
+		case Torso:
+			defenderBox = defender.TorsoBox
+		case Legs:
+			defenderBox = defender.LegsBox
+		}
+
+		// Проверка блока
+		if attacker.AttackPart == defender.TargetPart {
+			// Блокировка успешна
+			attacker.IsAttacking = false
+			if isHuman {
+				attacker.AttackPart = None
+			}
+		} else if rl.CheckCollisionRecs(attacker.AttackBox, defenderBox) {
+			// Удар попал
 			defender.Health -= 10
-			attacker.IsAttacking = false // Сбрасываем атаку после попадания
+			attacker.IsAttacking = false
+			if isHuman {
+				attacker.AttackPart = None
+			}
 			if defender.Health < 0 {
 				defender.Health = 0
 			}
 		}
+	}
+}
+
+func drawPlayer(player *Player, color rl.Color, isHuman bool) {
+	// Рисуем части тела
+	if player.TargetPart == Head {
+		rl.DrawRectangleRec(player.HeadBox, rl.Fade(color, 0.7))
+	} else {
+		rl.DrawRectangleRec(player.HeadBox, color)
+	}
+	if player.TargetPart == Torso {
+		rl.DrawRectangleRec(player.TorsoBox, rl.Fade(color, 0.7))
+	} else {
+		rl.DrawRectangleRec(player.TorsoBox, color)
+	}
+	if player.TargetPart == Legs {
+		rl.DrawRectangleRec(player.LegsBox, rl.Fade(color, 0.7))
+	} else {
+		rl.DrawRectangleRec(player.LegsBox, color)
+	}
+
+	// Рисуем хитбокс атаки
+	if player.IsAttacking {
+		rl.DrawRectangleRec(player.AttackBox, rl.Fade(color, 0.5))
 	}
 }
