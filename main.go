@@ -42,6 +42,16 @@ func main() {
 	player := gamepkg.NewActor(rl.NewVector2(200, float32(sceneHeight)-90*gamepkg.SpriteScale), gamepkg.PlayerActor)
 	enemies := []gamepkg.Actor{} // Массив врагов
 
+	// Инициализация системы перемотки времени (5 секунд истории при 60 FPS)
+	timeRewind := gamepkg.NewTimeRewindSystem(300) // 5 секунд * 60 FPS
+	enemyRewinds := []*gamepkg.TimeRewindSystem{}
+	if len(enemies) > 0 {
+		enemyRewinds = make([]*gamepkg.TimeRewindSystem, len(enemies))
+		for i := range enemies {
+			enemyRewinds[i] = gamepkg.NewTimeRewindSystem(300)
+		}
+	}
+
 	// Инициализация редактора уровней
 	editor := gamepkg.NewLevelEditor()
 	editor.LoadLevel("level.json") // Загружаем уровень при старте
@@ -67,6 +77,18 @@ func main() {
 				enemies[i].LastAttackTime = 0
 				enemies[i].AttackCooldown = 0
 			}
+			// Инициализация rewind для врагов
+			enemyRewinds = make([]*gamepkg.TimeRewindSystem, len(enemies))
+			for i := range enemies {
+				enemyRewinds[i] = gamepkg.NewTimeRewindSystem(300)
+			}
+		} else {
+			// Создаем одного врага по умолчанию
+			enemies = []gamepkg.Actor{
+				gamepkg.NewActor(rl.NewVector2(600, float32(sceneHeight)-90*gamepkg.SpriteScale), gamepkg.AIActor),
+			}
+			// Инициализация rewind для врага по умолчанию
+			enemyRewinds = []*gamepkg.TimeRewindSystem{gamepkg.NewTimeRewindSystem(300)}
 		}
 	}
 
@@ -92,6 +114,7 @@ func main() {
 			}
 			state = GameMode
 			player = gamepkg.NewActor(rl.NewVector2(200, float32(sceneHeight)-90*gamepkg.SpriteScale), gamepkg.PlayerActor)
+			timeRewind.ClearHistory() // Очищаем историю при переключении в игровой режим
 			// Загружаем врагов из редактора или создаем одного по умолчанию
 			if len(editor.Level.Enemies) > 0 {
 				enemies = make([]gamepkg.Actor, len(editor.Level.Enemies))
@@ -111,11 +134,18 @@ func main() {
 					enemies[i].LastAttackTime = 0
 					enemies[i].AttackCooldown = 0
 				}
+				// Инициализация rewind для врагов
+				enemyRewinds = make([]*gamepkg.TimeRewindSystem, len(enemies))
+				for i := range enemies {
+					enemyRewinds[i] = gamepkg.NewTimeRewindSystem(300)
+				}
 			} else {
 				// Создаем одного врага по умолчанию
 				enemies = []gamepkg.Actor{
 					gamepkg.NewActor(rl.NewVector2(600, float32(sceneHeight)-90*gamepkg.SpriteScale), gamepkg.AIActor),
 				}
+				// Инициализация rewind для врага по умолчанию
+				enemyRewinds = []*gamepkg.TimeRewindSystem{gamepkg.NewTimeRewindSystem(300)}
 			}
 		}
 		if rl.IsKeyPressed(rl.KeyTwo) {
@@ -182,6 +212,51 @@ func main() {
 
 		// Обновление в зависимости от режима
 		if state == GameMode {
+			// Обработка перемотки времени
+			if rl.IsKeyDown(rl.KeyR) {
+				timeRewind.StartRewind()
+				for _, er := range enemyRewinds {
+					er.StartRewind()
+				}
+				// Ускорение перемотки при удержании Shift
+				if rl.IsKeyDown(rl.KeyLeftShift) || rl.IsKeyDown(rl.KeyRightShift) {
+					timeRewind.RewindSpeed = 3.0 // 3x скорость
+					for _, er := range enemyRewinds {
+						er.RewindSpeed = 3.0
+					}
+				} else {
+					timeRewind.RewindSpeed = 1.0 // Нормальная скорость
+					for _, er := range enemyRewinds {
+						er.RewindSpeed = 1.0
+					}
+				}
+			} else {
+				timeRewind.StopRewind()
+				for _, er := range enemyRewinds {
+					er.StopRewind()
+				}
+			}
+
+			// Обновляем перемотку времени
+			timeRewind.UpdateRewind(&player)
+			for i := range enemies {
+				enemyRewinds[i].UpdateRewind(&enemies[i])
+			}
+
+			// Сохраняем состояние игрока (только если не перематываем)
+			if !timeRewind.IsRewinding {
+				if timeRewind.CurrentIndex < len(timeRewind.States)-1 {
+					timeRewind.CutHistoryToCurrent()
+				}
+				timeRewind.SaveState(&player)
+				for i := range enemies {
+					if enemyRewinds[i].CurrentIndex < len(enemyRewinds[i].States)-1 {
+						enemyRewinds[i].CutHistoryToCurrent()
+					}
+					enemyRewinds[i].SaveState(&enemies[i])
+				}
+			}
+
 			// Камера плавно следует за игроком
 			targetX := player.Position.X + player.Size.X/2
 			targetY := player.Position.Y + player.Size.Y/2
@@ -204,8 +279,10 @@ func main() {
 				}
 			}
 
-			// Обновляем игрока с ближайшим врагом
-			gamepkg.UpdateActor(&player, nearestEnemy, &camera, sceneMousePos)
+			// Обновляем игрока с ближайшим врагом (только если не перематываем)
+			if !timeRewind.IsRewinding {
+				gamepkg.UpdateActor(&player, nearestEnemy, &camera, sceneMousePos)
+			}
 			gamepkg.UpdateActorAnimation(&player)
 
 			// Обновляем всех врагов
@@ -250,8 +327,14 @@ func main() {
 				}
 			}
 
-			// Рисуем игрока
-			gamepkg.DrawActor(&player, nearestEnemy, rl.Red, &camera)
+			// Рисуем игрока с эффектом перемотки времени
+			playerColor := rl.Red
+			if timeRewind.IsRewinding {
+				// Эффект перемотки времени - игрок становится более прозрачным и меняет цвет
+				alpha := uint8(128 + 127*timeRewind.GetRewindProgress()) // От 128 до 255
+				playerColor = rl.NewColor(255, 0, 0, alpha)
+			}
+			gamepkg.DrawActor(&player, nearestEnemy, playerColor, &camera)
 
 			// Рисуем всех врагов
 			for i := range enemies {
@@ -301,6 +384,35 @@ func main() {
 			if len(enemies) > 0 {
 				rl.DrawText(fmt.Sprintf("Enemy Attack: %v, Pending: %v, Attack2: %v", enemies[0].IsAttacking, enemies[0].HasPendingAttack, enemies[0].IsCurrentAttack2), 10, 220, 20, rl.Black)
 			}
+
+			// Индикатор перемотки времени
+			if timeRewind.IsRewinding {
+				speedText := "TIME REWINDING..."
+				if timeRewind.RewindSpeed > 1.0 {
+					speedText = fmt.Sprintf("TIME REWINDING... (%dx)", int(timeRewind.RewindSpeed))
+				}
+				rl.DrawText(speedText, windowWidth-200, 10, 20, rl.Red)
+
+				progress := timeRewind.GetRewindProgress()
+				barWidth := float32(150)
+				barHeight := float32(10)
+				barX := float32(windowWidth) - barWidth - 25
+				barY := float32(35)
+
+				// Фон индикатора
+				rl.DrawRectangle(int32(barX), int32(barY), int32(barWidth), int32(barHeight), rl.Gray)
+				// Прогресс перемотки
+				rl.DrawRectangle(int32(barX), int32(barY), int32(barWidth*progress), int32(barHeight), rl.Red)
+				// Рамка
+				rl.DrawRectangleLines(int32(barX), int32(barY), int32(barWidth), int32(barHeight), rl.Black)
+
+				rl.DrawText(fmt.Sprintf("Progress: %.1f%%", progress*100), windowWidth-200, 50, 15, rl.Black)
+				rl.DrawText("Hold Shift+R for 3x speed", windowWidth-200, 70, 12, rl.DarkGray)
+			} else if timeRewind.CanRewind() {
+				rl.DrawText("Hold R to Rewind Time", windowWidth-200, 10, 15, rl.Blue)
+				rl.DrawText("Hold Shift+R for 3x speed", windowWidth-200, 30, 12, rl.DarkGray)
+			}
+
 			rl.DrawText("Game Mode: Press 2 for Editor", 10, windowHeight-30, 20, rl.Black)
 		} else {
 			// UI редактора (рисуем поверх масштабированного изображения)
