@@ -61,16 +61,17 @@ func main() {
 
 	// Инициализация редактора уровней
 	editor := gamepkg.NewLevelEditor()
-	editor.LoadLevel("level.json") // Загружаем уровень при старте
-	fmt.Printf("Loaded level: %d blocks, %d enemies\n", len(editor.Level.Blocks), len(editor.Level.Enemies))
+	// Загружаем уровни при старте (автоматически создаются демо-уровни если нет файлов)
+	fmt.Printf("Loaded %d levels\n", len(editor.LevelManager.Levels))
 
 	state := GameMode // Начальный режим — игра
 
 	// Если стартуем сразу в GameMode — инициализируем врагов из редактора
 	if state == GameMode {
-		if len(editor.Level.Enemies) > 0 {
-			enemies = make([]gamepkg.Actor, len(editor.Level.Enemies))
-			for i, enemyData := range editor.Level.Enemies {
+		currentLevel := editor.LevelManager.GetCurrentLevel()
+		if currentLevel != nil && len(currentLevel.Enemies) > 0 {
+			enemies = make([]gamepkg.Actor, len(currentLevel.Enemies))
+			for i, enemyData := range currentLevel.Enemies {
 				enemies[i] = gamepkg.NewActor(enemyData.Position, enemyData.Type)
 				// Сброс состояния врага
 				enemies[i].Health = 100
@@ -125,15 +126,16 @@ func main() {
 		// Переключение режимов
 		if rl.IsKeyPressed(rl.KeyOne) {
 			if state == EditorMode {
-				editor.SaveLevel("level.json")
+				editor.SaveCurrentLevel()
 			}
 			state = GameMode
 			player = gamepkg.NewActor(rl.NewVector2(200, float32(sceneHeight)-90*gamepkg.SpriteScale), gamepkg.PlayerActor)
 			timeRewind.ClearHistory() // Очищаем историю при переключении в игровой режим
 			// Загружаем врагов из редактора или создаем одного по умолчанию
-			if len(editor.Level.Enemies) > 0 {
-				enemies = make([]gamepkg.Actor, len(editor.Level.Enemies))
-				for i, enemyData := range editor.Level.Enemies {
+			currentLevel := editor.LevelManager.GetCurrentLevel()
+			if currentLevel != nil && len(currentLevel.Enemies) > 0 {
+				enemies = make([]gamepkg.Actor, len(currentLevel.Enemies))
+				for i, enemyData := range currentLevel.Enemies {
 					enemies[i] = gamepkg.NewActor(enemyData.Position, enemyData.Type)
 					// Сбрасываем состояние врага
 					enemies[i].Health = 100
@@ -174,11 +176,11 @@ func main() {
 					}
 				}
 				// Сохраняем всех врагов в редакторе
-				editor.Level = gamepkg.Level{
-					Blocks:  editor.Level.Blocks,
-					Enemies: enemyDataList,
+				currentLevel := editor.LevelManager.GetCurrentLevel()
+				if currentLevel != nil {
+					currentLevel.Enemies = enemyDataList
+					editor.SaveCurrentLevel()
 				}
-				editor.SaveLevel("level.json")
 			}
 			state = EditorMode
 		}
@@ -372,8 +374,36 @@ func main() {
 
 		rl.BeginMode2D(camera)
 		if state == GameMode {
-			for _, block := range editor.Level.Blocks {
-				rl.DrawRectangleV(block.Position, block.Size, rl.Gray)
+			currentLevel := editor.LevelManager.GetCurrentLevel()
+			if currentLevel != nil {
+				// Отрисовка блоков с параллаксом и разными цветами
+				for _, block := range currentLevel.Blocks {
+					var color rl.Color
+					var parallaxOffset float32 = 0
+
+					switch block.Type {
+					case gamepkg.NormalBlock:
+						color = rl.Gray
+					case gamepkg.GrassBlock:
+						color = rl.Green
+						parallaxOffset = camera.Target.X * 0.1 // Медленный параллакс
+					case gamepkg.StoneBlock:
+						color = rl.DarkGray
+						parallaxOffset = camera.Target.X * 0.05 // Очень медленный параллакс
+					case gamepkg.WoodBlock:
+						color = rl.Brown
+						parallaxOffset = camera.Target.X * 0.15 // Средний параллакс
+					case gamepkg.MetalBlock:
+						color = rl.LightGray
+					case gamepkg.BackgroundBlock:
+						color = rl.Fade(rl.Blue, 0.3)          // Полупрозрачный
+						parallaxOffset = camera.Target.X * 0.3 // Быстрый параллакс
+					}
+
+					// Применяем параллакс
+					parallaxPos := rl.NewVector2(block.Position.X+parallaxOffset, block.Position.Y)
+					rl.DrawRectangleV(parallaxPos, block.Size, color)
+				}
 			}
 
 			// Находим ближайшего врага для отрисовки
@@ -460,6 +490,12 @@ func main() {
 			rl.DrawText(fmt.Sprintf("Player Transition: %v, From: %d, To: %d", player.IsTransitioning, player.TransitionFrom, player.TransitionTo), 10, 340, 20, rl.Black)
 			rl.DrawText(fmt.Sprintf("Player TargetPart: %d", player.TargetPart), 10, 370, 20, rl.Black)
 
+			// Информация о текущем уровне
+			currentLevel := editor.LevelManager.GetCurrentLevel()
+			if currentLevel != nil {
+				rl.DrawText(fmt.Sprintf("Level: %s (%d/%d)", currentLevel.Name, editor.LevelManager.CurrentLevel+1, len(editor.LevelManager.Levels)), 10, 400, 20, rl.Black)
+			}
+
 			// Индикатор перемотки времени
 			if timeRewind.IsRewinding {
 				var speedText string
@@ -505,7 +541,7 @@ func main() {
 			// UI редактора (рисуем поверх масштабированного изображения)
 			editor.DrawUI(currentScale, posX, posY)
 			rl.DrawText(fmt.Sprintf("Zoom: %.1fx (Mouse Wheel)", currentScale), 10, 40, 20, rl.Black)
-			rl.DrawText(fmt.Sprintf("Editor Enemies: %d", len(editor.Level.Enemies)), 10, 70, 20, rl.Black)
+			rl.DrawText(fmt.Sprintf("Editor Enemies: %d", len(editor.LevelManager.GetCurrentLevel().Enemies)), 10, 70, 20, rl.Black)
 			rl.DrawText("Editor Mode: Press 1 for Game", 10, windowHeight-30, 20, rl.Black)
 		}
 		rl.EndDrawing()
@@ -524,15 +560,19 @@ func main() {
 			}
 		}
 		// Сохраняем всех врагов из игрового режима в редакторе
-		editor.Level = gamepkg.Level{
-			Blocks:  editor.Level.Blocks,
-			Enemies: enemyDataList,
+		currentLevel := editor.LevelManager.GetCurrentLevel()
+		if currentLevel != nil {
+			currentLevel.Enemies = enemyDataList
+			editor.SaveCurrentLevel()
 		}
 	} else {
-		fmt.Printf("Editor mode exit: %d enemies in editor\n", len(editor.Level.Enemies))
+		fmt.Printf("Editor mode exit: %d enemies in editor\n", len(editor.LevelManager.GetCurrentLevel().Enemies))
 	}
 	// Всегда сохраняем уровень при выходе (независимо от режима)
-	editor.SaveLevel("level.json")
+	editor.SaveCurrentLevel()
+
+	// Очищаем ресурсы редактора
+	editor.Cleanup()
 
 	gamepkg.UnloadActorTextures(&player)
 	// Освобождаем текстуры врагов из игры
