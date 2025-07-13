@@ -1,6 +1,8 @@
 package gamepkg
 
 import (
+	"fmt"
+
 	rl "github.com/gen2brain/raylib-go/raylib"
 )
 
@@ -142,6 +144,11 @@ func (trs *TimeRewindSystem) SaveState(actor *Actor) {
 		trs.States = trs.States[1:]
 		trs.CurrentIndex--
 	}
+
+	// Отладочная информация каждые 60 кадров (1 секунда)
+	if trs.CurrentIndex%60 == 0 {
+		fmt.Printf("SAVE STATE: Index %d/%d, States %d\n", trs.CurrentIndex, len(trs.States)-1, len(trs.States))
+	}
 }
 
 // LoadState загружает состояние игрока из определенного момента времени
@@ -203,10 +210,9 @@ func (trs *TimeRewindSystem) LoadState(actor *Actor, index int) {
 
 // StartRewind начинает перемотку времени назад
 func (trs *TimeRewindSystem) StartRewind() {
-	if trs.CurrentIndex > 0 {
-		trs.IsRewinding = true
-		trs.RewindTimer = 0
-	}
+	trs.IsRewinding = true
+	trs.RewindTimer = 0
+	trs.RewindSpeed = 0 // Начинаем с остановленной скорости
 }
 
 // StopRewind останавливает перемотку времени
@@ -220,18 +226,38 @@ func (trs *TimeRewindSystem) UpdateRewind(actor *Actor) {
 		return
 	}
 
+	if trs.RewindSpeed == 0 {
+		return
+	}
+
 	trs.RewindTimer += rl.GetFrameTime() * trs.RewindSpeed
 
-	// Каждые 0.016 секунды (60 FPS) перематываем на один кадр назад
-	if trs.RewindTimer >= 0.016 {
-		trs.RewindTimer = 0
-
-		if trs.CurrentIndex > 0 {
-			trs.CurrentIndex--
-			trs.LoadState(actor, trs.CurrentIndex)
+	// Используем цикл, чтобы перематывать сразу несколько кадров при большой скорости
+	for trs.RewindTimer >= 0.016 || trs.RewindTimer <= -0.016 {
+		if trs.RewindSpeed > 0 {
+			// Движение вперед
+			if trs.CurrentIndex < len(trs.States)-1 {
+				trs.CurrentIndex++
+				trs.LoadState(actor, trs.CurrentIndex)
+				trs.RewindTimer -= 0.016
+			} else {
+				trs.RewindSpeed = 0
+				trs.RewindTimer = 0
+				break
+			}
+		} else if trs.RewindSpeed < 0 {
+			// Движение назад
+			if trs.CurrentIndex > 0 {
+				trs.CurrentIndex--
+				trs.LoadState(actor, trs.CurrentIndex)
+				trs.RewindTimer += 0.016
+			} else {
+				trs.RewindSpeed = 0
+				trs.RewindTimer = 0
+				break
+			}
 		} else {
-			// Достигли начала истории
-			trs.IsRewinding = false
+			break
 		}
 	}
 }
