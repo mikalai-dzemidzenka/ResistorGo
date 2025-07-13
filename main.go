@@ -110,6 +110,11 @@ func main() {
 	// Масштаб вывода (только целые значения)
 	scale := float32(2) // Можно сделать настраиваемым (например, 2x, 3x)
 
+	// Переменные для плавного зума
+	targetScale := float32(2.0)  // Целевой зум
+	currentScale := float32(2.0) // Текущий зум (для плавного перехода)
+	zoomSpeed := float32(0.15)   // Скорость интерполяции зума
+
 	// Переменные для рендеринга
 	var scaledWidth, scaledHeight, posX, posY float32
 
@@ -178,21 +183,27 @@ func main() {
 			state = EditorMode
 		}
 
-		// Изменение integer scale клавишами +/-
-		if rl.IsKeyPressed(rl.KeyEqual) || rl.IsKeyPressed(rl.KeyKpAdd) {
-			if scale < 6 {
-				scale += 1
-			}
-		}
-		if rl.IsKeyPressed(rl.KeyMinus) || rl.IsKeyPressed(rl.KeyKpSubtract) {
-			if scale > 1 {
-				scale -= 1
+		// Изменение плавного зума колесиком мыши
+		mouseWheel := rl.GetMouseWheelMove()
+		if mouseWheel != 0 {
+			// Изменяем целевой зум на основе движения колесика
+			zoomChange := float32(mouseWheel) * 0.2 // 0.2x за одно движение колесика
+			targetScale += zoomChange
+
+			// Ограничиваем зум в разумных пределах
+			if targetScale < 0.5 {
+				targetScale = 0.5
+			} else if targetScale > 8.0 {
+				targetScale = 8.0
 			}
 		}
 
+		// Плавная интерполяция зума
+		currentScale = Lerp(currentScale, targetScale, zoomSpeed)
+
 		// Вычисляем размер масштабированного изображения и позицию для центрирования
-		scaledWidth = float32(sceneWidth) * scale
-		scaledHeight = float32(sceneHeight) * scale
+		scaledWidth = float32(sceneWidth) * currentScale
+		scaledHeight = float32(sceneHeight) * currentScale
 		posX = (float32(windowWidth) - scaledWidth) / 2
 		posY = (float32(windowHeight) - scaledHeight) / 2
 
@@ -433,7 +444,7 @@ func main() {
 		if state == GameMode {
 			rl.DrawText("Player HP: "+strconv.Itoa(player.Health), 10, 10, 20, rl.Black)
 			rl.DrawText(fmt.Sprintf("Enemies: %d", len(enemies)), windowWidth-150, 10, 20, rl.Black)
-			rl.DrawText(fmt.Sprintf("Scale: x%.0f (Press +/-)", scale), 10, 40, 20, rl.Black)
+			rl.DrawText(fmt.Sprintf("Zoom: %.1fx (Mouse Wheel)", currentScale), 10, 40, 20, rl.Black)
 			rl.DrawText(fmt.Sprintf("Camera: %.0f, %.0f", camera.Target.X, camera.Target.Y), 10, 70, 20, rl.Black)
 			rl.DrawText(fmt.Sprintf("Raw Mouse: %.0f, %.0f", mousePos.X, mousePos.Y), 10, 100, 20, rl.Black)
 			rl.DrawText(fmt.Sprintf("Scene Mouse: %.0f, %.0f", sceneMousePos.X, sceneMousePos.Y), 10, 130, 20, rl.Black)
@@ -490,8 +501,8 @@ func main() {
 			rl.DrawText("Game Mode: Press 2 for Editor", 10, windowHeight-30, 20, rl.Black)
 		} else {
 			// UI редактора (рисуем поверх масштабированного изображения)
-			editor.DrawUI(scale, posX, posY)
-			rl.DrawText(fmt.Sprintf("Scale: x%.0f (Press +/-)", scale), 10, 40, 20, rl.Black)
+			editor.DrawUI(currentScale, posX, posY)
+			rl.DrawText(fmt.Sprintf("Zoom: %.1fx (Mouse Wheel)", currentScale), 10, 40, 20, rl.Black)
 			rl.DrawText(fmt.Sprintf("Editor Enemies: %d", len(editor.Level.Enemies)), 10, 70, 20, rl.Black)
 			rl.DrawText("Editor Mode: Press 1 for Game", 10, windowHeight-30, 20, rl.Black)
 		}
