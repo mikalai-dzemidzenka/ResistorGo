@@ -21,4 +21,7 @@ const (
 	MoveAcceleration    = 0.95             // Ускорение движения (было 0.9)
 	MoveDeceleration    = 0.98             // Замедление движения (было 0.95)
 	MaxSpeed            = 50.0             // Максимальная скорость (ускорено)
+
+	UpDownTransitionDuration  = 0.1
+	UpDownTransitionFrameTime = UpDownTransitionDuration / 4
 )

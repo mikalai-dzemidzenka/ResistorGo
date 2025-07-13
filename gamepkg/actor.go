@@ -64,6 +64,22 @@ type Actor struct {
 	HitHighAnim        Animation
 	HitMidAnim         Animation
 	HitLowAnim         Animation
+	UpDownAnim         Animation // Анимация для отображения текущей позы (low/mid/high)
+
+	// Анимации переходов между позами
+	UpDownLowToMidAnim  Animation // Переход от low к mid (updown-0-1.png)
+	UpDownMidToHighAnim Animation // Переход от mid к high (updown-1-2.png)
+	UpDownHighToMidAnim Animation // Переход от high к mid (updown-2-1.png)
+	UpDownMidToLowAnim  Animation // Переход от mid к low (updown-1-0.png)
+
+	// Состояние перехода между позами
+	IsTransitioning    bool
+	TransitionFrom     BodyPart
+	TransitionTo       BodyPart
+	TransitionTimer    float32
+	TransitionDuration float32
+	CurrentPose        BodyPart // Последняя завершённая поза
+	NextTargetPart     BodyPart // Буфер следующей цели
 
 	// Таймеры атак
 	AttackDuration     float32
@@ -118,6 +134,23 @@ func NewActor(position rl.Vector2, actorType ActorType) Actor {
 		HitHighAnim:        Animation{Texture: rl.LoadTexture("resources/threefour/hit-top.png"), FrameCount: 4, FrameWidth: 48, FrameTime: HitFrameTime},
 		HitMidAnim:         Animation{Texture: rl.LoadTexture("resources/threefour/hit-mid.png"), FrameCount: 4, FrameWidth: 48, FrameTime: HitFrameTime},
 		HitLowAnim:         Animation{Texture: rl.LoadTexture("resources/threefour/hit-low.png"), FrameCount: 4, FrameWidth: 48, FrameTime: HitFrameTime},
+		UpDownAnim:         Animation{Texture: rl.LoadTexture("resources/threefour/updown.png"), FrameCount: 3, FrameWidth: 48, FrameTime: 0.1}, // 3 кадра: low/mid/high
+
+		// Анимации переходов между позами (4 кадра каждая)
+		UpDownLowToMidAnim:  Animation{Texture: rl.LoadTexture("resources/threefour/updown-0-1.png"), FrameCount: 4, FrameWidth: 48, FrameTime: UpDownTransitionFrameTime},
+		UpDownMidToHighAnim: Animation{Texture: rl.LoadTexture("resources/threefour/updown-1-2.png"), FrameCount: 4, FrameWidth: 48, FrameTime: UpDownTransitionFrameTime},
+		UpDownHighToMidAnim: Animation{Texture: rl.LoadTexture("resources/threefour/updown-2-1.png"), FrameCount: 4, FrameWidth: 48, FrameTime: UpDownTransitionFrameTime},
+		UpDownMidToLowAnim:  Animation{Texture: rl.LoadTexture("resources/threefour/updown-1-0.png"), FrameCount: 4, FrameWidth: 48, FrameTime: UpDownTransitionFrameTime},
+
+		// Состояние перехода
+		IsTransitioning:    false,
+		TransitionFrom:     None,
+		TransitionTo:       None,
+		TransitionTimer:    0,
+		TransitionDuration: UpDownTransitionDuration, // 0.1 сек
+		CurrentPose:        Torso,
+		NextTargetPart:     None,
+
 		AttackDuration:     0.45,
 		AttackTimer:        0,
 		BackAttackDuration: float32(4) / AttackFps,
@@ -375,6 +408,22 @@ func HandleActorAnimationEnd(actor *Actor, timer, duration float32, nextState fu
 	}
 }
 
+// getTransitionAnimation возвращает анимацию перехода между двумя позами
+func getTransitionAnimation(actor *Actor, from, to BodyPart) *Animation {
+	switch {
+	case from == Legs && to == Torso:
+		return &actor.UpDownLowToMidAnim
+	case from == Torso && to == Head:
+		return &actor.UpDownMidToHighAnim
+	case from == Head && to == Torso:
+		return &actor.UpDownHighToMidAnim
+	case from == Torso && to == Legs:
+		return &actor.UpDownMidToLowAnim
+	default:
+		return &actor.UpDownAnim // Возвращаем обычную анимацию если переход не найден
+	}
+}
+
 // SelectActorAnimation выбирает подходящую анимацию для актора
 func SelectActorAnimation(actor *Actor) *Animation {
 	if actor.IsHit {
@@ -419,7 +468,54 @@ func SelectActorAnimation(actor *Actor) *Animation {
 	} else if actor.IsMoving {
 		return &actor.RunAnim
 	}
-	return &actor.IdleAnim
+
+	// --- Логика переходов между позами ---
+	if actor.IsTransitioning {
+		// Если пользователь хочет новую позу — запоминаем её, но не прерываем текущий переход
+		if actor.TargetPart != actor.TransitionTo && actor.TargetPart != None {
+			actor.NextTargetPart = actor.TargetPart
+		}
+		transitionAnim := getTransitionAnimation(actor, actor.TransitionFrom, actor.TransitionTo)
+		return transitionAnim
+	}
+
+	// После завершения перехода — если есть отложенный переход, запускаем его
+	if actor.NextTargetPart != None && actor.NextTargetPart != actor.CurrentPose {
+		actor.IsTransitioning = true
+		actor.TransitionFrom = actor.CurrentPose
+		actor.TransitionTo = actor.NextTargetPart
+		actor.TransitionTimer = 0
+		transitionAnim := getTransitionAnimation(actor, actor.TransitionFrom, actor.TransitionTo)
+		transitionAnim.CurrentFrame = 0
+		transitionAnim.Timer = 0
+		actor.NextTargetPart = None
+		return transitionAnim
+	}
+
+	// Если поза изменилась (и нет перехода) — запускаем переход
+	if actor.TargetPart != None && actor.TargetPart != actor.CurrentPose {
+		actor.IsTransitioning = true
+		actor.TransitionFrom = actor.CurrentPose
+		actor.TransitionTo = actor.TargetPart
+		actor.TransitionTimer = 0
+		transitionAnim := getTransitionAnimation(actor, actor.TransitionFrom, actor.TransitionTo)
+		transitionAnim.CurrentFrame = 0
+		transitionAnim.Timer = 0
+		return transitionAnim
+	}
+
+	// Обычная поза (нет перехода)
+	switch actor.CurrentPose {
+	case Head:
+		actor.UpDownAnim.CurrentFrame = 2 // high
+	case Torso:
+		actor.UpDownAnim.CurrentFrame = 1 // mid
+	case Legs:
+		actor.UpDownAnim.CurrentFrame = 0 // low
+	default:
+		actor.UpDownAnim.CurrentFrame = 1 // mid по умолчанию
+	}
+	return &actor.UpDownAnim
 }
 
 // UpdateActorAnimation обновляет анимацию актора
@@ -429,6 +525,23 @@ func UpdateActorAnimation(actor *Actor) {
 	if anim.Timer >= anim.FrameTime {
 		anim.Timer = 0
 		anim.CurrentFrame = (anim.CurrentFrame + 1) % anim.FrameCount
+
+		// Если это анимация перехода и она завершилась
+		if actor.IsTransitioning && anim.CurrentFrame == 0 {
+			actor.IsTransitioning = false
+			actor.CurrentPose = actor.TransitionTo
+			actor.TransitionTimer = 0
+		}
+	}
+
+	// Обновляем таймер перехода
+	if actor.IsTransitioning {
+		actor.TransitionTimer += rl.GetFrameTime()
+		if actor.TransitionTimer >= actor.TransitionDuration {
+			actor.IsTransitioning = false
+			actor.CurrentPose = actor.TransitionTo
+			actor.TransitionTimer = 0
+		}
 	}
 }
 
@@ -537,4 +650,11 @@ func UnloadActorTextures(actor *Actor) {
 	rl.UnloadTexture(actor.HitHighAnim.Texture)
 	rl.UnloadTexture(actor.HitMidAnim.Texture)
 	rl.UnloadTexture(actor.HitLowAnim.Texture)
+	rl.UnloadTexture(actor.UpDownAnim.Texture)
+
+	// Освобождаем текстуры анимаций переходов
+	rl.UnloadTexture(actor.UpDownLowToMidAnim.Texture)
+	rl.UnloadTexture(actor.UpDownMidToHighAnim.Texture)
+	rl.UnloadTexture(actor.UpDownHighToMidAnim.Texture)
+	rl.UnloadTexture(actor.UpDownMidToLowAnim.Texture)
 }

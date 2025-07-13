@@ -457,6 +457,8 @@ func main() {
 			}
 			rl.DrawText(fmt.Sprintf("Rewind: %v, Speed: %.1f, States: %d/%d", timeRewind.IsRewinding, timeRewind.RewindSpeed, timeRewind.CurrentIndex, len(timeRewind.States)), 10, 250, 20, rl.Black)
 			rl.DrawText(fmt.Sprintf("Can Rewind: %v, Timer: %.3f", timeRewind.CanRewind(), timeRewind.RewindTimer), 10, 310, 20, rl.Black)
+			rl.DrawText(fmt.Sprintf("Player Transition: %v, From: %d, To: %d", player.IsTransitioning, player.TransitionFrom, player.TransitionTo), 10, 340, 20, rl.Black)
+			rl.DrawText(fmt.Sprintf("Player TargetPart: %d", player.TargetPart), 10, 370, 20, rl.Black)
 
 			// Индикатор перемотки времени
 			if timeRewind.IsRewinding {

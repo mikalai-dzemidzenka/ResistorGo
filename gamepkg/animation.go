@@ -11,6 +11,18 @@ func ResetAnimation(anims ...*Animation) {
 	}
 }
 
+// ResetTransitionAnimations сбрасывает анимации переходов для актора
+func ResetTransitionAnimations(actor *Actor) {
+	actor.UpDownLowToMidAnim.CurrentFrame = 0
+	actor.UpDownLowToMidAnim.Timer = 0
+	actor.UpDownMidToHighAnim.CurrentFrame = 0
+	actor.UpDownMidToHighAnim.Timer = 0
+	actor.UpDownHighToMidAnim.CurrentFrame = 0
+	actor.UpDownHighToMidAnim.Timer = 0
+	actor.UpDownMidToLowAnim.CurrentFrame = 0
+	actor.UpDownMidToLowAnim.Timer = 0
+}
+
 func SelectAnimation(player *Player) *Animation {
 	if player.IsHit {
 		switch player.AttackPart {
