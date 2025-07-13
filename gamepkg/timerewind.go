@@ -38,6 +38,7 @@ type AnimationState struct {
 }
 
 // TimeState представляет состояние игрока в определенный момент времени
+// Теперь хранит только активную анимацию (ID, кадр, таймер)
 type TimeState struct {
 	Position          rl.Vector2
 	TargetPosition    rl.Vector2
@@ -59,8 +60,9 @@ type TimeState struct {
 	AttackCooldown    float32
 	LastAttackTime    float32
 
-	// Оптимизированное хранение анимаций через слайс (более эффективно чем map)
-	Animations []AnimationState
+	ActiveAnimID AnimationID
+	AnimFrame    int
+	AnimTimer    float32
 }
 
 // TimeRewindSystem управляет системой перемотки времени
@@ -105,28 +107,49 @@ func setAnimationState(animations []AnimationState, id AnimationID, currentFrame
 
 // SaveState сохраняет текущее состояние игрока
 func (trs *TimeRewindSystem) SaveState(actor *Actor) {
-	// Создаем слайс для анимаций (фиксированный размер)
-	animations := make([]AnimationState, AnimCount)
-
-	// Сохраняем состояние всех анимаций
-	setAnimationState(animations, AnimIdle, actor.IdleAnim.CurrentFrame, actor.IdleAnim.Timer)
-	setAnimationState(animations, AnimRun, actor.RunAnim.CurrentFrame, actor.RunAnim.Timer)
-	setAnimationState(animations, AnimAttackHigh, actor.AttackHighAnim.CurrentFrame, actor.AttackHighAnim.Timer)
-	setAnimationState(animations, AnimAttackMid, actor.AttackMidAnim.CurrentFrame, actor.AttackMidAnim.Timer)
-	setAnimationState(animations, AnimAttackLow, actor.AttackLowAnim.CurrentFrame, actor.AttackLowAnim.Timer)
-	setAnimationState(animations, AnimAttackHigh2, actor.AttackHighAnim2.CurrentFrame, actor.AttackHighAnim2.Timer)
-	setAnimationState(animations, AnimAttackMid2, actor.AttackMidAnim2.CurrentFrame, actor.AttackMidAnim2.Timer)
-	setAnimationState(animations, AnimAttackLow2, actor.AttackLowAnim2.CurrentFrame, actor.AttackLowAnim2.Timer)
-	setAnimationState(animations, AnimBackAttackHigh, actor.BackAttackHighAnim.CurrentFrame, actor.BackAttackHighAnim.Timer)
-	setAnimationState(animations, AnimBackAttackMid, actor.BackAttackMidAnim.CurrentFrame, actor.BackAttackMidAnim.Timer)
-	setAnimationState(animations, AnimBackAttackLow, actor.BackAttackLowAnim.CurrentFrame, actor.BackAttackLowAnim.Timer)
-	setAnimationState(animations, AnimHitHigh, actor.HitHighAnim.CurrentFrame, actor.HitHighAnim.Timer)
-	setAnimationState(animations, AnimHitMid, actor.HitMidAnim.CurrentFrame, actor.HitMidAnim.Timer)
-	setAnimationState(animations, AnimHitLow, actor.HitLowAnim.CurrentFrame, actor.HitLowAnim.Timer)
-	setAnimationState(animations, AnimUpDownLowToMid, actor.UpDownLowToMidAnim.CurrentFrame, actor.UpDownLowToMidAnim.Timer)
-	setAnimationState(animations, AnimUpDownMidToHigh, actor.UpDownMidToHighAnim.CurrentFrame, actor.UpDownMidToHighAnim.Timer)
-	setAnimationState(animations, AnimUpDownHighToMid, actor.UpDownHighToMidAnim.CurrentFrame, actor.UpDownHighToMidAnim.Timer)
-	setAnimationState(animations, AnimUpDownMidToLow, actor.UpDownMidToLowAnim.CurrentFrame, actor.UpDownMidToLowAnim.Timer)
+	// Определяем активную анимацию
+	anim := SelectActorAnimation(actor)
+	var animID AnimationID
+	switch anim {
+	case &actor.IdleAnim:
+		animID = AnimIdle
+	case &actor.RunAnim:
+		animID = AnimRun
+	case &actor.AttackHighAnim:
+		animID = AnimAttackHigh
+	case &actor.AttackMidAnim:
+		animID = AnimAttackMid
+	case &actor.AttackLowAnim:
+		animID = AnimAttackLow
+	case &actor.AttackHighAnim2:
+		animID = AnimAttackHigh2
+	case &actor.AttackMidAnim2:
+		animID = AnimAttackMid2
+	case &actor.AttackLowAnim2:
+		animID = AnimAttackLow2
+	case &actor.BackAttackHighAnim:
+		animID = AnimBackAttackHigh
+	case &actor.BackAttackMidAnim:
+		animID = AnimBackAttackMid
+	case &actor.BackAttackLowAnim:
+		animID = AnimBackAttackLow
+	case &actor.HitHighAnim:
+		animID = AnimHitHigh
+	case &actor.HitMidAnim:
+		animID = AnimHitMid
+	case &actor.HitLowAnim:
+		animID = AnimHitLow
+	case &actor.UpDownLowToMidAnim:
+		animID = AnimUpDownLowToMid
+	case &actor.UpDownMidToHighAnim:
+		animID = AnimUpDownMidToHigh
+	case &actor.UpDownHighToMidAnim:
+		animID = AnimUpDownHighToMid
+	case &actor.UpDownMidToLowAnim:
+		animID = AnimUpDownMidToLow
+	default:
+		animID = AnimIdle
+	}
 
 	state := TimeState{
 		Position:          actor.Position,
@@ -148,21 +171,19 @@ func (trs *TimeRewindSystem) SaveState(actor *Actor) {
 		IsCurrentAttack2:  actor.IsCurrentAttack2,
 		AttackCooldown:    actor.AttackCooldown,
 		LastAttackTime:    actor.LastAttackTime,
-		Animations:        animations,
+		ActiveAnimID:      animID,
+		AnimFrame:         anim.CurrentFrame,
+		AnimTimer:         anim.Timer,
 	}
 
-	// Обрезание истории теперь не происходит автоматически!
-	// Добавляем новое состояние
 	trs.States = append(trs.States, state)
 	trs.CurrentIndex++
 
-	// Ограничиваем количество состояний
 	if len(trs.States) > trs.MaxStates {
 		trs.States = trs.States[1:]
 		trs.CurrentIndex--
 	}
 
-	// Отладочная информация каждые 60 кадров (1 секунда)
 	if trs.CurrentIndex%60 == 0 {
 		fmt.Printf("SAVE STATE: Index %d/%d, States %d\n", trs.CurrentIndex, len(trs.States)-1, len(trs.States))
 	}
@@ -195,78 +216,63 @@ func (trs *TimeRewindSystem) LoadState(actor *Actor, index int) {
 	actor.AttackCooldown = state.AttackCooldown
 	actor.LastAttackTime = state.LastAttackTime
 
-	// Загружаем состояния анимаций из слайса
-	animState := getAnimationState(state.Animations, AnimIdle)
-	actor.IdleAnim.CurrentFrame = animState.CurrentFrame
-	actor.IdleAnim.Timer = animState.Timer
-
-	animState = getAnimationState(state.Animations, AnimRun)
-	actor.RunAnim.CurrentFrame = animState.CurrentFrame
-	actor.RunAnim.Timer = animState.Timer
-
-	animState = getAnimationState(state.Animations, AnimAttackHigh)
-	actor.AttackHighAnim.CurrentFrame = animState.CurrentFrame
-	actor.AttackHighAnim.Timer = animState.Timer
-
-	animState = getAnimationState(state.Animations, AnimAttackMid)
-	actor.AttackMidAnim.CurrentFrame = animState.CurrentFrame
-	actor.AttackMidAnim.Timer = animState.Timer
-
-	animState = getAnimationState(state.Animations, AnimAttackLow)
-	actor.AttackLowAnim.CurrentFrame = animState.CurrentFrame
-	actor.AttackLowAnim.Timer = animState.Timer
-
-	animState = getAnimationState(state.Animations, AnimAttackHigh2)
-	actor.AttackHighAnim2.CurrentFrame = animState.CurrentFrame
-	actor.AttackHighAnim2.Timer = animState.Timer
-
-	animState = getAnimationState(state.Animations, AnimAttackMid2)
-	actor.AttackMidAnim2.CurrentFrame = animState.CurrentFrame
-	actor.AttackMidAnim2.Timer = animState.Timer
-
-	animState = getAnimationState(state.Animations, AnimAttackLow2)
-	actor.AttackLowAnim2.CurrentFrame = animState.CurrentFrame
-	actor.AttackLowAnim2.Timer = animState.Timer
-
-	animState = getAnimationState(state.Animations, AnimBackAttackHigh)
-	actor.BackAttackHighAnim.CurrentFrame = animState.CurrentFrame
-	actor.BackAttackHighAnim.Timer = animState.Timer
-
-	animState = getAnimationState(state.Animations, AnimBackAttackMid)
-	actor.BackAttackMidAnim.CurrentFrame = animState.CurrentFrame
-	actor.BackAttackMidAnim.Timer = animState.Timer
-
-	animState = getAnimationState(state.Animations, AnimBackAttackLow)
-	actor.BackAttackLowAnim.CurrentFrame = animState.CurrentFrame
-	actor.BackAttackLowAnim.Timer = animState.Timer
-
-	animState = getAnimationState(state.Animations, AnimHitHigh)
-	actor.HitHighAnim.CurrentFrame = animState.CurrentFrame
-	actor.HitHighAnim.Timer = animState.Timer
-
-	animState = getAnimationState(state.Animations, AnimHitMid)
-	actor.HitMidAnim.CurrentFrame = animState.CurrentFrame
-	actor.HitMidAnim.Timer = animState.Timer
-
-	animState = getAnimationState(state.Animations, AnimHitLow)
-	actor.HitLowAnim.CurrentFrame = animState.CurrentFrame
-	actor.HitLowAnim.Timer = animState.Timer
-
-	animState = getAnimationState(state.Animations, AnimUpDownLowToMid)
-	actor.UpDownLowToMidAnim.CurrentFrame = animState.CurrentFrame
-	actor.UpDownLowToMidAnim.Timer = animState.Timer
-
-	animState = getAnimationState(state.Animations, AnimUpDownMidToHigh)
-	actor.UpDownMidToHighAnim.CurrentFrame = animState.CurrentFrame
-	actor.UpDownMidToHighAnim.Timer = animState.Timer
-
-	animState = getAnimationState(state.Animations, AnimUpDownHighToMid)
-	actor.UpDownHighToMidAnim.CurrentFrame = animState.CurrentFrame
-	actor.UpDownHighToMidAnim.Timer = animState.Timer
-
-	animState = getAnimationState(state.Animations, AnimUpDownMidToLow)
-	actor.UpDownMidToLowAnim.CurrentFrame = animState.CurrentFrame
-	actor.UpDownMidToLowAnim.Timer = animState.Timer
+	// Восстанавливаем только активную анимацию, остальные не трогаем
+	switch state.ActiveAnimID {
+	case AnimIdle:
+		actor.IdleAnim.CurrentFrame = state.AnimFrame
+		actor.IdleAnim.Timer = state.AnimTimer
+	case AnimRun:
+		actor.RunAnim.CurrentFrame = state.AnimFrame
+		actor.RunAnim.Timer = state.AnimTimer
+	case AnimAttackHigh:
+		actor.AttackHighAnim.CurrentFrame = state.AnimFrame
+		actor.AttackHighAnim.Timer = state.AnimTimer
+	case AnimAttackMid:
+		actor.AttackMidAnim.CurrentFrame = state.AnimFrame
+		actor.AttackMidAnim.Timer = state.AnimTimer
+	case AnimAttackLow:
+		actor.AttackLowAnim.CurrentFrame = state.AnimFrame
+		actor.AttackLowAnim.Timer = state.AnimTimer
+	case AnimAttackHigh2:
+		actor.AttackHighAnim2.CurrentFrame = state.AnimFrame
+		actor.AttackHighAnim2.Timer = state.AnimTimer
+	case AnimAttackMid2:
+		actor.AttackMidAnim2.CurrentFrame = state.AnimFrame
+		actor.AttackMidAnim2.Timer = state.AnimTimer
+	case AnimAttackLow2:
+		actor.AttackLowAnim2.CurrentFrame = state.AnimFrame
+		actor.AttackLowAnim2.Timer = state.AnimTimer
+	case AnimBackAttackHigh:
+		actor.BackAttackHighAnim.CurrentFrame = state.AnimFrame
+		actor.BackAttackHighAnim.Timer = state.AnimTimer
+	case AnimBackAttackMid:
+		actor.BackAttackMidAnim.CurrentFrame = state.AnimFrame
+		actor.BackAttackMidAnim.Timer = state.AnimTimer
+	case AnimBackAttackLow:
+		actor.BackAttackLowAnim.CurrentFrame = state.AnimFrame
+		actor.BackAttackLowAnim.Timer = state.AnimTimer
+	case AnimHitHigh:
+		actor.HitHighAnim.CurrentFrame = state.AnimFrame
+		actor.HitHighAnim.Timer = state.AnimTimer
+	case AnimHitMid:
+		actor.HitMidAnim.CurrentFrame = state.AnimFrame
+		actor.HitMidAnim.Timer = state.AnimTimer
+	case AnimHitLow:
+		actor.HitLowAnim.CurrentFrame = state.AnimFrame
+		actor.HitLowAnim.Timer = state.AnimTimer
+	case AnimUpDownLowToMid:
+		actor.UpDownLowToMidAnim.CurrentFrame = state.AnimFrame
+		actor.UpDownLowToMidAnim.Timer = state.AnimTimer
+	case AnimUpDownMidToHigh:
+		actor.UpDownMidToHighAnim.CurrentFrame = state.AnimFrame
+		actor.UpDownMidToHighAnim.Timer = state.AnimTimer
+	case AnimUpDownHighToMid:
+		actor.UpDownHighToMidAnim.CurrentFrame = state.AnimFrame
+		actor.UpDownHighToMidAnim.Timer = state.AnimTimer
+	case AnimUpDownMidToLow:
+		actor.UpDownMidToLowAnim.CurrentFrame = state.AnimFrame
+		actor.UpDownMidToLowAnim.Timer = state.AnimTimer
+	}
 }
 
 // StartRewind начинает перемотку времени назад
