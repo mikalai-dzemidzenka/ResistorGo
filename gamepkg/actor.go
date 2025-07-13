@@ -212,7 +212,9 @@ func UpdateActor(actor *Actor, opponent *Actor, camera *rl.Camera2D, mousePos rl
 			}
 		}
 	} else {
-		// Логика атак ИИ
+		// Логика движения ИИ - теперь используем новую систему позиционирования
+		// Эта функция будет вызываться из main.go с передачей всех врагов
+		// Здесь оставляем только базовую логику атак
 		actor.LastAttackTime += rl.GetFrameTime()
 		if actor.LastAttackTime >= actor.AttackInterval {
 			actor.LastAttackTime = 0
@@ -267,8 +269,8 @@ func UpdateActor(actor *Actor, opponent *Actor, camera *rl.Camera2D, mousePos rl
 	// --- Плавное движение ---
 	actor.IsMoving = false
 	targetVelocity := float32(0.0)
-	acceleration := float32(120.0) // пикселей в секунду^2
-	deceleration := float32(200.0) // пикселей в секунду^2
+	acceleration := float32(80.0)  // Уменьшено с 120 для снижения скольжения
+	deceleration := float32(120.0) // Уменьшено с 200 для снижения скольжения
 	dt := rl.GetFrameTime()
 
 	if actor.Type == PlayerActor {
@@ -327,25 +329,43 @@ func UpdateActor(actor *Actor, opponent *Actor, camera *rl.Camera2D, mousePos rl
 	// Интерполяция позиции
 	actor.Position.X = Lerp(actor.Position.X, actor.TargetPosition.X, 0.95)
 
-	// Обновляем хитбоксы
+	// Обновляем хитбоксы после изменения позиции
 	UpdateActorHitboxes(actor)
 }
 
-// UpdateActorHitboxes обновляет хитбоксы актора
+// UpdateActorHitboxes обновляет хитбоксы актора после изменения позиции
 func UpdateActorHitboxes(actor *Actor) {
 	centerX := actor.Position.X + actor.Size.X/2
 	centerY := actor.Position.Y + actor.Size.Y/2
+
+	// Хитбоксы основаны на центре актора
 	actor.HeadBox.X = centerX - (9*SpriteScale)/2 - 1*SpriteScale // 9x10
 	actor.HeadBox.Y = centerY - (10*SpriteScale)/2 - 15*SpriteScale
+	actor.HeadBox.Width = 9 * SpriteScale
+	actor.HeadBox.Height = 10 * SpriteScale
+
 	actor.TorsoBox.X = centerX - (19*SpriteScale)/2 - 1*SpriteScale // 19x12
 	actor.TorsoBox.Y = centerY - (12*SpriteScale)/2 - 4*SpriteScale
+	actor.TorsoBox.Width = 19 * SpriteScale
+	actor.TorsoBox.Height = 12 * SpriteScale
+
 	actor.LegsBox.X = centerX - (16*SpriteScale)/2 - 1*SpriteScale // 16x22
 	actor.LegsBox.Y = centerY - (22*SpriteScale)/2 + 13*SpriteScale
+	actor.LegsBox.Width = 16 * SpriteScale
+	actor.LegsBox.Height = 22 * SpriteScale
 
-	var xOffset float32 = 6.0
-	if !actor.FacingRight {
-		xOffset = -6.0
+	// AttackBox всегда присутствует и следует за актором
+	// При взгляде вправо - в правой половине спрайта, при взгляде влево - в левой половине
+	var attackBoxX float32
+	if actor.FacingRight {
+		// Взгляд вправо - AttackBox в правой половине спрайта (24-48px)
+		attackBoxX = actor.Position.X + 24
+	} else {
+		// Взгляд влево - AttackBox в левой половине спрайта (0-24px)
+		attackBoxX = actor.Position.X
 	}
+
+	// Определяем часть тела для атаки
 	attackPart := actor.AttackPart
 	if actor.Type == PlayerActor && !actor.IsAttacking {
 		attackPart = actor.TargetPart
@@ -356,6 +376,7 @@ func UpdateActorHitboxes(actor *Actor) {
 		attackPart = Torso
 	}
 
+	// Устанавливаем позицию AttackBox в зависимости от части тела
 	var attackBoxY float32
 	switch attackPart {
 	case Head:
@@ -366,13 +387,6 @@ func UpdateActorHitboxes(actor *Actor) {
 		attackBoxY = actor.LegsBox.Y + actor.LegsBox.Height/2 - AttackBoxHeight/2
 	default:
 		attackBoxY = actor.TorsoBox.Y + actor.TorsoBox.Height/2 - AttackBoxHeight/2
-	}
-
-	attackBoxX := centerX + xOffset
-	if attackBoxX < actor.Position.X {
-		attackBoxX = actor.Position.X
-	} else if attackBoxX+AttackBoxWidth > actor.Position.X+actor.Size.X {
-		attackBoxX = actor.Position.X + actor.Size.X - AttackBoxWidth
 	}
 
 	actor.AttackBox = rl.NewRectangle(attackBoxX, attackBoxY, AttackBoxWidth, AttackBoxHeight)
@@ -573,7 +587,7 @@ func abs(x float32) float32 {
 	return x
 }
 
-// sign возвращает знак float32
+// sign возвращает знак числа (-1, 0, 1)
 func sign(x float32) float32 {
 	if x > 0 {
 		return 1
@@ -619,50 +633,40 @@ func UpdateActorAnimation(actor *Actor) {
 // CheckActorAttack проверяет атаку актора
 func CheckActorAttack(attacker, defender *Actor) {
 	if attacker.IsAttacking {
-		var defenderBox rl.Rectangle
-		switch attacker.AttackPart {
-		case Head:
-			defenderBox = defender.HeadBox
-		case Torso:
-			defenderBox = defender.TorsoBox
-		case Legs:
-			defenderBox = defender.LegsBox
-		}
-
 		anim := SelectActorAnimation(attacker)
-		if attacker.AttackPart == defender.TargetPart {
-			attacker.IsAttacking = false
-			attacker.IsBackAttacking = true
-			attacker.BackAttackTimer = 0
-			ResetAnimation(&attacker.BackAttackHighAnim, &attacker.BackAttackMidAnim, &attacker.BackAttackLowAnim)
-			// Обрабатываем ожидающую атаку только если актор не в состоянии получения урона
-			if attacker.Type == PlayerActor && attacker.HasPendingAttack && !attacker.IsHit {
-				attacker.IsAttacking = true
-				attacker.IsBackAttacking = false
-				attacker.AttackPart = attacker.PendingAttackPart
-				attacker.HasPendingAttack = false
-				attacker.PendingAttackPart = None
-				var xOffset float32 = 6.0
-				if !attacker.FacingRight {
-					xOffset = -6.0
+
+		// Урон наносится только на 6-м кадре анимации атаки (CurrentFrame == 5)
+		if anim.CurrentFrame == 5 {
+			// Проверяем коллизию AttackBox с хитбоксами защитника
+			if rl.CheckCollisionRecs(attacker.AttackBox, defender.HeadBox) ||
+				rl.CheckCollisionRecs(attacker.AttackBox, defender.TorsoBox) ||
+				rl.CheckCollisionRecs(attacker.AttackBox, defender.LegsBox) {
+
+				// Наносим урон
+				defender.Health -= 10
+				if defender.Health < 0 {
+					defender.Health = 0
 				}
-				SetActorAttackBox(attacker, xOffset)
-				ResetAnimation(&attacker.AttackHighAnim, &attacker.AttackMidAnim, &attacker.AttackLowAnim)
-				attacker.AttackTimer = 0
-				attacker.AttackCooldown = 0.1
+
+				// Активируем анимацию получения урона
+				defender.IsHit = true
+				defender.HitTimer = 0
+				defender.AttackPart = attacker.AttackPart
+
+				// Сбрасываем ожидающую атаку при получении урона
+				defender.HasPendingAttack = false
+				defender.PendingAttackPart = None
+
+				// Выбираем правильную анимацию получения урона
+				switch attacker.AttackPart {
+				case Head:
+					ResetAnimation(&defender.HitHighAnim)
+				case Torso:
+					ResetAnimation(&defender.HitMidAnim)
+				case Legs:
+					ResetAnimation(&defender.HitLowAnim)
+				}
 			}
-		} else if anim.CurrentFrame == 5 && rl.CheckCollisionRecs(attacker.AttackBox, defenderBox) {
-			defender.Health -= 10
-			if defender.Health < 0 {
-				defender.Health = 0
-			}
-			defender.IsHit = true
-			defender.HitTimer = 0
-			defender.AttackPart = attacker.AttackPart
-			// Сбрасываем ожидающую атаку при получении урона
-			defender.HasPendingAttack = false
-			defender.PendingAttackPart = None
-			ResetAnimation(&defender.HitHighAnim, &defender.HitMidAnim, &defender.HitLowAnim)
 		}
 	}
 }
@@ -757,4 +761,173 @@ func UnloadActorTextures(actor *Actor) {
 	rl.UnloadTexture(actor.UpDownMidToHighAnim.Texture)
 	rl.UnloadTexture(actor.UpDownHighToMidAnim.Texture)
 	rl.UnloadTexture(actor.UpDownMidToLowAnim.Texture)
+}
+
+// CalculateEnemyPositionAroundPlayer рассчитывает желаемую позицию врага для beat'em up
+// Реализует систему очереди атаки: первые 2 врага атакуют, остальные ждут
+func CalculateEnemyPositionAroundPlayer(player *Actor, enemies []Actor, enemyIndex int) rl.Vector2 {
+	// Первые 2 врага (индексы 0 и 1) - атакующие позиции слева и справа
+	if enemyIndex < 2 {
+		side := -1 // -1 = слева, 1 = справа
+		if enemyIndex == 1 {
+			side = 1
+		}
+		// Атакующие позиции ближе к игроку
+		distanceX := float32(35) * float32(side)
+		return rl.NewVector2(player.Position.X+distanceX, player.Position.Y)
+	}
+
+	// Остальные враги (индексы 2+) - ожидающие позиции сверху и снизу
+	queueIndex := enemyIndex - 2
+	side := -1 // -1 = сверху, 1 = снизу
+	if queueIndex%2 == 1 {
+		side = 1
+	}
+
+	// Ожидающие позиции с фиксированными Y координатами для создания перспективы
+	var fixedY float32
+	if side == -1 {
+		// Сверху - фиксированная позиция выше игрока
+		fixedY = player.Position.Y - 25
+	} else {
+		// Снизу - фиксированная позиция ниже игрока
+		fixedY = player.Position.Y + 25
+	}
+
+	// Небольшое смещение по X для разнесения
+	var spreadX float32
+	if queueIndex%4 < 2 {
+		spreadX = float32((queueIndex/2)*30) * -1
+	} else {
+		spreadX = float32((queueIndex / 2) * 30)
+	}
+
+	return rl.NewVector2(player.Position.X+spreadX, fixedY)
+}
+
+// UpdateEnemyAI обновляет ИИ врага для движения к желаемой позиции
+func UpdateEnemyAI(enemy *Actor, player *Actor, enemies []Actor, enemyIndex int) {
+	// Рассчитываем желаемую позицию
+	targetPos := CalculateEnemyPositionAroundPlayer(player, enemies, enemyIndex)
+
+	// Определяем направление движения по X
+	dx := targetPos.X - enemy.Position.X
+
+	// Устанавливаем целевую скорость
+	targetVelocity := float32(0.0)
+	acceleration := float32(80.0)  // Уменьшено с 120 для снижения скольжения
+	deceleration := float32(120.0) // Уменьшено с 200 для снижения скольжения
+	dt := rl.GetFrameTime()
+
+	// Горизонтальное движение
+	if abs(dx) > 10 {
+		if dx > 0 {
+			targetVelocity = enemy.Speed
+			enemy.FacingRight = true
+		} else {
+			targetVelocity = -enemy.Speed
+			enemy.FacingRight = false
+		}
+		enemy.IsMoving = true
+	} else {
+		targetVelocity = 0
+		enemy.IsMoving = false
+	}
+
+	// Применяем плавное движение
+	if targetVelocity != 0 {
+		if (targetVelocity > 0 && enemy.Velocity < targetVelocity) || (targetVelocity < 0 && enemy.Velocity > targetVelocity) {
+			enemy.Velocity += acceleration * dt * sign(targetVelocity)
+			if (targetVelocity > 0 && enemy.Velocity > targetVelocity) || (targetVelocity < 0 && enemy.Velocity < targetVelocity) {
+				enemy.Velocity = targetVelocity
+			}
+		} else if (targetVelocity > 0 && enemy.Velocity > targetVelocity) || (targetVelocity < 0 && enemy.Velocity < targetVelocity) {
+			enemy.Velocity -= deceleration * dt * sign(enemy.Velocity)
+			if (targetVelocity > 0 && enemy.Velocity < targetVelocity) || (targetVelocity < 0 && enemy.Velocity > targetVelocity) {
+				enemy.Velocity = targetVelocity
+			}
+		}
+	} else {
+		// Быстрое торможение
+		if enemy.Velocity > 0 {
+			enemy.Velocity -= BrakeSpeed * dt
+			if enemy.Velocity < 0 {
+				enemy.Velocity = 0
+			}
+		} else if enemy.Velocity < 0 {
+			enemy.Velocity += BrakeSpeed * dt
+			if enemy.Velocity > 0 {
+				enemy.Velocity = 0
+			}
+		}
+	}
+
+	// Все враги двигаются к своим целевым позициям (включая Y)
+	// Атакующие враги получают Y игрока, враги в очереди - фиксированные Y позиции
+
+	// Обновляем целевую позицию
+	enemy.TargetPosition.X += enemy.Velocity * dt
+	enemy.TargetPosition.Y = targetPos.Y // Используем Y из целевой позиции
+
+	// Интерполяция позиции (включая Y для врагов в очереди)
+	enemy.Position.X = Lerp(enemy.Position.X, enemy.TargetPosition.X, 0.95)
+	enemy.Position.Y = Lerp(enemy.Position.Y, enemy.TargetPosition.Y, 0.95)
+
+	// --- Атака, если враг достаточно близко к игроку ---
+	// Только первые 2 врага могут атаковать (система очереди)
+	if enemyIndex < 2 {
+		// Проверяем расстояние до игрока для начала атаки
+		distX := abs(enemy.Position.X - player.Position.X)
+		distY := abs(enemy.Position.Y - player.Position.Y)
+		if distX < 30 && distY < 20 && !enemy.IsAttacking && !enemy.IsBackAttacking && !enemy.IsHit {
+			enemy.IsAttacking = true
+			enemy.AttackPart = BodyPart(rand.Intn(3))
+			ResetAnimation(&enemy.AttackHighAnim, &enemy.AttackMidAnim, &enemy.AttackLowAnim)
+			enemy.AttackTimer = 0
+		}
+	}
+}
+
+// ReorderEnemyQueue перераспределяет очередь врагов, когда один из атакующих падает
+func ReorderEnemyQueue(enemies []Actor) {
+	// Находим живых врагов
+	var aliveEnemies []int
+	for i, enemy := range enemies {
+		if enemy.Health > 0 {
+			aliveEnemies = append(aliveEnemies, i)
+		}
+	}
+
+	// Если врагов меньше 3, перераспределение не нужно
+	if len(aliveEnemies) < 3 {
+		return
+	}
+
+	// Проверяем, есть ли атакующие позиции (первые 2) свободны
+	attackingPositions := 0
+	for _, index := range aliveEnemies {
+		if index < 2 {
+			attackingPositions++
+		}
+	}
+
+	// Если атакующих позиций меньше 2, перемещаем врага из очереди
+	if attackingPositions < 2 {
+		// Находим первого врага в очереди (индекс >= 2)
+		for _, index := range aliveEnemies {
+			if index >= 2 {
+				// Перемещаем его в первую свободную атакующую позицию
+				if attackingPositions == 0 {
+					// Заменяем индекс 0
+					enemies[0] = enemies[index]
+					enemies[index] = Actor{} // Очищаем старую позицию
+				} else if attackingPositions == 1 {
+					// Заменяем индекс 1
+					enemies[1] = enemies[index]
+					enemies[index] = Actor{} // Очищаем старую позицию
+				}
+				break
+			}
+		}
+	}
 }

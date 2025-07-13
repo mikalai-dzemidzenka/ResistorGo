@@ -91,12 +91,17 @@ func main() {
 				enemyRewinds[i] = gamepkg.NewTimeRewindSystem(300)
 			}
 		} else {
-			// Создаем одного врага по умолчанию
+			// Создаем нескольких врагов по умолчанию для тестирования позиционирования
 			enemies = []gamepkg.Actor{
 				gamepkg.NewActor(rl.NewVector2(600, float32(sceneHeight)-90*gamepkg.SpriteScale), gamepkg.AIActor),
+				gamepkg.NewActor(rl.NewVector2(700, float32(sceneHeight)-90*gamepkg.SpriteScale), gamepkg.AIActor),
+				gamepkg.NewActor(rl.NewVector2(500, float32(sceneHeight)-90*gamepkg.SpriteScale), gamepkg.AIActor),
 			}
-			// Инициализация rewind для врага по умолчанию
-			enemyRewinds = []*gamepkg.TimeRewindSystem{gamepkg.NewTimeRewindSystem(300)}
+			// Инициализация rewind для врагов по умолчанию
+			enemyRewinds = make([]*gamepkg.TimeRewindSystem, len(enemies))
+			for i := range enemies {
+				enemyRewinds[i] = gamepkg.NewTimeRewindSystem(300)
+			}
 		}
 	}
 
@@ -157,12 +162,17 @@ func main() {
 					enemyRewinds[i] = gamepkg.NewTimeRewindSystem(300)
 				}
 			} else {
-				// Создаем одного врага по умолчанию
+				// Создаем нескольких врагов по умолчанию для тестирования позиционирования
 				enemies = []gamepkg.Actor{
 					gamepkg.NewActor(rl.NewVector2(600, float32(sceneHeight)-90*gamepkg.SpriteScale), gamepkg.AIActor),
+					gamepkg.NewActor(rl.NewVector2(700, float32(sceneHeight)-90*gamepkg.SpriteScale), gamepkg.AIActor),
+					gamepkg.NewActor(rl.NewVector2(500, float32(sceneHeight)-90*gamepkg.SpriteScale), gamepkg.AIActor),
 				}
-				// Инициализация rewind для врага по умолчанию
-				enemyRewinds = []*gamepkg.TimeRewindSystem{gamepkg.NewTimeRewindSystem(300)}
+				// Инициализация rewind для врагов по умолчанию
+				enemyRewinds = make([]*gamepkg.TimeRewindSystem, len(enemies))
+				for i := range enemies {
+					enemyRewinds[i] = gamepkg.NewTimeRewindSystem(300)
+				}
 			}
 		}
 		if rl.IsKeyPressed(rl.KeyTwo) {
@@ -331,10 +341,13 @@ func main() {
 				gamepkg.UpdateActor(&player, nearestEnemy, &camera, sceneMousePos)
 				gamepkg.UpdateActorAnimation(&player)
 
-				// Обновляем всех врагов
+				// Обновляем всех врагов с новой системой ИИ
 				for i := range enemies {
-					gamepkg.UpdateActor(&enemies[i], &player, &camera, sceneMousePos)
+					// Используем новую систему позиционирования для врагов
+					gamepkg.UpdateEnemyAI(&enemies[i], &player, enemies, i)
 					gamepkg.UpdateActorAnimation(&enemies[i])
+					// Обновляем хитбоксы врагов
+					gamepkg.UpdateActorHitboxes(&enemies[i])
 				}
 
 				// Проверяем атаки игрока против всех врагов
@@ -346,6 +359,9 @@ func main() {
 				for i := range enemies {
 					gamepkg.CheckActorAttack(&enemies[i], &player)
 				}
+
+				// Перераспределяем очередь врагов, если нужно
+				gamepkg.ReorderEnemyQueue(enemies)
 			} else {
 				// Если перематываем время - только обновляем анимации
 				gamepkg.UpdateActorAnimation(&player)
@@ -420,18 +436,53 @@ func main() {
 				}
 			}
 
-			// Рисуем игрока с эффектом перемотки времени
+			// Y-sort: собираем всех акторов и сортируем по Y позиции
+			type ActorDrawInfo struct {
+				Actor    *gamepkg.Actor
+				Color    rl.Color
+				IsPlayer bool
+			}
+
+			var actorsToDraw []ActorDrawInfo
+
+			// Добавляем игрока
 			playerColor := rl.Red
 			if timeRewind.IsRewinding {
 				// Эффект перемотки времени - игрок становится более прозрачным и меняет цвет
 				alpha := uint8(128 + 127*timeRewind.GetRewindProgress()) // От 128 до 255
 				playerColor = rl.NewColor(255, 0, 0, alpha)
 			}
-			gamepkg.DrawActor(&player, nearestEnemy, playerColor, &camera)
+			actorsToDraw = append(actorsToDraw, ActorDrawInfo{
+				Actor:    &player,
+				Color:    playerColor,
+				IsPlayer: true,
+			})
 
-			// Рисуем всех врагов
+			// Добавляем врагов
 			for i := range enemies {
-				gamepkg.DrawActor(&enemies[i], nil, rl.Blue, &camera)
+				actorsToDraw = append(actorsToDraw, ActorDrawInfo{
+					Actor:    &enemies[i],
+					Color:    rl.Blue,
+					IsPlayer: false,
+				})
+			}
+
+			// Сортируем по Y позиции (больший Y рисуется поверх)
+			for i := 0; i < len(actorsToDraw)-1; i++ {
+				for j := i + 1; j < len(actorsToDraw); j++ {
+					if actorsToDraw[i].Actor.Position.Y > actorsToDraw[j].Actor.Position.Y {
+						actorsToDraw[i], actorsToDraw[j] = actorsToDraw[j], actorsToDraw[i]
+					}
+				}
+			}
+
+			// Рисуем всех акторов в правильном порядке
+			for _, drawInfo := range actorsToDraw {
+				if drawInfo.IsPlayer {
+					gamepkg.DrawActor(drawInfo.Actor, nearestEnemy, drawInfo.Color, &camera)
+				} else {
+					gamepkg.DrawActor(drawInfo.Actor, nil, drawInfo.Color, &camera)
+				}
 			}
 
 			// Рисуем красный квадратик на месте курсора в сцене

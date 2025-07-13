@@ -24,7 +24,7 @@ const (
 	MoveAcceleration    = 0.95             // Ускорение движения (было 0.9)
 	MoveDeceleration    = 0.98             // Замедление движения (было 0.95)
 	MaxSpeed            = 250.0            // Максимальная скорость (ускорено)
-	BrakeSpeed          = 400.0            // Скорость торможения (быстрое замедление)
+	BrakeSpeed          = 200.0            // Уменьшено с 400 для снижения скольжения
 
 	UpDownTransitionDuration  = 0.1
 	UpDownTransitionFrameTime = UpDownTransitionDuration / 4
