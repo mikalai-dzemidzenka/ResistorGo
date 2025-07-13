@@ -11,6 +11,10 @@ type AnimationID int
 
 const (
 	AnimIdle AnimationID = iota
+	AnimWalk
+	AnimWalkHigh
+	AnimWalkMid
+	AnimWalkLow
 	AnimRun
 	AnimAttackHigh
 	AnimAttackMid
@@ -113,6 +117,14 @@ func (trs *TimeRewindSystem) SaveState(actor *Actor) {
 	switch anim {
 	case &actor.IdleAnim:
 		animID = AnimIdle
+	case &actor.WalkAnim:
+		animID = AnimWalk
+	case &actor.WalkHighAnim:
+		animID = AnimWalkHigh
+	case &actor.WalkMidAnim:
+		animID = AnimWalkMid
+	case &actor.WalkLowAnim:
+		animID = AnimWalkLow
 	case &actor.RunAnim:
 		animID = AnimRun
 	case &actor.AttackHighAnim:
@@ -221,6 +233,18 @@ func (trs *TimeRewindSystem) LoadState(actor *Actor, index int) {
 	case AnimIdle:
 		actor.IdleAnim.CurrentFrame = state.AnimFrame
 		actor.IdleAnim.Timer = state.AnimTimer
+	case AnimWalk:
+		actor.WalkAnim.CurrentFrame = state.AnimFrame
+		actor.WalkAnim.Timer = state.AnimTimer
+	case AnimWalkHigh:
+		actor.WalkHighAnim.CurrentFrame = state.AnimFrame
+		actor.WalkHighAnim.Timer = state.AnimTimer
+	case AnimWalkMid:
+		actor.WalkMidAnim.CurrentFrame = state.AnimFrame
+		actor.WalkMidAnim.Timer = state.AnimTimer
+	case AnimWalkLow:
+		actor.WalkLowAnim.CurrentFrame = state.AnimFrame
+		actor.WalkLowAnim.Timer = state.AnimTimer
 	case AnimRun:
 		actor.RunAnim.CurrentFrame = state.AnimFrame
 		actor.RunAnim.Timer = state.AnimTimer

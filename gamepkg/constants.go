@@ -13,6 +13,9 @@ const (
 	HitFrameTime        = 0.3333 / 4             // 0.08333 сек/кадр (4 кадра, 12 FPS, 0.3333 сек)
 	RunFps              = 18
 	RunFrameTime        = 1.0 / RunFps
+	WalkFps             = 12               // FPS для анимации ходьбы
+	WalkFrameTime       = 1.0 / WalkFps    // Время кадра для ходьбы
+	WalkToRunThreshold  = 150.0            // Порог скорости для перехода от ходьбы к бегу
 	AttackBoxWidth      = 24 * SpriteScale // 24 пикселя
 	AttackBoxHeight     = 6 * SpriteScale  // 6 пикселей
 	MinZoom             = 0.5              // Минимальный масштаб камеры
@@ -20,7 +23,8 @@ const (
 	ZoomSpeed           = 0.1              // Скорость изменения масштаба
 	MoveAcceleration    = 0.95             // Ускорение движения (было 0.9)
 	MoveDeceleration    = 0.98             // Замедление движения (было 0.95)
-	MaxSpeed            = 50.0             // Максимальная скорость (ускорено)
+	MaxSpeed            = 250.0            // Максимальная скорость (ускорено)
+	BrakeSpeed          = 400.0            // Скорость торможения (быстрое замедление)
 
 	UpDownTransitionDuration  = 0.1
 	UpDownTransitionFrameTime = UpDownTransitionDuration / 4

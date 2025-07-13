@@ -1,6 +1,7 @@
 package gamepkg
 
 import (
+	"fmt"
 	"math/rand"
 
 	rl "github.com/gen2brain/raylib-go/raylib"
@@ -51,6 +52,10 @@ type Actor struct {
 
 	// Анимации
 	IdleAnim           Animation
+	WalkAnim           Animation // Анимация ходьбы (нижняя часть тела - ноги)
+	WalkHighAnim       Animation // Анимация ходьбы с высоким положением рук
+	WalkMidAnim        Animation // Анимация ходьбы со средним положением рук
+	WalkLowAnim        Animation // Анимация ходьбы с низким положением рук
 	RunAnim            Animation
 	AttackHighAnim     Animation
 	AttackMidAnim      Animation
@@ -121,6 +126,10 @@ func NewActor(position rl.Vector2, actorType ActorType) Actor {
 		HitTimer:           0,
 		HitDuration:        0.3333, // Длительность анимации урона (4 кадра, 12 FPS)
 		IdleAnim:           Animation{Texture: rl.LoadTexture("resources/threefour/idle.png"), FrameCount: 1, FrameWidth: 48, FrameTime: 0.1},
+		WalkAnim:           Animation{Texture: rl.LoadTexture("resources/threefour/walk.png"), FrameCount: 8, FrameWidth: 48, FrameTime: WalkFrameTime},
+		WalkHighAnim:       Animation{Texture: rl.LoadTexture("resources/threefour/walk-high.png"), FrameCount: 8, FrameWidth: 48, FrameTime: WalkFrameTime},
+		WalkMidAnim:        Animation{Texture: rl.LoadTexture("resources/threefour/walk-mid.png"), FrameCount: 8, FrameWidth: 48, FrameTime: WalkFrameTime},
+		WalkLowAnim:        Animation{Texture: rl.LoadTexture("resources/threefour/walk-low.png"), FrameCount: 8, FrameWidth: 48, FrameTime: WalkFrameTime},
 		RunAnim:            Animation{Texture: rl.LoadTexture("resources/threefour/run.png"), FrameCount: 10, FrameWidth: 48, FrameTime: RunFrameTime},
 		AttackHighAnim:     Animation{Texture: rl.LoadTexture("resources/threefour/attack-high.png"), FrameCount: 8, FrameWidth: 48, FrameTime: AttackFrameTime},
 		AttackMidAnim:      Animation{Texture: rl.LoadTexture("resources/threefour/attack-mid.png"), FrameCount: 8, FrameWidth: 48, FrameTime: AttackFrameTime},
@@ -255,12 +264,14 @@ func UpdateActor(actor *Actor, opponent *Actor, camera *rl.Camera2D, mousePos rl
 		return
 	}
 
-	// Обработка движения в зависимости от типа актора
+	// --- Плавное движение ---
 	actor.IsMoving = false
 	targetVelocity := float32(0.0)
+	acceleration := float32(120.0) // пикселей в секунду^2
+	deceleration := float32(200.0) // пикселей в секунду^2
+	dt := rl.GetFrameTime()
 
 	if actor.Type == PlayerActor {
-		// Логика движения игрока
 		if rl.IsKeyDown(rl.KeyA) {
 			targetVelocity = -actor.Speed // Влево
 			actor.IsMoving = true
@@ -272,7 +283,6 @@ func UpdateActor(actor *Actor, opponent *Actor, camera *rl.Camera2D, mousePos rl
 			actor.FacingRight = true
 		}
 	} else {
-		// Логика движения ИИ
 		if opponent.Position.X > actor.Position.X+50 {
 			targetVelocity = actor.Speed // Вправо
 			actor.IsMoving = true
@@ -284,14 +294,35 @@ func UpdateActor(actor *Actor, opponent *Actor, camera *rl.Camera2D, mousePos rl
 		}
 	}
 
-	// Интерполяция скорости
-	actor.Velocity = Lerp(actor.Velocity, targetVelocity, MoveAcceleration) // 0.95
-	if targetVelocity == 0 {
-		actor.Velocity = Lerp(actor.Velocity, 0, MoveDeceleration) // 0.98
+	if targetVelocity != 0 {
+		if (targetVelocity > 0 && actor.Velocity < targetVelocity) || (targetVelocity < 0 && actor.Velocity > targetVelocity) {
+			actor.Velocity += acceleration * dt * sign(targetVelocity)
+			if (targetVelocity > 0 && actor.Velocity > targetVelocity) || (targetVelocity < 0 && actor.Velocity < targetVelocity) {
+				actor.Velocity = targetVelocity
+			}
+		} else if (targetVelocity > 0 && actor.Velocity > targetVelocity) || (targetVelocity < 0 && actor.Velocity < targetVelocity) {
+			actor.Velocity -= deceleration * dt * sign(actor.Velocity)
+			if (targetVelocity > 0 && actor.Velocity < targetVelocity) || (targetVelocity < 0 && actor.Velocity > targetVelocity) {
+				actor.Velocity = targetVelocity
+			}
+		}
+	} else {
+		// Быстрое торможение до нуля
+		if actor.Velocity > 0 {
+			actor.Velocity -= BrakeSpeed * dt
+			if actor.Velocity < 0 {
+				actor.Velocity = 0
+			}
+		} else if actor.Velocity < 0 {
+			actor.Velocity += BrakeSpeed * dt
+			if actor.Velocity > 0 {
+				actor.Velocity = 0
+			}
+		}
 	}
 
 	// Обновляем целевую позицию
-	actor.TargetPosition.X += actor.Velocity * rl.GetFrameTime()
+	actor.TargetPosition.X += actor.Velocity * dt
 
 	// Интерполяция позиции
 	actor.Position.X = Lerp(actor.Position.X, actor.TargetPosition.X, 0.95)
@@ -466,7 +497,23 @@ func SelectActorAnimation(actor *Actor) *Animation {
 			return &actor.BackAttackLowAnim
 		}
 	} else if actor.IsMoving {
-		return &actor.RunAnim
+		// Проверяем скорость для выбора между ходьбой и бегом
+		if abs(actor.Velocity) >= WalkToRunThreshold {
+			// Бег - используем обычную анимацию бега
+			return &actor.RunAnim
+		} else {
+			// Ходьба - выбираем анимацию в зависимости от положения рук
+			switch actor.CurrentPose {
+			case Head:
+				return &actor.WalkHighAnim
+			case Torso:
+				return &actor.WalkMidAnim
+			case Legs:
+				return &actor.WalkLowAnim
+			default:
+				return &actor.WalkMidAnim
+			}
+		}
 	}
 
 	// --- Логика переходов между позами ---
@@ -518,6 +565,24 @@ func SelectActorAnimation(actor *Actor) *Animation {
 	return &actor.UpDownAnim
 }
 
+// abs возвращает абсолютное значение float32
+func abs(x float32) float32 {
+	if x < 0 {
+		return -x
+	}
+	return x
+}
+
+// sign возвращает знак float32
+func sign(x float32) float32 {
+	if x > 0 {
+		return 1
+	} else if x < 0 {
+		return -1
+	}
+	return 0
+}
+
 // UpdateActorAnimation обновляет анимацию актора
 func UpdateActorAnimation(actor *Actor) {
 	anim := SelectActorAnimation(actor)
@@ -525,6 +590,12 @@ func UpdateActorAnimation(actor *Actor) {
 	if anim.Timer >= anim.FrameTime {
 		anim.Timer = 0
 		anim.CurrentFrame = (anim.CurrentFrame + 1) % anim.FrameCount
+
+		// Если это анимация ходьбы, синхронизируем нижнюю часть
+		if anim == &actor.WalkHighAnim || anim == &actor.WalkMidAnim || anim == &actor.WalkLowAnim {
+			actor.WalkAnim.CurrentFrame = anim.CurrentFrame
+			actor.WalkAnim.Timer = anim.Timer
+		}
 
 		// Если это анимация перехода и она завершилась
 		if actor.IsTransitioning && anim.CurrentFrame == 0 {
@@ -604,11 +675,36 @@ func DrawActor(actor *Actor, opponent *Actor, color rl.Color, camera *rl.Camera2
 		flip = -1.0
 	}
 
-	sourceRect := rl.NewRectangle(float32(anim.CurrentFrame)*anim.FrameWidth, 0, anim.FrameWidth*flip, float32(anim.Texture.Height))
-	destRect := rl.NewRectangle(actor.Position.X+actor.Size.X/2, actor.Position.Y+actor.Size.Y/2, anim.FrameWidth*SpriteScale, float32(anim.Texture.Height)*SpriteScale)
-	origin := rl.NewVector2(anim.FrameWidth*SpriteScale/2, float32(anim.Texture.Height)*SpriteScale/2)
-	rl.DrawTexturePro(anim.Texture, sourceRect, destRect, origin, 0, rl.White)
+	// Проверяем, является ли это анимацией ходьбы
+	if anim == &actor.WalkHighAnim || anim == &actor.WalkMidAnim || anim == &actor.WalkLowAnim {
+		// Отрисовываем анимацию ходьбы с разделением на верхнюю и нижнюю части
+		// Сначала рисуем нижнюю часть (ноги) - WalkAnim
+		walkSourceRect := rl.NewRectangle(float32(actor.WalkAnim.CurrentFrame)*actor.WalkAnim.FrameWidth, 0, actor.WalkAnim.FrameWidth*flip, float32(actor.WalkAnim.Texture.Height))
+		walkDestRect := rl.NewRectangle(actor.Position.X+actor.Size.X/2, actor.Position.Y+actor.Size.Y/2, actor.WalkAnim.FrameWidth*SpriteScale, float32(actor.WalkAnim.Texture.Height)*SpriteScale)
+		walkOrigin := rl.NewVector2(actor.WalkAnim.FrameWidth*SpriteScale/2, float32(actor.WalkAnim.Texture.Height)*SpriteScale/2)
+		rl.DrawTexturePro(actor.WalkAnim.Texture, walkSourceRect, walkDestRect, walkOrigin, 0, rl.White)
 
+		// Затем рисуем верхнюю часть (руки) - выбранная анимация ходьбы
+		upperSourceRect := rl.NewRectangle(float32(anim.CurrentFrame)*anim.FrameWidth, 0, anim.FrameWidth*flip, float32(anim.Texture.Height))
+		upperDestRect := rl.NewRectangle(actor.Position.X+actor.Size.X/2, actor.Position.Y+actor.Size.Y/2, anim.FrameWidth*SpriteScale, float32(anim.Texture.Height)*SpriteScale)
+		upperOrigin := rl.NewVector2(anim.FrameWidth*SpriteScale/2, float32(anim.Texture.Height)*SpriteScale/2)
+		rl.DrawTexturePro(anim.Texture, upperSourceRect, upperDestRect, upperOrigin, 0, rl.White)
+	} else {
+		// Обычная отрисовка для всех остальных анимаций
+		sourceRect := rl.NewRectangle(float32(anim.CurrentFrame)*anim.FrameWidth, 0, anim.FrameWidth*flip, float32(anim.Texture.Height))
+		destRect := rl.NewRectangle(actor.Position.X+actor.Size.X/2, actor.Position.Y+actor.Size.Y/2, anim.FrameWidth*SpriteScale, float32(anim.Texture.Height)*SpriteScale)
+		origin := rl.NewVector2(anim.FrameWidth*SpriteScale/2, float32(anim.Texture.Height)*SpriteScale/2)
+		rl.DrawTexturePro(anim.Texture, sourceRect, destRect, origin, 0, rl.White)
+	}
+
+	// Выводим скорость актора рядом с ним
+	speedText := fmt.Sprintf("%.2f", actor.Velocity)
+	textWidth := rl.MeasureText(speedText, 16)
+	textX := int32(actor.Position.X + actor.Size.X/2 - float32(textWidth)/2)
+	textY := int32(actor.Position.Y - 24) // чуть выше головы
+	rl.DrawText(speedText, textX, textY, 16, rl.Black)
+
+	// Хитбоксы
 	rl.DrawRectangleLinesEx(actor.HeadBox, 1/camera.Zoom, rl.Fade(color, 0.5)) // Толщина линий корректируется
 	rl.DrawRectangleLinesEx(actor.TorsoBox, 1/camera.Zoom, rl.Fade(color, 0.5))
 	rl.DrawRectangleLinesEx(actor.LegsBox, 1/camera.Zoom, rl.Fade(color, 0.5))
@@ -637,6 +733,10 @@ func DrawActor(actor *Actor, opponent *Actor, color rl.Color, camera *rl.Camera2
 // UnloadActorTextures освобождает текстуры актора
 func UnloadActorTextures(actor *Actor) {
 	rl.UnloadTexture(actor.IdleAnim.Texture)
+	rl.UnloadTexture(actor.WalkAnim.Texture)
+	rl.UnloadTexture(actor.WalkHighAnim.Texture)
+	rl.UnloadTexture(actor.WalkMidAnim.Texture)
+	rl.UnloadTexture(actor.WalkLowAnim.Texture)
 	rl.UnloadTexture(actor.RunAnim.Texture)
 	rl.UnloadTexture(actor.AttackHighAnim.Texture)
 	rl.UnloadTexture(actor.AttackMidAnim.Texture)
