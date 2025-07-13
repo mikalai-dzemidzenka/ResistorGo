@@ -22,9 +22,9 @@ const (
 	MaxZoom             = 8.0              // Максимальный масштаб камеры
 	ZoomSpeed           = 0.1              // Скорость изменения масштаба
 	MoveAcceleration    = 0.95             // Ускорение движения (было 0.9)
-	MoveDeceleration    = 0.98             // Замедление движения (было 0.95)
+	MoveDeceleration    = 0.85             // Увеличено замедление для более быстрой остановки
 	MaxSpeed            = 250.0            // Максимальная скорость (ускорено)
-	BrakeSpeed          = 200.0            // Уменьшено с 400 для снижения скольжения
+	BrakeSpeed          = 800.0            // Увеличено с 400 для еще более быстрого торможения
 
 	UpDownTransitionDuration  = 0.1
 	UpDownTransitionFrameTime = UpDownTransitionDuration / 4

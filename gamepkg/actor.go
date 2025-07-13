@@ -94,7 +94,8 @@ type Actor struct {
 	BackAttackTimer    float32
 
 	// Параметры ИИ
-	AttackInterval float32
+	AttackInterval  float32
+	SpeedMultiplier float32 // Множитель скорости для рандомизации
 }
 
 // NewActor создает нового актора указанного типа
@@ -164,8 +165,9 @@ func NewActor(position rl.Vector2, actorType ActorType) Actor {
 		AttackTimer:        0,
 		BackAttackDuration: float32(4) / AttackFps,
 		BackAttackTimer:    0,
-		AttackInterval:     1.5, // Интервал атак для ИИ
-		AttackCooldown:     0.0, // Кулдаун между атаками
+		AttackInterval:     1.5,                      // Интервал атак для ИИ
+		AttackCooldown:     0.0,                      // Кулдаун между атаками
+		SpeedMultiplier:    0.7 + rand.Float32()*0.6, // Случайная скорость от 0.7 до 1.3
 	}
 }
 
@@ -270,7 +272,7 @@ func UpdateActor(actor *Actor, opponent *Actor, camera *rl.Camera2D, mousePos rl
 	actor.IsMoving = false
 	targetVelocity := float32(0.0)
 	acceleration := float32(80.0)  // Уменьшено с 120 для снижения скольжения
-	deceleration := float32(120.0) // Уменьшено с 200 для снижения скольжения
+	deceleration := float32(200.0) // Увеличено с 120 для более быстрого торможения
 	dt := rl.GetFrameTime()
 
 	if actor.Type == PlayerActor {
@@ -816,16 +818,16 @@ func UpdateEnemyAI(enemy *Actor, player *Actor, enemies []Actor, enemyIndex int)
 	// Устанавливаем целевую скорость
 	targetVelocity := float32(0.0)
 	acceleration := float32(80.0)  // Уменьшено с 120 для снижения скольжения
-	deceleration := float32(120.0) // Уменьшено с 200 для снижения скольжения
+	deceleration := float32(200.0) // Увеличено с 120 для более быстрого торможения
 	dt := rl.GetFrameTime()
 
-	// Горизонтальное движение
+	// Горизонтальное движение с учетом индивидуальной скорости
 	if abs(dx) > 10 {
 		if dx > 0 {
-			targetVelocity = enemy.Speed
+			targetVelocity = enemy.Speed * enemy.SpeedMultiplier
 			enemy.FacingRight = true
 		} else {
-			targetVelocity = -enemy.Speed
+			targetVelocity = -enemy.Speed * enemy.SpeedMultiplier
 			enemy.FacingRight = false
 		}
 		enemy.IsMoving = true
