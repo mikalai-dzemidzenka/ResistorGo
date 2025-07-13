@@ -38,14 +38,37 @@ func main() {
 	renderTex := rl.LoadRenderTexture(sceneWidth, sceneHeight)
 	defer rl.UnloadRenderTexture(renderTex)
 
-	// Инициализация игрока и ИИ
-	player := gamepkg.NewPlayer(rl.NewVector2(200, float32(sceneHeight)-90*gamepkg.SpriteScale), true)
-	ai := gamepkg.NewPlayer(rl.NewVector2(600, float32(sceneHeight)-90*gamepkg.SpriteScale), false)
-	aiAttackInterval := float32(1.5)
+	// Инициализация игрока и врагов как акторов
+	player := gamepkg.NewActor(rl.NewVector2(200, float32(sceneHeight)-90*gamepkg.SpriteScale), gamepkg.PlayerActor)
+	enemies := []gamepkg.Actor{} // Массив врагов
 
 	// Инициализация редактора уровней
 	editor := gamepkg.NewLevelEditor()
 	editor.LoadLevel("level.json") // Загружаем уровень при старте
+	fmt.Printf("Loaded level: %d blocks, %d enemies\n", len(editor.Level.Blocks), len(editor.Level.Enemies))
+
+	state := GameMode // Начальный режим — игра
+
+	// Если стартуем сразу в GameMode — инициализируем врагов из редактора
+	if state == GameMode {
+		if len(editor.Level.Enemies) > 0 {
+			enemies = make([]gamepkg.Actor, len(editor.Level.Enemies))
+			for i, enemyData := range editor.Level.Enemies {
+				enemies[i] = gamepkg.NewActor(enemyData.Position, enemyData.Type)
+				// Сброс состояния врага
+				enemies[i].Health = 100
+				enemies[i].IsAttacking = false
+				enemies[i].IsBackAttacking = false
+				enemies[i].IsHit = false
+				enemies[i].HasPendingAttack = false
+				enemies[i].AttackTimer = 0
+				enemies[i].BackAttackTimer = 0
+				enemies[i].HitTimer = 0
+				enemies[i].LastAttackTime = 0
+				enemies[i].AttackCooldown = 0
+			}
+		}
+	}
 
 	// Инициализация камеры (без зума, всегда 1.0)
 	camera := rl.Camera2D{
@@ -54,8 +77,6 @@ func main() {
 		Rotation: 0,
 		Zoom:     1.0,
 	}
-
-	state := GameMode // Начальный режим — игра
 
 	// Масштаб вывода (только целые значения)
 	scale := float32(2) // Можно сделать настраиваемым (например, 2x, 3x)
@@ -70,14 +91,47 @@ func main() {
 				editor.SaveLevel("level.json")
 			}
 			state = GameMode
-			player = gamepkg.NewPlayer(rl.NewVector2(200, float32(sceneHeight)-90*gamepkg.SpriteScale), true)
-			ai = gamepkg.NewPlayer(rl.NewVector2(600, float32(sceneHeight)-90*gamepkg.SpriteScale), false)
+			player = gamepkg.NewActor(rl.NewVector2(200, float32(sceneHeight)-90*gamepkg.SpriteScale), gamepkg.PlayerActor)
+			// Загружаем врагов из редактора или создаем одного по умолчанию
+			if len(editor.Level.Enemies) > 0 {
+				enemies = make([]gamepkg.Actor, len(editor.Level.Enemies))
+				for i, enemyData := range editor.Level.Enemies {
+					enemies[i] = gamepkg.NewActor(enemyData.Position, enemyData.Type)
+					// Сбрасываем состояние врага
+					enemies[i].Health = 100
+					enemies[i].IsAttacking = false
+					enemies[i].IsBackAttacking = false
+					enemies[i].IsHit = false
+					enemies[i].HasPendingAttack = false
+					enemies[i].IsPendingAttack2 = false
+					enemies[i].IsCurrentAttack2 = false
+					enemies[i].AttackTimer = 0
+					enemies[i].BackAttackTimer = 0
+					enemies[i].HitTimer = 0
+					enemies[i].LastAttackTime = 0
+					enemies[i].AttackCooldown = 0
+				}
+			} else {
+				// Создаем одного врага по умолчанию
+				enemies = []gamepkg.Actor{
+					gamepkg.NewActor(rl.NewVector2(600, float32(sceneHeight)-90*gamepkg.SpriteScale), gamepkg.AIActor),
+				}
+			}
 		}
 		if rl.IsKeyPressed(rl.KeyTwo) {
 			if state == GameMode {
+				// Конвертируем врагов в EnemyData для сохранения
+				enemyDataList := make([]gamepkg.EnemyData, len(enemies))
+				for i, enemy := range enemies {
+					enemyDataList[i] = gamepkg.EnemyData{
+						Position: enemy.Position,
+						Type:     enemy.Type,
+					}
+				}
+				// Сохраняем всех врагов в редакторе
 				editor.Level = gamepkg.Level{
 					Blocks:  editor.Level.Blocks,
-					Enemies: []gamepkg.Player{ai},
+					Enemies: enemyDataList,
 				}
 				editor.SaveLevel("level.json")
 			}
@@ -136,14 +190,41 @@ func main() {
 			camera.Target.X = Lerp(camera.Target.X, targetX, 0.1)
 			camera.Target.Y = Lerp(camera.Target.Y, targetY, 0.1)
 
-			gamepkg.UpdatePlayer(&player, &ai, true, &camera, sceneMousePos)
-			gamepkg.UpdateAI(&ai, &player, aiAttackInterval)
-			gamepkg.UpdateAnimation(&player)
-			gamepkg.UpdateAnimation(&ai)
-			gamepkg.CheckAttack(&player, &ai, true)
-			gamepkg.CheckAttack(&ai, &player, false)
+			// Находим ближайшего врага для игрока
+			var nearestEnemy *gamepkg.Actor
+			if len(enemies) > 0 {
+				nearestEnemy = &enemies[0]
+				minDist := float32(999999)
+				for i := range enemies {
+					dist := rl.Vector2Distance(player.Position, enemies[i].Position)
+					if dist < minDist {
+						minDist = dist
+						nearestEnemy = &enemies[i]
+					}
+				}
+			}
+
+			// Обновляем игрока с ближайшим врагом
+			gamepkg.UpdateActor(&player, nearestEnemy, &camera, sceneMousePos)
+			gamepkg.UpdateActorAnimation(&player)
+
+			// Обновляем всех врагов
+			for i := range enemies {
+				gamepkg.UpdateActor(&enemies[i], &player, &camera, sceneMousePos)
+				gamepkg.UpdateActorAnimation(&enemies[i])
+			}
+
+			// Проверяем атаки игрока против всех врагов
+			for i := range enemies {
+				gamepkg.CheckActorAttack(&player, &enemies[i])
+			}
+
+			// Проверяем атаки всех врагов против игрока
+			for i := range enemies {
+				gamepkg.CheckActorAttack(&enemies[i], &player)
+			}
 		} else {
-			editor.Update(&camera)
+			editor.Update(&camera, scale, posX, posY)
 		}
 
 		// --- Рисуем всю сцену в renderTex ---
@@ -154,8 +235,28 @@ func main() {
 			for _, block := range editor.Level.Blocks {
 				rl.DrawRectangleV(block.Position, block.Size, rl.Gray)
 			}
-			gamepkg.DrawPlayer(&player, &ai, rl.Red, true, &camera)
-			gamepkg.DrawPlayer(&ai, nil, rl.Blue, false, &camera)
+
+			// Находим ближайшего врага для отрисовки
+			var nearestEnemy *gamepkg.Actor
+			if len(enemies) > 0 {
+				nearestEnemy = &enemies[0]
+				minDist := float32(999999)
+				for i := range enemies {
+					dist := rl.Vector2Distance(player.Position, enemies[i].Position)
+					if dist < minDist {
+						minDist = dist
+						nearestEnemy = &enemies[i]
+					}
+				}
+			}
+
+			// Рисуем игрока
+			gamepkg.DrawActor(&player, nearestEnemy, rl.Red, &camera)
+
+			// Рисуем всех врагов
+			for i := range enemies {
+				gamepkg.DrawActor(&enemies[i], nil, rl.Blue, &camera)
+			}
 
 			// Рисуем красный квадратик на месте курсора в сцене
 			if sceneMousePos.X >= 0 && sceneMousePos.Y >= 0 {
@@ -167,7 +268,8 @@ func main() {
 				)
 			}
 		} else {
-			editor.Draw(&camera)
+			// Рисуем только сцену в редакторе (без UI)
+			editor.DrawScene(&camera)
 		}
 		rl.EndMode2D()
 		// HUD рисуем после масштабирования!
@@ -188,34 +290,59 @@ func main() {
 
 		// HUD (рисуем поверх, чтобы не масштабировался)
 		if state == GameMode {
-
 			rl.DrawText("Player HP: "+strconv.Itoa(player.Health), 10, 10, 20, rl.Black)
-			rl.DrawText("AI HP: "+strconv.Itoa(ai.Health), windowWidth-150, 10, 20, rl.Black)
+			rl.DrawText(fmt.Sprintf("Enemies: %d", len(enemies)), windowWidth-150, 10, 20, rl.Black)
 			rl.DrawText(fmt.Sprintf("Scale: x%.0f (Press +/-)", scale), 10, 40, 20, rl.Black)
 			rl.DrawText(fmt.Sprintf("Camera: %.0f, %.0f", camera.Target.X, camera.Target.Y), 10, 70, 20, rl.Black)
 			rl.DrawText(fmt.Sprintf("Raw Mouse: %.0f, %.0f", mousePos.X, mousePos.Y), 10, 100, 20, rl.Black)
 			rl.DrawText(fmt.Sprintf("Scene Mouse: %.0f, %.0f", sceneMousePos.X, sceneMousePos.Y), 10, 130, 20, rl.Black)
 			rl.DrawText(fmt.Sprintf("Pos: %.0f, %.0f", posX, posY), 10, 160, 20, rl.Black)
+			rl.DrawText(fmt.Sprintf("Player Attack: %v, Pending: %v, Attack2: %v", player.IsAttacking, player.HasPendingAttack, player.IsCurrentAttack2), 10, 190, 20, rl.Black)
+			if len(enemies) > 0 {
+				rl.DrawText(fmt.Sprintf("Enemy Attack: %v, Pending: %v, Attack2: %v", enemies[0].IsAttacking, enemies[0].HasPendingAttack, enemies[0].IsCurrentAttack2), 10, 220, 20, rl.Black)
+			}
 			rl.DrawText("Game Mode: Press 2 for Editor", 10, windowHeight-30, 20, rl.Black)
 		} else {
+			// UI редактора (рисуем поверх масштабированного изображения)
+			editor.DrawUI(scale, posX, posY)
 			rl.DrawText(fmt.Sprintf("Scale: x%.0f (Press +/-)", scale), 10, 40, 20, rl.Black)
+			rl.DrawText(fmt.Sprintf("Editor Enemies: %d", len(editor.Level.Enemies)), 10, 70, 20, rl.Black)
 			rl.DrawText("Editor Mode: Press 1 for Game", 10, windowHeight-30, 20, rl.Black)
 		}
 		rl.EndDrawing()
 	}
 
 	// Сохранение уровня при выходе
+	fmt.Printf("Exiting game, state: %v\n", state)
 	if state == GameMode {
+		fmt.Printf("Game mode exit: %d enemies to save\n", len(enemies))
+		// Конвертируем врагов в EnemyData для сохранения
+		enemyDataList := make([]gamepkg.EnemyData, len(enemies))
+		for i, enemy := range enemies {
+			enemyDataList[i] = gamepkg.EnemyData{
+				Position: enemy.Position,
+				Type:     enemy.Type,
+			}
+		}
+		// Сохраняем всех врагов из игрового режима в редакторе
 		editor.Level = gamepkg.Level{
 			Blocks:  editor.Level.Blocks,
-			Enemies: []gamepkg.Player{ai},
+			Enemies: enemyDataList,
 		}
+	} else {
+		fmt.Printf("Editor mode exit: %d enemies in editor\n", len(editor.Level.Enemies))
 	}
+	// Всегда сохраняем уровень при выходе (независимо от режима)
 	editor.SaveLevel("level.json")
 
-	gamepkg.UnloadTextures([]*gamepkg.Player{&player, &ai})
-	for i := range editor.Level.Enemies {
-		gamepkg.UnloadTextures([]*gamepkg.Player{&editor.Level.Enemies[i]})
+	gamepkg.UnloadActorTextures(&player)
+	// Освобождаем текстуры врагов из игры
+	for i := range enemies {
+		gamepkg.UnloadActorTextures(&enemies[i])
+	}
+	// Освобождаем текстуры врагов из редактора (если есть DisplayEnemies)
+	for i := range editor.DisplayEnemies {
+		gamepkg.UnloadActorTextures(&editor.DisplayEnemies[i])
 	}
 	rl.CloseWindow()
 }

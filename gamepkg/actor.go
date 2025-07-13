@@ -1,0 +1,540 @@
+package gamepkg
+
+import (
+	"math/rand"
+
+	rl "github.com/gen2brain/raylib-go/raylib"
+)
+
+// ActorType определяет тип актора (игрок или ИИ)
+type ActorType int
+
+const (
+	PlayerActor ActorType = iota
+	AIActor
+)
+
+// Actor объединяет функциональность Player и AI в единую сущность
+type Actor struct {
+	// Основные свойства
+	Type           ActorType
+	Position       rl.Vector2
+	TargetPosition rl.Vector2 // Целевая позиция для интерполяции
+	Velocity       float32    // Текущая скорость
+	Size           rl.Vector2
+	Speed          float32 // Максимальная скорость (MaxSpeed)
+	Health         int
+	TargetPart     BodyPart
+
+	// Хитбоксы
+	HeadBox  rl.Rectangle
+	TorsoBox rl.Rectangle
+	LegsBox  rl.Rectangle
+
+	// Система атак
+	IsAttacking       bool
+	AttackPart        BodyPart
+	AttackBox         rl.Rectangle
+	PendingAttackPart BodyPart
+	HasPendingAttack  bool
+	IsPendingAttack2  bool // Флаг для атаки-2
+	IsCurrentAttack2  bool // Флаг для текущей атаки-2
+	LastAttackTime    float32
+	AttackCooldown    float32 // Защита от спама атак
+
+	// Состояние
+	IsMoving    bool
+	FacingRight bool
+	IsHit       bool
+	HitTimer    float32
+	HitDuration float32
+
+	// Анимации
+	IdleAnim           Animation
+	RunAnim            Animation
+	AttackHighAnim     Animation
+	AttackMidAnim      Animation
+	AttackLowAnim      Animation
+	AttackHighAnim2    Animation // Новые анимации для атак-2
+	AttackMidAnim2     Animation
+	AttackLowAnim2     Animation
+	BackAttackHighAnim Animation
+	BackAttackMidAnim  Animation
+	BackAttackLowAnim  Animation
+	HitHighAnim        Animation
+	HitMidAnim         Animation
+	HitLowAnim         Animation
+
+	// Таймеры атак
+	AttackDuration     float32
+	AttackTimer        float32
+	IsBackAttacking    bool
+	BackAttackDuration float32
+	BackAttackTimer    float32
+
+	// Параметры ИИ
+	AttackInterval float32
+}
+
+// NewActor создает нового актора указанного типа
+func NewActor(position rl.Vector2, actorType ActorType) Actor {
+	isHuman := actorType == PlayerActor
+
+	return Actor{
+		Type:               actorType,
+		Position:           position,
+		TargetPosition:     position,
+		Velocity:           0.0,
+		Size:               rl.NewVector2(SpriteSize*SpriteScale, SpriteSize*SpriteScale), // 48x48
+		Speed:              MaxSpeed,                                                      // 25.0
+		Health:             100,
+		TargetPart:         None,
+		HeadBox:            rl.NewRectangle(0, 0, 9*SpriteScale, 10*SpriteScale),  // 9x10
+		TorsoBox:           rl.NewRectangle(0, 0, 19*SpriteScale, 12*SpriteScale), // 19x12
+		LegsBox:            rl.NewRectangle(0, 0, 16*SpriteScale, 22*SpriteScale), // 16x22
+		IsAttacking:        false,
+		AttackPart:         Torso,
+		PendingAttackPart:  None,
+		HasPendingAttack:   false,
+		IsPendingAttack2:   false,
+		IsCurrentAttack2:   false,
+		AttackBox:          rl.NewRectangle(0, 0, AttackBoxWidth, AttackBoxHeight), // 24x6
+		IsMoving:           false,
+		FacingRight:        isHuman,
+		IsHit:              false,
+		HitTimer:           0,
+		HitDuration:        0.3333, // Длительность анимации урона (4 кадра, 12 FPS)
+		IdleAnim:           Animation{Texture: rl.LoadTexture("resources/threefour/idle.png"), FrameCount: 1, FrameWidth: 48, FrameTime: 0.1},
+		RunAnim:            Animation{Texture: rl.LoadTexture("resources/threefour/run.png"), FrameCount: 10, FrameWidth: 48, FrameTime: RunFrameTime},
+		AttackHighAnim:     Animation{Texture: rl.LoadTexture("resources/threefour/attack-high.png"), FrameCount: 8, FrameWidth: 48, FrameTime: AttackFrameTime},
+		AttackMidAnim:      Animation{Texture: rl.LoadTexture("resources/threefour/attack-mid.png"), FrameCount: 8, FrameWidth: 48, FrameTime: AttackFrameTime},
+		AttackLowAnim:      Animation{Texture: rl.LoadTexture("resources/threefour/attack-low.png"), FrameCount: 8, FrameWidth: 48, FrameTime: AttackFrameTime},
+		AttackHighAnim2:    Animation{Texture: rl.LoadTexture("resources/threefour/attack-high-2.png"), FrameCount: 8, FrameWidth: 48, FrameTime: AttackFrameTime},
+		AttackMidAnim2:     Animation{Texture: rl.LoadTexture("resources/threefour/attack-mid-2.png"), FrameCount: 8, FrameWidth: 48, FrameTime: AttackFrameTime},
+		AttackLowAnim2:     Animation{Texture: rl.LoadTexture("resources/threefour/attack-low-2.png"), FrameCount: 8, FrameWidth: 48, FrameTime: AttackFrameTime},
+		BackAttackHighAnim: Animation{Texture: rl.LoadTexture("resources/threefour/back-attack-top-1.png"), FrameCount: 4, FrameWidth: 48, FrameTime: BackAttackFrameTime},
+		BackAttackMidAnim:  Animation{Texture: rl.LoadTexture("resources/threefour/back-attack-mid-1.png"), FrameCount: 4, FrameWidth: 48, FrameTime: BackAttackFrameTime},
+		BackAttackLowAnim:  Animation{Texture: rl.LoadTexture("resources/threefour/back-attack-low-1.png"), FrameCount: 4, FrameWidth: 48, FrameTime: BackAttackFrameTime},
+		HitHighAnim:        Animation{Texture: rl.LoadTexture("resources/threefour/hit-top.png"), FrameCount: 4, FrameWidth: 48, FrameTime: HitFrameTime},
+		HitMidAnim:         Animation{Texture: rl.LoadTexture("resources/threefour/hit-mid.png"), FrameCount: 4, FrameWidth: 48, FrameTime: HitFrameTime},
+		HitLowAnim:         Animation{Texture: rl.LoadTexture("resources/threefour/hit-low.png"), FrameCount: 4, FrameWidth: 48, FrameTime: HitFrameTime},
+		AttackDuration:     0.45,
+		AttackTimer:        0,
+		BackAttackDuration: float32(4) / AttackFps,
+		BackAttackTimer:    0,
+		AttackInterval:     1.5, // Интервал атак для ИИ
+		AttackCooldown:     0.0, // Кулдаун между атаками
+	}
+}
+
+// UpdateActor объединяет логику обновления игрока и ИИ
+func UpdateActor(actor *Actor, opponent *Actor, camera *rl.Camera2D, mousePos rl.Vector2) {
+	// Обработка атак в зависимости от типа актора (ДО обработки состояний)
+	if actor.Type == PlayerActor {
+		// Логика атак игрока
+		if opponent != nil {
+			actor.TargetPart = None
+			if rl.CheckCollisionPointRec(mousePos, opponent.HeadBox) {
+				actor.TargetPart = Head
+			} else if rl.CheckCollisionPointRec(mousePos, opponent.TorsoBox) {
+				actor.TargetPart = Torso
+			} else if rl.CheckCollisionPointRec(mousePos, opponent.LegsBox) {
+				actor.TargetPart = Legs
+			}
+
+			// Обновляем кулдаун атаки
+			if actor.AttackCooldown > 0 {
+				actor.AttackCooldown -= rl.GetFrameTime()
+			}
+
+			if rl.IsMouseButtonPressed(rl.MouseLeftButton) && actor.TargetPart != None && actor.AttackCooldown <= 0 {
+				if actor.IsAttacking || actor.IsBackAttacking {
+					// Если уже атакуем, ставим атаку-2 в очередь
+					actor.HasPendingAttack = true
+					actor.PendingAttackPart = actor.TargetPart
+					actor.IsPendingAttack2 = true // Флаг для атаки-2
+				} else {
+					// Начинаем обычную атаку
+					actor.IsAttacking = true
+					actor.AttackPart = actor.TargetPart
+					actor.IsCurrentAttack2 = false // Обычная атака
+					var xOffset float32 = 6.0
+					if !actor.FacingRight {
+						xOffset = -6.0
+					}
+					SetActorAttackBox(actor, xOffset)
+					ResetAnimation(&actor.AttackHighAnim, &actor.AttackMidAnim, &actor.AttackLowAnim)
+					actor.AttackTimer = 0
+					actor.AttackCooldown = 0.1 // Небольшой кулдаун после начала атаки
+				}
+			}
+		}
+	} else {
+		// Логика атак ИИ
+		actor.LastAttackTime += rl.GetFrameTime()
+		if actor.LastAttackTime >= actor.AttackInterval {
+			actor.LastAttackTime = 0
+			actor.IsAttacking = true
+			actor.AttackPart = BodyPart(rand.Intn(3))
+			actor.IsCurrentAttack2 = false // ИИ всегда использует обычные атаки
+			var xOffset float32 = -6.0
+			if actor.FacingRight {
+				xOffset = 6.0
+			}
+			SetActorAttackBox(actor, xOffset)
+			actor.TargetPart = BodyPart(rand.Intn(3))
+			ResetAnimation(&actor.AttackHighAnim, &actor.AttackMidAnim, &actor.AttackLowAnim)
+			actor.AttackTimer = 0
+		}
+	}
+
+	// Обработка состояния получения урона
+	if actor.IsHit {
+		actor.HitTimer += rl.GetFrameTime()
+		HandleActorAnimationEnd(actor, actor.HitTimer, actor.HitDuration, func() {
+			actor.IsHit = false
+			actor.HitTimer = 0
+		})
+		return
+	}
+
+	// Обработка состояния атаки
+	if actor.IsAttacking {
+		actor.AttackTimer += rl.GetFrameTime()
+		HandleActorAnimationEnd(actor, actor.AttackTimer, actor.AttackDuration, func() {
+			actor.IsAttacking = false
+			actor.IsCurrentAttack2 = false // Сбрасываем флаг текущей атаки-2
+			actor.IsBackAttacking = true
+			actor.BackAttackTimer = 0
+			ResetAnimation(&actor.BackAttackHighAnim, &actor.BackAttackMidAnim, &actor.BackAttackLowAnim)
+		})
+		return
+	}
+
+	// Обработка состояния возврата из атаки
+	if actor.IsBackAttacking {
+		actor.BackAttackTimer += rl.GetFrameTime()
+		HandleActorAnimationEnd(actor, actor.BackAttackTimer, actor.BackAttackDuration, func() {
+			actor.IsBackAttacking = false
+			actor.AttackPart = Torso
+			actor.BackAttackTimer = 0
+		})
+		return
+	}
+
+	// Обработка движения в зависимости от типа актора
+	actor.IsMoving = false
+	targetVelocity := float32(0.0)
+
+	if actor.Type == PlayerActor {
+		// Логика движения игрока
+		if rl.IsKeyDown(rl.KeyA) {
+			targetVelocity = -actor.Speed // Влево
+			actor.IsMoving = true
+			actor.FacingRight = false
+		}
+		if rl.IsKeyDown(rl.KeyD) {
+			targetVelocity = actor.Speed // Вправо
+			actor.IsMoving = true
+			actor.FacingRight = true
+		}
+	} else {
+		// Логика движения ИИ
+		if opponent.Position.X > actor.Position.X+50 {
+			targetVelocity = actor.Speed // Вправо
+			actor.IsMoving = true
+			actor.FacingRight = true
+		} else if opponent.Position.X < actor.Position.X-50 {
+			targetVelocity = -actor.Speed // Влево
+			actor.IsMoving = true
+			actor.FacingRight = false
+		}
+	}
+
+	// Интерполяция скорости
+	actor.Velocity = Lerp(actor.Velocity, targetVelocity, MoveAcceleration) // 0.95
+	if targetVelocity == 0 {
+		actor.Velocity = Lerp(actor.Velocity, 0, MoveDeceleration) // 0.98
+	}
+
+	// Обновляем целевую позицию
+	actor.TargetPosition.X += actor.Velocity * rl.GetFrameTime()
+
+	// Интерполяция позиции
+	actor.Position.X = Lerp(actor.Position.X, actor.TargetPosition.X, 0.95)
+
+	// Обновляем хитбоксы
+	UpdateActorHitboxes(actor)
+}
+
+// UpdateActorHitboxes обновляет хитбоксы актора
+func UpdateActorHitboxes(actor *Actor) {
+	centerX := actor.Position.X + actor.Size.X/2
+	centerY := actor.Position.Y + actor.Size.Y/2
+	actor.HeadBox.X = centerX - (9*SpriteScale)/2 - 1*SpriteScale // 9x10
+	actor.HeadBox.Y = centerY - (10*SpriteScale)/2 - 15*SpriteScale
+	actor.TorsoBox.X = centerX - (19*SpriteScale)/2 - 1*SpriteScale // 19x12
+	actor.TorsoBox.Y = centerY - (12*SpriteScale)/2 - 4*SpriteScale
+	actor.LegsBox.X = centerX - (16*SpriteScale)/2 - 1*SpriteScale // 16x22
+	actor.LegsBox.Y = centerY - (22*SpriteScale)/2 + 13*SpriteScale
+
+	var xOffset float32 = 6.0
+	if !actor.FacingRight {
+		xOffset = -6.0
+	}
+	attackPart := actor.AttackPart
+	if actor.Type == PlayerActor && !actor.IsAttacking {
+		attackPart = actor.TargetPart
+		if attackPart == None {
+			attackPart = Torso
+		}
+	} else if attackPart == None {
+		attackPart = Torso
+	}
+
+	var attackBoxY float32
+	switch attackPart {
+	case Head:
+		attackBoxY = actor.HeadBox.Y + actor.HeadBox.Height/2 - AttackBoxHeight/2
+	case Torso:
+		attackBoxY = actor.TorsoBox.Y + actor.TorsoBox.Height/2 - AttackBoxHeight/2
+	case Legs:
+		attackBoxY = actor.LegsBox.Y + actor.LegsBox.Height/2 - AttackBoxHeight/2
+	default:
+		attackBoxY = actor.TorsoBox.Y + actor.TorsoBox.Height/2 - AttackBoxHeight/2
+	}
+
+	attackBoxX := centerX + xOffset
+	if attackBoxX < actor.Position.X {
+		attackBoxX = actor.Position.X
+	} else if attackBoxX+AttackBoxWidth > actor.Position.X+actor.Size.X {
+		attackBoxX = actor.Position.X + actor.Size.X - AttackBoxWidth
+	}
+
+	actor.AttackBox = rl.NewRectangle(attackBoxX, attackBoxY, AttackBoxWidth, AttackBoxHeight)
+}
+
+// SetActorAttackBox устанавливает позицию атаки для актора
+func SetActorAttackBox(actor *Actor, xOffset float32) {
+	centerX := actor.Position.X + actor.Size.X/2
+	var attackBoxY float32
+	switch actor.AttackPart {
+	case Head:
+		attackBoxY = actor.HeadBox.Y + actor.HeadBox.Height/2 - AttackBoxHeight/2
+	case Torso:
+		attackBoxY = actor.TorsoBox.Y + actor.TorsoBox.Height/2 - AttackBoxHeight/2
+	case Legs:
+		attackBoxY = actor.LegsBox.Y + actor.LegsBox.Height/2 - AttackBoxHeight/2
+	default:
+		attackBoxY = actor.TorsoBox.Y + actor.TorsoBox.Height/2 - AttackBoxHeight/2
+	}
+
+	attackBoxX := centerX + xOffset
+	if attackBoxX < actor.Position.X {
+		attackBoxX = actor.Position.X
+	} else if attackBoxX+AttackBoxWidth > actor.Position.X+actor.Size.X {
+		attackBoxX = actor.Position.X + actor.Size.X - AttackBoxWidth
+	}
+
+	actor.AttackBox = rl.NewRectangle(attackBoxX, attackBoxY, AttackBoxWidth, AttackBoxHeight)
+}
+
+// HandleActorAnimationEnd обрабатывает завершение анимации для актора
+func HandleActorAnimationEnd(actor *Actor, timer, duration float32, nextState func()) {
+	if timer >= duration {
+		nextState()
+		// Обрабатываем ожидающую атаку только если актор не в состоянии получения урона
+		if actor.HasPendingAttack && !actor.IsHit {
+			actor.IsAttacking = true
+			actor.IsBackAttacking = false
+			actor.AttackPart = actor.PendingAttackPart
+			var xOffset float32 = 6.0
+			if actor.Type == AIActor || !actor.FacingRight {
+				xOffset = -6.0
+			}
+			SetActorAttackBox(actor, xOffset)
+
+			// Устанавливаем флаг текущей атаки-2
+			actor.IsCurrentAttack2 = actor.IsPendingAttack2
+
+			// Выбираем анимацию в зависимости от типа атаки
+			if actor.IsPendingAttack2 {
+				// Сбрасываем анимации атаки-2
+				ResetAnimation(&actor.AttackHighAnim2, &actor.AttackMidAnim2, &actor.AttackLowAnim2)
+			} else {
+				// Сбрасываем обычные анимации атаки
+				ResetAnimation(&actor.AttackHighAnim, &actor.AttackMidAnim, &actor.AttackLowAnim)
+			}
+
+			actor.AttackTimer = 0
+			actor.AttackCooldown = 0.1 // Кулдаун после начала новой атаки
+			actor.HasPendingAttack = false
+			actor.PendingAttackPart = None
+			actor.IsPendingAttack2 = false // Сбрасываем флаг атаки-2
+		}
+	}
+}
+
+// SelectActorAnimation выбирает подходящую анимацию для актора
+func SelectActorAnimation(actor *Actor) *Animation {
+	if actor.IsHit {
+		switch actor.AttackPart {
+		case Head:
+			return &actor.HitHighAnim
+		case Torso:
+			return &actor.HitMidAnim
+		case Legs:
+			return &actor.HitLowAnim
+		}
+	} else if actor.IsAttacking {
+		// Выбираем анимацию в зависимости от того, была ли это атака-2
+		if actor.IsCurrentAttack2 {
+			switch actor.AttackPart {
+			case Head:
+				return &actor.AttackHighAnim2
+			case Torso:
+				return &actor.AttackMidAnim2
+			case Legs:
+				return &actor.AttackLowAnim2
+			}
+		} else {
+			switch actor.AttackPart {
+			case Head:
+				return &actor.AttackHighAnim
+			case Torso:
+				return &actor.AttackMidAnim
+			case Legs:
+				return &actor.AttackLowAnim
+			}
+		}
+	} else if actor.IsBackAttacking {
+		switch actor.AttackPart {
+		case Head:
+			return &actor.BackAttackHighAnim
+		case Torso:
+			return &actor.BackAttackMidAnim
+		case Legs:
+			return &actor.BackAttackLowAnim
+		}
+	} else if actor.IsMoving {
+		return &actor.RunAnim
+	}
+	return &actor.IdleAnim
+}
+
+// UpdateActorAnimation обновляет анимацию актора
+func UpdateActorAnimation(actor *Actor) {
+	anim := SelectActorAnimation(actor)
+	anim.Timer += rl.GetFrameTime()
+	if anim.Timer >= anim.FrameTime {
+		anim.Timer = 0
+		anim.CurrentFrame = (anim.CurrentFrame + 1) % anim.FrameCount
+	}
+}
+
+// CheckActorAttack проверяет атаку актора
+func CheckActorAttack(attacker, defender *Actor) {
+	if attacker.IsAttacking {
+		var defenderBox rl.Rectangle
+		switch attacker.AttackPart {
+		case Head:
+			defenderBox = defender.HeadBox
+		case Torso:
+			defenderBox = defender.TorsoBox
+		case Legs:
+			defenderBox = defender.LegsBox
+		}
+
+		anim := SelectActorAnimation(attacker)
+		if attacker.AttackPart == defender.TargetPart {
+			attacker.IsAttacking = false
+			attacker.IsBackAttacking = true
+			attacker.BackAttackTimer = 0
+			ResetAnimation(&attacker.BackAttackHighAnim, &attacker.BackAttackMidAnim, &attacker.BackAttackLowAnim)
+			// Обрабатываем ожидающую атаку только если актор не в состоянии получения урона
+			if attacker.Type == PlayerActor && attacker.HasPendingAttack && !attacker.IsHit {
+				attacker.IsAttacking = true
+				attacker.IsBackAttacking = false
+				attacker.AttackPart = attacker.PendingAttackPart
+				attacker.HasPendingAttack = false
+				attacker.PendingAttackPart = None
+				var xOffset float32 = 6.0
+				if !attacker.FacingRight {
+					xOffset = -6.0
+				}
+				SetActorAttackBox(attacker, xOffset)
+				ResetAnimation(&attacker.AttackHighAnim, &attacker.AttackMidAnim, &attacker.AttackLowAnim)
+				attacker.AttackTimer = 0
+				attacker.AttackCooldown = 0.1
+			}
+		} else if anim.CurrentFrame == 5 && rl.CheckCollisionRecs(attacker.AttackBox, defenderBox) {
+			defender.Health -= 10
+			if defender.Health < 0 {
+				defender.Health = 0
+			}
+			defender.IsHit = true
+			defender.HitTimer = 0
+			defender.AttackPart = attacker.AttackPart
+			// Сбрасываем ожидающую атаку при получении урона
+			defender.HasPendingAttack = false
+			defender.PendingAttackPart = None
+			ResetAnimation(&defender.HitHighAnim, &defender.HitMidAnim, &defender.HitLowAnim)
+		}
+	}
+}
+
+// DrawActor отрисовывает актора
+func DrawActor(actor *Actor, opponent *Actor, color rl.Color, camera *rl.Camera2D) {
+	anim := SelectActorAnimation(actor)
+	var flip float32 = 1.0
+	if !actor.FacingRight {
+		flip = -1.0
+	}
+
+	sourceRect := rl.NewRectangle(float32(anim.CurrentFrame)*anim.FrameWidth, 0, anim.FrameWidth*flip, float32(anim.Texture.Height))
+	destRect := rl.NewRectangle(actor.Position.X+actor.Size.X/2, actor.Position.Y+actor.Size.Y/2, anim.FrameWidth*SpriteScale, float32(anim.Texture.Height)*SpriteScale)
+	origin := rl.NewVector2(anim.FrameWidth*SpriteScale/2, float32(anim.Texture.Height)*SpriteScale/2)
+	rl.DrawTexturePro(anim.Texture, sourceRect, destRect, origin, 0, rl.White)
+
+	rl.DrawRectangleLinesEx(actor.HeadBox, 1/camera.Zoom, rl.Fade(color, 0.5)) // Толщина линий корректируется
+	rl.DrawRectangleLinesEx(actor.TorsoBox, 1/camera.Zoom, rl.Fade(color, 0.5))
+	rl.DrawRectangleLinesEx(actor.LegsBox, 1/camera.Zoom, rl.Fade(color, 0.5))
+
+	// Отображаем AttackBox всегда с учётом направления удара
+	attackBoxColor := rl.Blue
+	if actor.IsAttacking && anim.CurrentFrame >= 5 {
+		attackBoxColor = rl.Red
+	}
+	rl.DrawRectangleLinesEx(actor.AttackBox, 1/camera.Zoom, rl.Fade(attackBoxColor, 0.5))
+
+	if actor.Type == PlayerActor && actor.TargetPart != None && opponent != nil {
+		var targetBox rl.Rectangle
+		switch actor.TargetPart {
+		case Head:
+			targetBox = opponent.HeadBox
+		case Torso:
+			targetBox = opponent.TorsoBox
+		case Legs:
+			targetBox = opponent.LegsBox
+		}
+		rl.DrawRectangleRec(targetBox, rl.Fade(color, 0.3))
+	}
+}
+
+// UnloadActorTextures освобождает текстуры актора
+func UnloadActorTextures(actor *Actor) {
+	rl.UnloadTexture(actor.IdleAnim.Texture)
+	rl.UnloadTexture(actor.RunAnim.Texture)
+	rl.UnloadTexture(actor.AttackHighAnim.Texture)
+	rl.UnloadTexture(actor.AttackMidAnim.Texture)
+	rl.UnloadTexture(actor.AttackLowAnim.Texture)
+	rl.UnloadTexture(actor.AttackHighAnim2.Texture)
+	rl.UnloadTexture(actor.AttackMidAnim2.Texture)
+	rl.UnloadTexture(actor.AttackLowAnim2.Texture)
+	rl.UnloadTexture(actor.BackAttackHighAnim.Texture)
+	rl.UnloadTexture(actor.BackAttackMidAnim.Texture)
+	rl.UnloadTexture(actor.BackAttackLowAnim.Texture)
+	rl.UnloadTexture(actor.HitHighAnim.Texture)
+	rl.UnloadTexture(actor.HitMidAnim.Texture)
+	rl.UnloadTexture(actor.HitLowAnim.Texture)
+}
