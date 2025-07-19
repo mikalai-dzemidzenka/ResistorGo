@@ -98,76 +98,98 @@ type Actor struct {
 	SpeedMultiplier float32 // Множитель скорости для рандомизации
 }
 
+// TextureManager управляет загрузкой и хранением текстур
+var textureManager *TextureManager
+
+type TextureManager struct {
+	textures map[string]rl.Texture2D
+}
+
+func NewTextureManager() *TextureManager {
+	return &TextureManager{textures: make(map[string]rl.Texture2D)}
+}
+
+func (tm *TextureManager) LoadTexture(path string) rl.Texture2D {
+	if tex, ok := tm.textures[path]; ok {
+		return tex
+	}
+	tex := rl.LoadTexture(path)
+	tm.textures[path] = tex
+	return tex
+}
+
+func (tm *TextureManager) UnloadAll() {
+	for _, tex := range tm.textures {
+		rl.UnloadTexture(tex)
+	}
+	tm.textures = make(map[string]rl.Texture2D)
+}
+
 // NewActor создает нового актора указанного типа
-func NewActor(position rl.Vector2, actorType ActorType) Actor {
+func NewActor(position rl.Vector2, actorType ActorType, tm *TextureManager) Actor {
 	isHuman := actorType == PlayerActor
 
 	return Actor{
-		Type:               actorType,
-		Position:           position,
-		TargetPosition:     position,
-		Velocity:           0.0,
-		Size:               rl.NewVector2(SpriteSize*SpriteScale, SpriteSize*SpriteScale), // 48x48
-		Speed:              MaxSpeed,                                                      // 25.0
-		Health:             100,
-		TargetPart:         None,
-		HeadBox:            rl.NewRectangle(0, 0, 9*SpriteScale, 10*SpriteScale),  // 9x10
-		TorsoBox:           rl.NewRectangle(0, 0, 19*SpriteScale, 12*SpriteScale), // 19x12
-		LegsBox:            rl.NewRectangle(0, 0, 16*SpriteScale, 22*SpriteScale), // 16x22
-		IsAttacking:        false,
-		AttackPart:         Torso,
-		PendingAttackPart:  None,
-		HasPendingAttack:   false,
-		IsPendingAttack2:   false,
-		IsCurrentAttack2:   false,
-		AttackBox:          rl.NewRectangle(0, 0, AttackBoxWidth, AttackBoxHeight), // 24x6
-		IsMoving:           false,
-		FacingRight:        isHuman,
-		IsHit:              false,
-		HitTimer:           0,
-		HitDuration:        0.3333, // Длительность анимации урона (4 кадра, 12 FPS)
-		IdleAnim:           Animation{Texture: rl.LoadTexture("resources/threefour/idle.png"), FrameCount: 1, FrameWidth: 48, FrameTime: 0.1},
-		WalkAnim:           Animation{Texture: rl.LoadTexture("resources/threefour/walk.png"), FrameCount: 8, FrameWidth: 48, FrameTime: WalkFrameTime},
-		WalkHighAnim:       Animation{Texture: rl.LoadTexture("resources/threefour/walk-high.png"), FrameCount: 8, FrameWidth: 48, FrameTime: WalkFrameTime},
-		WalkMidAnim:        Animation{Texture: rl.LoadTexture("resources/threefour/walk-mid.png"), FrameCount: 8, FrameWidth: 48, FrameTime: WalkFrameTime},
-		WalkLowAnim:        Animation{Texture: rl.LoadTexture("resources/threefour/walk-low.png"), FrameCount: 8, FrameWidth: 48, FrameTime: WalkFrameTime},
-		RunAnim:            Animation{Texture: rl.LoadTexture("resources/threefour/run.png"), FrameCount: 10, FrameWidth: 48, FrameTime: RunFrameTime},
-		AttackHighAnim:     Animation{Texture: rl.LoadTexture("resources/threefour/attack-high.png"), FrameCount: 8, FrameWidth: 48, FrameTime: AttackFrameTime},
-		AttackMidAnim:      Animation{Texture: rl.LoadTexture("resources/threefour/attack-mid.png"), FrameCount: 8, FrameWidth: 48, FrameTime: AttackFrameTime},
-		AttackLowAnim:      Animation{Texture: rl.LoadTexture("resources/threefour/attack-low.png"), FrameCount: 8, FrameWidth: 48, FrameTime: AttackFrameTime},
-		AttackHighAnim2:    Animation{Texture: rl.LoadTexture("resources/threefour/attack-high-2.png"), FrameCount: 8, FrameWidth: 48, FrameTime: AttackFrameTime},
-		AttackMidAnim2:     Animation{Texture: rl.LoadTexture("resources/threefour/attack-mid-2.png"), FrameCount: 8, FrameWidth: 48, FrameTime: AttackFrameTime},
-		AttackLowAnim2:     Animation{Texture: rl.LoadTexture("resources/threefour/attack-low-2.png"), FrameCount: 8, FrameWidth: 48, FrameTime: AttackFrameTime},
-		BackAttackHighAnim: Animation{Texture: rl.LoadTexture("resources/threefour/back-attack-top-1.png"), FrameCount: 4, FrameWidth: 48, FrameTime: BackAttackFrameTime},
-		BackAttackMidAnim:  Animation{Texture: rl.LoadTexture("resources/threefour/back-attack-mid-1.png"), FrameCount: 4, FrameWidth: 48, FrameTime: BackAttackFrameTime},
-		BackAttackLowAnim:  Animation{Texture: rl.LoadTexture("resources/threefour/back-attack-low-1.png"), FrameCount: 4, FrameWidth: 48, FrameTime: BackAttackFrameTime},
-		HitHighAnim:        Animation{Texture: rl.LoadTexture("resources/threefour/hit-top.png"), FrameCount: 4, FrameWidth: 48, FrameTime: HitFrameTime},
-		HitMidAnim:         Animation{Texture: rl.LoadTexture("resources/threefour/hit-mid.png"), FrameCount: 4, FrameWidth: 48, FrameTime: HitFrameTime},
-		HitLowAnim:         Animation{Texture: rl.LoadTexture("resources/threefour/hit-low.png"), FrameCount: 4, FrameWidth: 48, FrameTime: HitFrameTime},
-		UpDownAnim:         Animation{Texture: rl.LoadTexture("resources/threefour/updown.png"), FrameCount: 3, FrameWidth: 48, FrameTime: 0.1}, // 3 кадра: low/mid/high
-
-		// Анимации переходов между позами (4 кадра каждая)
-		UpDownLowToMidAnim:  Animation{Texture: rl.LoadTexture("resources/threefour/updown-0-1.png"), FrameCount: 4, FrameWidth: 48, FrameTime: UpDownTransitionFrameTime},
-		UpDownMidToHighAnim: Animation{Texture: rl.LoadTexture("resources/threefour/updown-1-2.png"), FrameCount: 4, FrameWidth: 48, FrameTime: UpDownTransitionFrameTime},
-		UpDownHighToMidAnim: Animation{Texture: rl.LoadTexture("resources/threefour/updown-2-1.png"), FrameCount: 4, FrameWidth: 48, FrameTime: UpDownTransitionFrameTime},
-		UpDownMidToLowAnim:  Animation{Texture: rl.LoadTexture("resources/threefour/updown-1-0.png"), FrameCount: 4, FrameWidth: 48, FrameTime: UpDownTransitionFrameTime},
-
-		// Состояние перехода
-		IsTransitioning:    false,
-		TransitionFrom:     None,
-		TransitionTo:       None,
-		TransitionTimer:    0,
-		TransitionDuration: UpDownTransitionDuration, // 0.1 сек
-		CurrentPose:        Torso,
-		NextTargetPart:     None,
-
-		AttackDuration:     0.45,
-		AttackTimer:        0,
-		BackAttackDuration: float32(4) / AttackFps,
-		BackAttackTimer:    0,
-		AttackInterval:     1.5,                      // Интервал атак для ИИ
-		AttackCooldown:     0.0,                      // Кулдаун между атаками
-		SpeedMultiplier:    0.7 + rand.Float32()*0.6, // Случайная скорость от 0.7 до 1.3
+		Type:                actorType,
+		Position:            position,
+		TargetPosition:      position,
+		Velocity:            0.0,
+		Size:                rl.NewVector2(SpriteSize*SpriteScale, SpriteSize*SpriteScale), // 48x48
+		Speed:               MaxSpeed,                                                      // 25.0
+		Health:              100,
+		TargetPart:          None,
+		HeadBox:             rl.NewRectangle(0, 0, 9*SpriteScale, 10*SpriteScale),  // 9x10
+		TorsoBox:            rl.NewRectangle(0, 0, 19*SpriteScale, 12*SpriteScale), // 19x12
+		LegsBox:             rl.NewRectangle(0, 0, 16*SpriteScale, 22*SpriteScale), // 16x22
+		IsAttacking:         false,
+		AttackPart:          Torso,
+		PendingAttackPart:   None,
+		HasPendingAttack:    false,
+		IsPendingAttack2:    false,
+		IsCurrentAttack2:    false,
+		AttackBox:           rl.NewRectangle(0, 0, AttackBoxWidth, AttackBoxHeight), // 24x6
+		IsMoving:            false,
+		FacingRight:         isHuman,
+		IsHit:               false,
+		HitTimer:            0,
+		HitDuration:         0.3333, // Длительность анимации урона (4 кадра, 12 FPS)
+		IdleAnim:            Animation{Texture: tm.LoadTexture("resources/threefour/idle.png"), FrameCount: 1, FrameWidth: 48, FrameTime: 0.1},
+		WalkAnim:            Animation{Texture: tm.LoadTexture("resources/threefour/walk.png"), FrameCount: 8, FrameWidth: 48, FrameTime: WalkFrameTime},
+		WalkHighAnim:        Animation{Texture: tm.LoadTexture("resources/threefour/walk-high.png"), FrameCount: 8, FrameWidth: 48, FrameTime: WalkFrameTime},
+		WalkMidAnim:         Animation{Texture: tm.LoadTexture("resources/threefour/walk-mid.png"), FrameCount: 8, FrameWidth: 48, FrameTime: WalkFrameTime},
+		WalkLowAnim:         Animation{Texture: tm.LoadTexture("resources/threefour/walk-low.png"), FrameCount: 8, FrameWidth: 48, FrameTime: WalkFrameTime},
+		RunAnim:             Animation{Texture: tm.LoadTexture("resources/threefour/run.png"), FrameCount: 10, FrameWidth: 48, FrameTime: RunFrameTime},
+		AttackHighAnim:      Animation{Texture: tm.LoadTexture("resources/threefour/attack-high.png"), FrameCount: 8, FrameWidth: 48, FrameTime: AttackFrameTime},
+		AttackMidAnim:       Animation{Texture: tm.LoadTexture("resources/threefour/attack-mid.png"), FrameCount: 8, FrameWidth: 48, FrameTime: AttackFrameTime},
+		AttackLowAnim:       Animation{Texture: tm.LoadTexture("resources/threefour/attack-low.png"), FrameCount: 8, FrameWidth: 48, FrameTime: AttackFrameTime},
+		AttackHighAnim2:     Animation{Texture: tm.LoadTexture("resources/threefour/attack-high-2.png"), FrameCount: 8, FrameWidth: 48, FrameTime: AttackFrameTime},
+		AttackMidAnim2:      Animation{Texture: tm.LoadTexture("resources/threefour/attack-mid-2.png"), FrameCount: 8, FrameWidth: 48, FrameTime: AttackFrameTime},
+		AttackLowAnim2:      Animation{Texture: tm.LoadTexture("resources/threefour/attack-low-2.png"), FrameCount: 8, FrameWidth: 48, FrameTime: AttackFrameTime},
+		BackAttackHighAnim:  Animation{Texture: tm.LoadTexture("resources/threefour/back-attack-top-1.png"), FrameCount: 4, FrameWidth: 48, FrameTime: BackAttackFrameTime},
+		BackAttackMidAnim:   Animation{Texture: tm.LoadTexture("resources/threefour/back-attack-mid-1.png"), FrameCount: 4, FrameWidth: 48, FrameTime: BackAttackFrameTime},
+		BackAttackLowAnim:   Animation{Texture: tm.LoadTexture("resources/threefour/back-attack-low-1.png"), FrameCount: 4, FrameWidth: 48, FrameTime: BackAttackFrameTime},
+		HitHighAnim:         Animation{Texture: tm.LoadTexture("resources/threefour/hit-top.png"), FrameCount: 4, FrameWidth: 48, FrameTime: HitFrameTime},
+		HitMidAnim:          Animation{Texture: tm.LoadTexture("resources/threefour/hit-mid.png"), FrameCount: 4, FrameWidth: 48, FrameTime: HitFrameTime},
+		HitLowAnim:          Animation{Texture: tm.LoadTexture("resources/threefour/hit-low.png"), FrameCount: 4, FrameWidth: 48, FrameTime: HitFrameTime},
+		UpDownAnim:          Animation{Texture: tm.LoadTexture("resources/threefour/updown.png"), FrameCount: 3, FrameWidth: 48, FrameTime: 0.1}, // 3 кадра: low/mid/high
+		UpDownLowToMidAnim:  Animation{Texture: tm.LoadTexture("resources/threefour/updown-0-1.png"), FrameCount: 4, FrameWidth: 48, FrameTime: UpDownTransitionFrameTime},
+		UpDownMidToHighAnim: Animation{Texture: tm.LoadTexture("resources/threefour/updown-1-2.png"), FrameCount: 4, FrameWidth: 48, FrameTime: UpDownTransitionFrameTime},
+		UpDownHighToMidAnim: Animation{Texture: tm.LoadTexture("resources/threefour/updown-2-1.png"), FrameCount: 4, FrameWidth: 48, FrameTime: UpDownTransitionFrameTime},
+		UpDownMidToLowAnim:  Animation{Texture: tm.LoadTexture("resources/threefour/updown-1-0.png"), FrameCount: 4, FrameWidth: 48, FrameTime: UpDownTransitionFrameTime},
+		IsTransitioning:     false,
+		TransitionFrom:      None,
+		TransitionTo:        None,
+		TransitionTimer:     0,
+		TransitionDuration:  UpDownTransitionDuration, // 0.1 сек
+		CurrentPose:         Torso,
+		NextTargetPart:      None,
+		AttackDuration:      0.45,
+		AttackTimer:         0,
+		BackAttackDuration:  float32(4) / AttackFps,
+		BackAttackTimer:     0,
+		AttackInterval:      1.5,                      // Интервал атак для ИИ
+		AttackCooldown:      0.0,                      // Кулдаун между атаками
+		SpeedMultiplier:     0.7 + rand.Float32()*0.6, // Случайная скорость от 0.7 до 1.3
 	}
 }
 

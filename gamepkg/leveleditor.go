@@ -56,7 +56,10 @@ type LevelEditor struct {
 	ShowDropdown      bool
 	DropdownActive    int32
 	LevelManager      LevelManager
-	DisplayEnemies    []Actor // Враги для отображения в редакторе
+	DisplayEnemies    []Actor         // Враги для отображения в редакторе
+	TextureManager    *TextureManager // Менеджер текстур
+	// Новое поле для управления раскрытием DropdownBox
+	dropdownEditMode bool
 }
 
 func NewLevelManager() LevelManager {
@@ -213,6 +216,7 @@ func (lm *LevelManager) GenerateDemoLevels() {
 func NewLevelEditor() LevelEditor {
 	levelManager := NewLevelManager()
 	levelManager.LoadAllLevels()
+	textureManager := NewTextureManager()
 
 	return LevelEditor{
 		ActiveElementType: BlockElement,
@@ -220,6 +224,7 @@ func NewLevelEditor() LevelEditor {
 		ShowDropdown:      false,
 		DropdownActive:    0,
 		LevelManager:      levelManager,
+		TextureManager:    textureManager,
 	}
 }
 
@@ -243,104 +248,84 @@ func (le *LevelEditor) LoadLevel(filename string) error {
 }
 
 func (le *LevelEditor) Update(camera *rl.Camera2D, scale float32, posX, posY float32) {
-	// Переключение типа элемента через Tab
-	if rl.IsKeyPressed(rl.KeyTab) {
-		le.ShowDropdown = !le.ShowDropdown
-	}
-
-	// Переключение уровней
-	if rl.IsKeyPressed(rl.KeyRight) {
-		le.LevelManager.NextLevel()
-	}
-	if rl.IsKeyPressed(rl.KeyLeft) {
-		le.LevelManager.PreviousLevel()
-	}
-
 	// Переключение типа блока через B
-	if rl.IsKeyPressed(rl.KeyB) && le.ActiveElementType == BlockElement {
-		le.ActiveBlockType = BlockType((int(le.ActiveBlockType) + 1) % 6) // 6 типов блоков
+	if rl.IsKeyPressed(rl.KeyB) && le.DropdownActive == 0 {
+		le.ActiveBlockType = BlockType((int(le.ActiveBlockType) + 1) % 6)
 	}
 
-	// Обработка UI (выпадающий список) - используем фиксированные экранные координаты
-	if le.ShowDropdown {
-		items := []string{"Block", "Enemy"}
-		uiPosX := float32(10) // Фиксированная позиция
-		uiPosY := float32(10) // Фиксированная позиция
-		dropdownRect := rl.NewRectangle(uiPosX, uiPosY+60, 120, 30)
-		if raygui.DropdownBox(dropdownRect, stringsJoin(items, ";"), &le.DropdownActive, le.ShowDropdown) {
-			le.ActiveElementType = LevelElementType(le.DropdownActive)
-			le.ShowDropdown = false
-		}
+	items := []string{"Block", "Enemy"}
+	uiPosX := float32(10)
+	uiPosY := float32(10)
+	dropdownRect := rl.NewRectangle(uiPosX, uiPosY+60, 120, 30)
+
+	// Клик по списку — раскрыть/закрыть
+	if rl.IsMouseButtonPressed(rl.MouseLeftButton) && rl.CheckCollisionPointRec(rl.GetMousePosition(), dropdownRect) {
+		le.dropdownEditMode = !le.dropdownEditMode
+	}
+
+	// Если раскрыт и выбран пункт — обновить выбор и закрыть
+	if raygui.DropdownBox(dropdownRect, stringsJoin(items, ";"), &le.DropdownActive, le.dropdownEditMode) {
+		le.dropdownEditMode = false
+	}
+	le.ActiveElementType = LevelElementType(le.DropdownActive)
+
+	// Клик вне списка — закрыть
+	if le.dropdownEditMode && rl.IsMouseButtonPressed(rl.MouseLeftButton) && !rl.CheckCollisionPointRec(rl.GetMousePosition(), dropdownRect) {
+		le.dropdownEditMode = false
 	}
 
 	// Размещение элемента (ЛКМ)
-	if rl.IsMouseButtonPressed(rl.MouseLeftButton) && !le.ShowDropdown {
-		// Преобразуем координаты мыши с учетом масштабирования
+	if rl.IsMouseButtonPressed(rl.MouseLeftButton) && !le.dropdownEditMode {
 		mousePos := rl.GetMousePosition()
-
-		// Проверяем, находится ли мышь в пределах масштабированного изображения
 		if mousePos.X >= posX && mousePos.X <= posX+float32(ScreenWidth)*scale &&
 			mousePos.Y >= posY && mousePos.Y <= posY+float32(ScreenHeight)*scale {
-
-			// Нормализуем координаты мыши относительно масштабированного изображения
 			normalizedX := (mousePos.X - posX) / (float32(ScreenWidth) * scale)
 			normalizedY := (mousePos.Y - posY) / (float32(ScreenHeight) * scale)
-
-			// Преобразуем в координаты сцены (без учета камеры)
 			sceneX := normalizedX * float32(ScreenWidth)
 			sceneY := normalizedY * float32(ScreenHeight)
-
-			// Применяем обратное преобразование камеры
 			worldPos := rl.GetScreenToWorld2D(rl.NewVector2(sceneX, sceneY), *camera)
-
 			currentLevel := le.LevelManager.GetCurrentLevel()
 			if currentLevel == nil {
 				return
 			}
-
-			switch le.ActiveElementType {
-			case BlockElement:
+			saveNeeded := false
+			switch le.DropdownActive {
+			case 0: // Block
 				block := Block{
-					Position: rl.NewVector2(float32(int(worldPos.X/48)*48), float32(int(worldPos.Y/48)*48)), // Привязка к сетке 48x48
+					Position: rl.NewVector2(float32(int(worldPos.X/48)*48), float32(int(worldPos.Y/48)*48)),
 					Size:     rl.NewVector2(48*SpriteScale, 48*SpriteScale),
 					Type:     le.ActiveBlockType,
 				}
 				currentLevel.Blocks = append(currentLevel.Blocks, block)
-			case EnemyElement:
+				saveNeeded = true
+			case 1: // Enemy
 				enemyData := EnemyData{
 					Position: rl.NewVector2(worldPos.X, ScreenHeight-90*SpriteScale),
 					Type:     AIActor,
 				}
 				currentLevel.Enemies = append(currentLevel.Enemies, enemyData)
+				saveNeeded = true
+			}
+			if saveNeeded {
+				le.SaveCurrentLevel()
 			}
 		}
 	}
 
 	// Удаление элемента (ПКМ)
-	if rl.IsMouseButtonPressed(rl.MouseRightButton) {
-		// Преобразуем координаты мыши с учетом масштабирования
+	if rl.IsMouseButtonPressed(rl.MouseRightButton) && !le.dropdownEditMode {
 		mousePos := rl.GetMousePosition()
-
-		// Проверяем, находится ли мышь в пределах масштабированного изображения
 		if mousePos.X >= posX && mousePos.X <= posX+float32(ScreenWidth)*scale &&
 			mousePos.Y >= posY && mousePos.Y <= posY+float32(ScreenHeight)*scale {
-
-			// Нормализуем координаты мыши относительно масштабированного изображения
 			normalizedX := (mousePos.X - posX) / (float32(ScreenWidth) * scale)
 			normalizedY := (mousePos.Y - posY) / (float32(ScreenHeight) * scale)
-
-			// Преобразуем в координаты сцены (без учета камеры)
 			sceneX := normalizedX * float32(ScreenWidth)
 			sceneY := normalizedY * float32(ScreenHeight)
-
-			// Применяем обратное преобразование камеры
 			worldPos := rl.GetScreenToWorld2D(rl.NewVector2(sceneX, sceneY), *camera)
-
 			currentLevel := le.LevelManager.GetCurrentLevel()
 			if currentLevel == nil {
 				return
 			}
-
 			// Удаление блоков
 			newBlocks := []Block{}
 			for _, block := range currentLevel.Blocks {
@@ -350,7 +335,6 @@ func (le *LevelEditor) Update(camera *rl.Camera2D, scale float32, posX, posY flo
 				}
 			}
 			currentLevel.Blocks = newBlocks
-
 			// Удаление врагов
 			newEnemies := []EnemyData{}
 			for _, enemy := range currentLevel.Enemies {
@@ -360,6 +344,7 @@ func (le *LevelEditor) Update(camera *rl.Camera2D, scale float32, posX, posY flo
 				}
 			}
 			currentLevel.Enemies = newEnemies
+			le.SaveCurrentLevel()
 		}
 	}
 }
@@ -421,7 +406,7 @@ func (le *LevelEditor) updateDisplayEnemies(level *Level) {
 		// Создаем новые акторы
 		le.DisplayEnemies = make([]Actor, len(level.Enemies))
 		for i, enemyData := range level.Enemies {
-			le.DisplayEnemies[i] = NewActor(enemyData.Position, enemyData.Type)
+			le.DisplayEnemies[i] = NewActor(enemyData.Position, enemyData.Type, le.TextureManager)
 		}
 	} else {
 		// Обновляем позиции существующих акторов
@@ -431,39 +416,30 @@ func (le *LevelEditor) updateDisplayEnemies(level *Level) {
 	}
 }
 
-// DrawUI рисует UI редактора поверх масштабированного изображения
 func (le *LevelEditor) DrawUI(scale float32, posX, posY float32) {
-	// UI всегда в фиксированной позиции экрана (не зависит от камеры)
-	uiPosX := float32(10) // Фиксированная позиция от левого края экрана
-	uiPosY := float32(10) // Фиксированная позиция от верхнего края экрана
-
-	// Отрисовка UI
-	if le.ShowDropdown {
-		dropdownRect := rl.NewRectangle(uiPosX, uiPosY+60, 120, 30)
-		raygui.DropdownBox(dropdownRect, "Block;Enemy", &le.DropdownActive, le.ShowDropdown)
-	}
-
-	currentLevel := le.LevelManager.GetCurrentLevel()
-	if currentLevel == nil {
-		return
-	}
-
-	// Текст
+	uiPosX := float32(10)
+	uiPosY := float32(10)
 	fontSize := int32(20)
 	textY := uiPosY + 90
-	rl.DrawText("Level Editor: Tab=select, B=block type, LMB=place, RMB=remove", int32(uiPosX), int32(textY), fontSize, rl.Black)
-	rl.DrawText("Arrow Keys: Switch levels", int32(uiPosX), int32(textY+30), fontSize, rl.Black)
 
-	// Дополнительная информация
-	rl.DrawText(fmt.Sprintf("Level: %s (%d/%d)", currentLevel.Name, le.LevelManager.CurrentLevel+1, len(le.LevelManager.Levels)), int32(uiPosX), int32(textY+60), fontSize, rl.Black)
+	// UI выбора типа элемента всегда видим
+	items := []string{"Block", "Enemy"}
+	dropdownRect := rl.NewRectangle(uiPosX, uiPosY+60, 120, 30)
+	raygui.DropdownBox(dropdownRect, stringsJoin(items, ";"), &le.DropdownActive, false)
+	// Показываем текущий активный элемент
 	rl.DrawText(fmt.Sprintf("Active: %s", le.getActiveElementName()), int32(uiPosX), int32(textY+90), fontSize, rl.Black)
-
 	if le.ActiveElementType == BlockElement {
 		blockTypeName := le.getBlockTypeName()
 		rl.DrawText(fmt.Sprintf("Block Type: %s", blockTypeName), int32(uiPosX), int32(textY+120), fontSize, rl.Black)
 	}
-
-	rl.DrawText(fmt.Sprintf("Blocks: %d, Enemies: %d", len(currentLevel.Blocks), len(currentLevel.Enemies)), int32(uiPosX), int32(textY+150), fontSize, rl.Black)
+	// Остальной UI
+	rl.DrawText("Level Editor: Tab=select, B=block type, LMB=place, RMB=remove", int32(uiPosX), int32(textY), fontSize, rl.Black)
+	rl.DrawText("Arrow Keys: Switch levels", int32(uiPosX), int32(textY+30), fontSize, rl.Black)
+	currentLevel := le.LevelManager.GetCurrentLevel()
+	if currentLevel != nil {
+		rl.DrawText(fmt.Sprintf("Level: %s (%d/%d)", currentLevel.Name, le.LevelManager.CurrentLevel+1, len(le.LevelManager.Levels)), int32(uiPosX), int32(textY+60), fontSize, rl.Black)
+		rl.DrawText(fmt.Sprintf("Blocks: %d, Enemies: %d", len(currentLevel.Blocks), len(currentLevel.Enemies)), int32(uiPosX), int32(textY+150), fontSize, rl.Black)
+	}
 }
 
 // getActiveElementName возвращает название активного элемента
@@ -505,6 +481,9 @@ func (le *LevelEditor) Cleanup() {
 		UnloadActorTextures(&le.DisplayEnemies[i])
 	}
 	le.DisplayEnemies = nil
+	if le.TextureManager != nil {
+		le.TextureManager.UnloadAll()
+	}
 }
 
 // Вспомогательная функция для объединения строк для raygui.DropdownBox
