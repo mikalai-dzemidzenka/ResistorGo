@@ -1,0 +1,28 @@
+package resistor
+
+import rl "github.com/gen2brain/raylib-go/raylib"
+
+type Camera struct {
+	rl.Camera2D
+	ZoomSpeed float32
+}
+
+func NewCamera() Camera {
+	offset := rl.Vector2{SW / 2, SH / 2}
+	cam := rl.NewCamera2D(offset, ZeroVec2, 0, 1.0)
+	return Camera{Camera2D: cam, ZoomSpeed: 0}
+}
+
+func (c *Camera) SetTarget(coord rl.Vector2) {
+	c.Target = coord
+}
+
+func (c *Camera) Update(dt float32) {
+	c.ZoomSpeed += rl.GetMouseWheelMove() * 0.1
+	c.Zoom += c.ZoomSpeed * dt
+
+	c.ZoomSpeed = moveTo0(c.ZoomSpeed, 0.025*dt)
+
+	c.Zoom = clamp(c.Zoom, 1, 3)
+	c.ZoomSpeed = clamp(c.ZoomSpeed, -2, 2)
+}
