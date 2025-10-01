@@ -31,7 +31,40 @@ func NewActor() *Actor {
 	}
 }
 
+func (a *Actor) updateRewind() {
+	if rl.IsKeyPressed(rl.KeyR) {
+		RewindIdx--
+		RewindLeft--
+		data := a.RewindData[RewindIdx%RewindFrames]
+		a.Pos = data.Pos
+		a.Speed = data.Speed
+		a.Orientation = data.Orientation
+	}
+	if rl.IsKeyDown(rl.KeyR) && RewindLeft > 0 {
+		IsRewinding = true
+		RewindIdx--
+		RewindLeft--
+		data := a.RewindData[RewindIdx%RewindFrames]
+		a.Pos = data.Pos
+		a.Speed = data.Speed
+		a.Orientation = data.Orientation
+	} else {
+		IsRewinding = false
+		a.RewindData[RewindIdx%RewindFrames] = ActorRewindFrame{
+			Pos:         a.Pos,
+			Speed:       a.Speed,
+			Orientation: a.Orientation,
+		}
+		RewindIdx++
+		if RewindLeft < RewindFrames {
+			RewindLeft++
+		}
+	}
+}
+
 func (a *Actor) Update(dt float32) {
+	a.updateRewind()
+
 	if IsRewinding {
 		return
 	}
@@ -52,54 +85,7 @@ func (a *Actor) Update(dt float32) {
 	}
 	a.Pos.X += a.Speed.X
 }
-
-var RewindDelayTimeSec float32
-
-// var RewindTimer // TODO look for neuro implementation
-// var RewindSpeed
-const RewindDelaySec float32 = 0.12
-
-func (a *Actor) UpdatePhysics() {
-	if rl.IsKeyPressed(rl.KeyR) {
-		RewindDelayTimeSec = GameTimeSec
-		RewindIdx--
-		RewindLeft--
-		data := a.RewindData[RewindIdx%RewindFrames]
-		a.Pos = data.Pos
-		a.Speed = data.Speed
-		a.Orientation = data.Orientation
-	}
-	if rl.IsKeyDown(rl.KeyR) && RewindLeft > 0 {
-		IsRewinding = true
-		if GameTimeSec < RewindDelayTimeSec+RewindDelaySec {
-			nextData := a.RewindData[(RewindIdx-1)%RewindFrames]
-			t := (GameTimeSec - RewindDelayTimeSec) / (RewindDelaySec) // [0.0, 1.0]
-			//t = clamp(t, 0.0, 1.0)
-			a.Pos.X = lerp(a.Pos.X, nextData.Pos.X, t)
-			a.Speed.X = lerp(a.Speed.X, nextData.Speed.X, t)
-			return
-		}
-		RewindDelayTimeSec = GameTimeSec
-
-		RewindIdx--
-		RewindLeft--
-		data := a.RewindData[RewindIdx%RewindFrames]
-		//a.Pos = data.Pos
-		//a.Speed = data.Speed
-		a.Orientation = data.Orientation
-	} else {
-		IsRewinding = false
-		a.RewindData[RewindIdx%RewindFrames] = ActorRewindFrame{
-			Pos:         a.Pos,
-			Speed:       a.Speed,
-			Orientation: a.Orientation,
-		}
-		RewindIdx++
-		if RewindLeft < RewindFrames {
-			RewindLeft++
-		}
-	}
-}
+func (a *Actor) UpdatePhysics() {}
 
 func (a *Actor) Draw() {
 	a.PlayAnim(TexTFRun, 24, 10)
