@@ -55,7 +55,9 @@ func (a *Actor) Update(dt float32) {
 
 var RewindDelayTimeSec float32
 
-const RewindDelaySec float32 = 0.5
+// var RewindTimer // TODO look for neuro implementation
+// var RewindSpeed
+const RewindDelaySec float32 = 0.12
 
 func (a *Actor) UpdatePhysics() {
 	if rl.IsKeyPressed(rl.KeyR) {
@@ -68,17 +70,22 @@ func (a *Actor) UpdatePhysics() {
 		a.Orientation = data.Orientation
 	}
 	if rl.IsKeyDown(rl.KeyR) && RewindLeft > 0 {
-		if GameTimeSec <= RewindDelayTimeSec+RewindDelaySec {
+		IsRewinding = true
+		if GameTimeSec < RewindDelayTimeSec+RewindDelaySec {
+			nextData := a.RewindData[(RewindIdx-1)%RewindFrames]
+			t := (GameTimeSec - RewindDelayTimeSec) / (RewindDelaySec) // [0.0, 1.0]
+			//t = clamp(t, 0.0, 1.0)
+			a.Pos.X = lerp(a.Pos.X, nextData.Pos.X, t)
+			a.Speed.X = lerp(a.Speed.X, nextData.Speed.X, t)
 			return
 		}
 		RewindDelayTimeSec = GameTimeSec
 
-		IsRewinding = true
 		RewindIdx--
 		RewindLeft--
 		data := a.RewindData[RewindIdx%RewindFrames]
-		a.Pos = data.Pos
-		a.Speed = data.Speed
+		//a.Pos = data.Pos
+		//a.Speed = data.Speed
 		a.Orientation = data.Orientation
 	} else {
 		IsRewinding = false
