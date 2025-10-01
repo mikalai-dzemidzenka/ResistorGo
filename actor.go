@@ -1,6 +1,7 @@
 package resistor
 
 import (
+	"fmt"
 	rl "github.com/gen2brain/raylib-go/raylib"
 )
 
@@ -52,15 +53,33 @@ func (a *Actor) Update(dt float32) {
 	a.Pos.X += a.Speed.X
 }
 
+var RewindDelayTimeSec float32
+
+const RewindDelaySec float32 = 0.5
+
 func (a *Actor) UpdatePhysics() {
-	if rl.IsKeyDown(rl.KeyR) && RewindLeft > 0 {
-		IsRewinding = true
+	if rl.IsKeyPressed(rl.KeyR) {
+		RewindDelayTimeSec = GameTimeSec
+		RewindIdx--
+		RewindLeft--
 		data := a.RewindData[RewindIdx%RewindFrames]
 		a.Pos = data.Pos
 		a.Speed = data.Speed
 		a.Orientation = data.Orientation
+	}
+	if rl.IsKeyDown(rl.KeyR) && RewindLeft > 0 {
+		if GameTimeSec <= RewindDelayTimeSec+RewindDelaySec {
+			return
+		}
+		RewindDelayTimeSec = GameTimeSec
+
+		IsRewinding = true
 		RewindIdx--
 		RewindLeft--
+		data := a.RewindData[RewindIdx%RewindFrames]
+		a.Pos = data.Pos
+		a.Speed = data.Speed
+		a.Orientation = data.Orientation
 	} else {
 		IsRewinding = false
 		a.RewindData[RewindIdx%RewindFrames] = ActorRewindFrame{
@@ -77,12 +96,14 @@ func (a *Actor) UpdatePhysics() {
 
 func (a *Actor) Draw() {
 	a.PlayAnim(TexTFRun, 24, 10)
+	rl.DrawText(fmt.Sprintf("RewindIndex: %d", RewindIdx), int32(a.Pos.X), int32(a.Pos.Y), 2, rl.White)
+	rl.DrawText(fmt.Sprintf("RewindLeft: %d", RewindLeft), int32(a.Pos.X), int32(a.Pos.Y)-8, 2, rl.White)
 }
 
-func (a *Actor) PlayAnim(tex rl.Texture2D, frameTime float32, totalFrames int) {
-	frameTimeMs := 1000 / frameTime
+func (a *Actor) PlayAnim(tex rl.Texture2D, framesPerSecond float32, totalFrames int) {
+	frameTimeMs := 1000 / framesPerSecond
 	rl.DrawTextureRec(tex, rl.Rectangle{
-		X:      float32(int(GameTime*1000/frameTimeMs)%totalFrames) * 48,
+		X:      float32(int(GameTimeSec*1000/frameTimeMs)%totalFrames) * 48,
 		Y:      0,
 		Width:  48 * float32(a.Orientation),
 		Height: 48,

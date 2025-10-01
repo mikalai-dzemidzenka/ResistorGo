@@ -14,7 +14,7 @@ const (
 
 var (
 	Debug         = true
-	GameTime      float32
+	GameTimeSec   float32
 	PhysicsTime   float32
 	FixedTimeStep float32 = 1.0 / 30.0
 )
@@ -55,14 +55,14 @@ func Game() {
 			dt = 0.25
 		}
 
-		GameTime += dt
+		GameTimeSec += dt
 
-		for PhysicsTime < GameTime {
+		for PhysicsTime < GameTimeSec {
 			PhysicsTime += FixedTimeStep
 			pl.UpdatePhysics()
 		}
 
-		dt = (PhysicsTime - GameTime) / FixedTimeStep
+		dt = (PhysicsTime - GameTimeSec) / FixedTimeStep
 		pl.Update(dt)
 
 		rl.BeginDrawing()
@@ -81,7 +81,7 @@ func Game() {
 			if Debug {
 				fps := strconv.Itoa(int(rl.GetFPS()))
 				rl.DrawText("fps:"+fps, 20, 20, 2, rl.White)
-				rl.DrawText(fmt.Sprintf("gameTime:%f", GameTime), 20, 30, 2, rl.White)
+				rl.DrawText(fmt.Sprintf("gameTime:%f", GameTimeSec), 20, 30, 2, rl.White)
 				rl.DrawText(fmt.Sprintf("physTime:%f", PhysicsTime), 20, 40, 2, rl.White)
 				rl.DrawText(fmt.Sprintf("camera zoom speed %f", cam.ZoomSpeed), 20, 50, 2, rl.White)
 			}
