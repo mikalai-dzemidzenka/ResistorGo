@@ -18,7 +18,7 @@ func (c *Camera) SetTarget(coord rl.Vector2) {
 }
 
 func (c *Camera) Update(dt float32) {
-	c.ZoomSpeed += rl.GetMouseWheelMove() * 0.1
+	c.ZoomSpeed += rl.GetMouseWheelMove() * 0.2
 	c.Zoom += c.ZoomSpeed * dt
 
 	c.ZoomSpeed = moveTo0(c.ZoomSpeed, 0.025*dt)
