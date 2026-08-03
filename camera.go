@@ -7,9 +7,9 @@ type Camera struct {
 	ZoomSpeed float32
 }
 
-func NewCamera() Camera {
+func NewCamera(zoom float32) Camera {
 	offset := rl.Vector2{SW / 2, SH / 2}
-	cam := rl.NewCamera2D(offset, ZeroVec2, 0, 1.0)
+	cam := rl.NewCamera2D(offset, ZeroVec2, 0, zoom)
 	return Camera{Camera2D: cam, ZoomSpeed: 0}
 }
 

@@ -11,13 +11,20 @@ const (
 	MaxSpeed        = 7
 )
 
+type ActorState uint8
+
+const (
+	Idle ActorState = iota
+	Run
+)
+
 type Actor struct {
 	Pos         rl.Vector2
 	Speed       rl.Vector2
 	Acc         float32
 	Friction    float32
 	Orientation int8
-	State       int8 // todo enum
+	State       ActorState
 	RewindData  [RewindFrames]ActorRewindFrame
 }
 
@@ -88,7 +95,22 @@ func (a *Actor) Update(dt float32) {
 func (a *Actor) UpdatePhysics() {}
 
 func (a *Actor) Draw() {
-	a.PlayAnim(TexTFRun, 24, 10)
+	if a.State == Idle {
+		rl.DrawTextureRec(TexTFIdle, rl.Rectangle{
+			X:      0,
+			Y:      0,
+			Width:  48 * float32(a.Orientation),
+			Height: 48,
+		}, a.Pos, rl.White)
+	} else {
+		a.PlayAnim(TexTFRun, 24, 10)
+	}
+	rl.DrawRectangleLinesEx(rl.Rectangle{
+		X:      a.Pos.X,
+		Y:      a.Pos.Y,
+		Width:  48,
+		Height: 48,
+	}, 1, rl.Blue)
 	rl.DrawText(fmt.Sprintf("RewindIndex: %d", RewindIdx), int32(a.Pos.X), int32(a.Pos.Y), 2, rl.White)
 	rl.DrawText(fmt.Sprintf("RewindLeft: %d", RewindLeft), int32(a.Pos.X), int32(a.Pos.Y)-8, 2, rl.White)
 }

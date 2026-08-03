@@ -20,21 +20,38 @@ var (
 )
 
 var (
-	TexTFRun rl.Texture2D
+	E1M1Wall1 rl.Texture2D
+	TexTFRun  rl.Texture2D
+	TexTFIdle rl.Texture2D
 )
 
 func LoadTextures() {
+	E1M1Wall1 = rl.LoadTexture("resources/blocks/e1m1_wall1.png")
 	TexTFRun = rl.LoadTexture("resources/threefour/run.png")
+	TexTFIdle = rl.LoadTexture("resources/threefour/idle.png")
 }
 
 func DrawGUI() {
+	rlg.Button(rl.Rectangle{0, 0, 200, 200}, "Press me")
+}
+
+type Vector2i struct {
+	X int32
+	Y int32
+}
+
+func v2i(v rl.Vector2) Vector2i {
+	return Vector2i{
+		X: int32(v.X),
+		Y: int32(v.Y),
+	}
 }
 
 func Game() {
 	rl.InitWindow(SW, SH, "Resistor")
 	defer rl.CloseWindow()
 
-	rl.DisableCursor()
+	//rl.DisableCursor()
 
 	rlg.LoadStyle("resources/style_dark.rgs")
 
@@ -42,8 +59,9 @@ func Game() {
 
 	LoadTextures()
 
-	cam := NewCamera()
+	cam := NewCamera(3)
 	pl := NewActor()
+	le := NewLevelEditor(32, 83)
 
 	for !rl.WindowShouldClose() {
 		if rl.IsKeyPressed(rl.KeyGrave) {
@@ -70,9 +88,11 @@ func Game() {
 			rl.ClearBackground(rl.Black)
 			rl.BeginMode2D(cam.Camera2D)
 			{
-				//cam.SetTarget(pl.Pos)
+				le.DrawCursor(cam)
+				cam.SetTarget(pl.Pos)
 				cam.Update(dt)
 				pl.Draw()
+				le.DrawGrid()
 			}
 			rl.EndMode2D()
 
