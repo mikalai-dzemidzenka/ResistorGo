@@ -9,6 +9,9 @@ const (
 	DefaultAcc      = 4
 	DefaultFriction = 0.7
 	MaxSpeed        = 7
+	Gravity         = 0.3
+	MaxJumpSpeed    = -10
+	MaxFallSpeed    = 4
 )
 
 type ActorState uint8
@@ -19,13 +22,15 @@ const (
 )
 
 type Actor struct {
-	Pos         rl.Vector2
-	Speed       rl.Vector2
-	Acc         float32
-	Friction    float32
-	Orientation int8
-	State       ActorState
-	RewindData  [RewindFrames]ActorRewindFrame
+	Pos          rl.Vector2
+	Speed        rl.Vector2
+	Acc          float32
+	Friction     float32
+	Orientation  int8
+	State        ActorState
+	RewindData   [RewindFrames]ActorRewindFrame
+	CollisionBox rl.Rectangle
+	OnGround     bool
 }
 
 func NewActor() *Actor {
@@ -35,7 +40,27 @@ func NewActor() *Actor {
 		Acc:         DefaultAcc,
 		Friction:    DefaultFriction,
 		Orientation: 1,
+		CollisionBox: rl.Rectangle{
+			X:      11,
+			Y:      6,
+			Width:  17,
+			Height: 42,
+		},
 	}
+}
+
+func (a *Actor) Update(dt float32) {
+	a.updateRewind()
+
+	if IsRewinding {
+		return
+	}
+	a.updateHorSpeed(dt)
+	a.updateVertSpeed(dt)
+	a.checkCollision()
+
+	a.Pos.X += a.Speed.X
+	a.Pos.Y += a.Speed.Y
 }
 
 func (a *Actor) updateRewind() {
@@ -68,35 +93,6 @@ func (a *Actor) updateRewind() {
 		}
 	}
 }
-
-func (a *Actor) Update(dt float32) {
-	a.updateRewind()
-
-	if IsRewinding {
-		return
-	}
-	if rl.IsKeyDown(rl.KeyA) {
-		a.Speed.X -= a.Acc * dt
-		a.Orientation = -1
-	}
-	if rl.IsKeyDown(rl.KeyD) {
-		a.Speed.X += a.Acc * dt
-		a.Orientation = 1
-	}
-	a.Speed.X = clamp(a.Speed.X, -MaxSpeed, MaxSpeed)
-
-	a.Speed.X = moveTo0(a.Speed.X, a.Friction*dt) // friction
-
-	absSpeed := abs(a.Speed.X)
-
-	if absSpeed < 0.001 {
-		a.State = Idle
-		a.Speed.X = 0
-	} else {
-		a.State = Run
-	}
-	a.Pos.X += a.Speed.X
-}
 func (a *Actor) UpdatePhysics() {}
 
 func (a *Actor) Draw() {
@@ -116,8 +112,16 @@ func (a *Actor) Draw() {
 		Width:  48,
 		Height: 48,
 	}, 1, rl.Blue)
+	rl.DrawRectangleLinesEx(rl.Rectangle{
+		X:      a.Pos.X + a.CollisionBox.X,
+		Y:      a.Pos.Y + a.CollisionBox.Y,
+		Width:  a.CollisionBox.Width,
+		Height: a.CollisionBox.Height,
+	}, 1, rl.SkyBlue)
 	rl.DrawText(fmt.Sprintf("RewindIndex: %d", RewindIdx), int32(a.Pos.X), int32(a.Pos.Y), 2, rl.White)
 	rl.DrawText(fmt.Sprintf("RewindLeft: %d", RewindLeft), int32(a.Pos.X), int32(a.Pos.Y)-8, 2, rl.White)
+	px := a.Pos.X + a.CollisionBox.X + a.CollisionBox.Width/2
+	rl.DrawPixel(int32(px), int32(a.Pos.Y+a.CollisionBox.Y+a.CollisionBox.Height), rl.Red)
 }
 
 func (a *Actor) PlayAnim(tex rl.Texture2D, framesPerSecond float32, totalFrames int) {
@@ -128,4 +132,56 @@ func (a *Actor) PlayAnim(tex rl.Texture2D, framesPerSecond float32, totalFrames 
 		Width:  48 * float32(a.Orientation),
 		Height: 48,
 	}, a.Pos, rl.White)
+}
+
+func (a *Actor) updateHorSpeed(dt float32) {
+	var movePressed bool
+	if rl.IsKeyDown(rl.KeyA) {
+		movePressed = true
+		a.Speed.X -= a.Acc * dt
+		a.Orientation = -1
+	}
+	if rl.IsKeyDown(rl.KeyD) {
+		movePressed = true
+		a.Speed.X += a.Acc * dt
+		a.Orientation = 1
+	}
+	if !movePressed {
+		a.Speed.X = moveTo0(a.Speed.X, a.Friction*dt) // friction
+	}
+	a.Speed.X = clamp(a.Speed.X, -MaxSpeed, MaxSpeed)
+
+	absSpeed := abs(a.Speed.X)
+	if absSpeed < 0.001 {
+		a.State = Idle
+		a.Speed.X = 0
+	} else {
+		a.State = Run
+	}
+}
+
+func (a *Actor) updateVertSpeed(dt float32) {
+	if !a.OnGround {
+		a.Speed.Y += Gravity * dt
+	}
+	a.Speed.Y = clamp(a.Speed.Y, MaxJumpSpeed, MaxFallSpeed)
+}
+
+func (a *Actor) checkCollision() {
+	for _, obj := range le.objectsIndexed {
+		oColY := float32(obj.Y + int32(obj.CollisionRect.Y))
+		oColX := float32(obj.X + int32(obj.CollisionRect.X))
+
+		pColY := a.Pos.Y + a.CollisionBox.Y + a.CollisionBox.Height
+		pColX := a.Pos.X + a.CollisionBox.X + a.CollisionBox.Width/2
+		// TODO
+		if oColX <= pColX && oColX+obj.CollisionRect.Width >= pColX &&
+			pColY >= oColY && pColY <= oColY+obj.CollisionRect.Height {
+			a.OnGround = true
+			a.Speed.Y = 0
+			a.Pos.Y = oColY - (a.CollisionBox.Y + a.CollisionBox.Height)
+			return
+		}
+	}
+	a.OnGround = false
 }

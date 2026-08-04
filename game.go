@@ -21,6 +21,7 @@ var (
 	MouseScreenPos Vector2i
 	MousePos       rl.Vector2
 	Cam            Camera
+	le             LevelEditor
 )
 
 func DrawGUI() {
@@ -59,6 +60,13 @@ func v2i(v rl.Vector2) Vector2i {
 	}
 }
 
+func v2f(v Vector2i) rl.Vector2 {
+	return rl.Vector2{
+		X: float32(v.X),
+		Y: float32(v.Y),
+	}
+}
+
 func Game() {
 	rl.InitWindow(SW, SH, "Resistor")
 	defer rl.CloseWindow()
@@ -73,7 +81,7 @@ func Game() {
 
 	Cam = NewCamera(3)
 	pl := NewActor()
-	le := NewLevelEditor(39, 83)
+	le = NewLevelEditor(39, 83)
 	le.LoadLevel("level_1.json")
 
 	for !rl.WindowShouldClose() {

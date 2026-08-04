@@ -101,22 +101,29 @@ func (le *LevelEditor) updateCursor() {
 func (le *LevelEditor) Update(dt float32) {
 	le.updateCursor()
 
-	if rl.IsMouseButtonPressed(rl.MouseButtonLeft) {
+	pos := Vector2i{
+		X: le.obj.X,
+		Y: le.obj.Y,
+	}
+	if rl.IsMouseButtonPressed(rl.MouseButtonRight) {
+		if le.objects[le.layer] != nil {
+			delete(le.objects[le.layer], pos)
+		}
+
+		le.buildIndex()
+	} else if rl.IsMouseButtonPressed(rl.MouseButtonLeft) {
 		if le.objects[le.layer] == nil {
 			le.objects[le.layer] = make(map[Vector2i]LevelObject)
 		}
-		pos := Vector2i{
-			X: le.obj.X,
-			Y: le.obj.Y,
-		}
+
 		le.objects[le.layer][pos] = LevelObject{
 			Resource: le.obj.Resource,
 			X:        pos.X,
 			Y:        pos.Y,
 			Layer:    le.layer,
 			CollisionRect: &rl.Rectangle{
-				X:      float32(pos.X) + le.obj.CollisionRect.X,
-				Y:      float32(pos.Y) + le.obj.CollisionRect.Y,
+				X:      le.obj.CollisionRect.X,
+				Y:      le.obj.CollisionRect.Y,
 				Width:  le.obj.CollisionRect.Width,
 				Height: le.obj.CollisionRect.Height,
 			},
@@ -149,7 +156,12 @@ func (le *LevelEditor) Draw() {
 	}
 	for _, obj := range le.objectsIndexed {
 		if obj.CollisionRect != nil {
-			rl.DrawRectangleLinesEx(*obj.CollisionRect, 1, rl.SkyBlue)
+			rl.DrawRectangleLinesEx(rl.Rectangle{
+				X:      float32(obj.X) + obj.CollisionRect.X,
+				Y:      float32(obj.Y) + obj.CollisionRect.Y,
+				Width:  obj.CollisionRect.Width,
+				Height: obj.CollisionRect.Height,
+			}, 1, rl.SkyBlue)
 		}
 	}
 
