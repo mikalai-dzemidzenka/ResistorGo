@@ -31,11 +31,17 @@ type Actor struct {
 	RewindData   [RewindFrames]ActorRewindFrame
 	CollisionBox rl.Rectangle
 	OnGround     bool
+	IsPlayer     bool
+	Input        Input
+}
+type Input struct {
+	Left  bool
+	Right bool
 }
 
-func NewActor() *Actor {
+func NewActor(pos rl.Vector2, isPlayer bool) *Actor {
 	return &Actor{
-		Pos:         rl.Vector2{},
+		Pos:         pos,
 		Speed:       rl.Vector2{},
 		Acc:         DefaultAcc,
 		Friction:    DefaultFriction,
@@ -46,6 +52,7 @@ func NewActor() *Actor {
 			Width:  17,
 			Height: 42,
 		},
+		IsPlayer: isPlayer,
 	}
 }
 
@@ -54,6 +61,11 @@ func (a *Actor) Update(dt float32) {
 
 	if IsRewinding {
 		return
+	}
+	if a.IsPlayer {
+		a.updatePlayerInput()
+	} else {
+		a.updateBotInput()
 	}
 	a.updateHorSpeed(dt)
 	a.updateVertSpeed(dt)
@@ -104,7 +116,12 @@ func (a *Actor) Draw() {
 			Height: 48,
 		}, a.Pos, rl.White)
 	} else {
-		a.PlayAnim(resources["resources/threefour/run.png"], 24, 10)
+		absSpeed := abs(a.Speed.X)
+		var fps float32 = 24
+		if absSpeed < MaxSpeed {
+			fps = 12
+		}
+		a.PlayAnim(resources["resources/threefour/run.png"], fps, 10)
 	}
 	rl.DrawRectangleLinesEx(rl.Rectangle{
 		X:      a.Pos.X,
@@ -136,12 +153,12 @@ func (a *Actor) PlayAnim(tex rl.Texture2D, framesPerSecond float32, totalFrames 
 
 func (a *Actor) updateHorSpeed(dt float32) {
 	var movePressed bool
-	if rl.IsKeyDown(rl.KeyA) {
+	if a.Input.Right {
 		movePressed = true
 		a.Speed.X -= a.Acc * dt
 		a.Orientation = -1
 	}
-	if rl.IsKeyDown(rl.KeyD) {
+	if a.Input.Left {
 		movePressed = true
 		a.Speed.X += a.Acc * dt
 		a.Orientation = 1
@@ -168,13 +185,13 @@ func (a *Actor) updateVertSpeed(dt float32) {
 }
 
 func (a *Actor) checkCollision() {
-	for _, obj := range le.objectsIndexed {
+	for _, obj := range LE.objectsIndexed {
 		oColY := float32(obj.Y + int32(obj.CollisionRect.Y))
 		oColX := float32(obj.X + int32(obj.CollisionRect.X))
 
 		pColY := a.Pos.Y + a.CollisionBox.Y + a.CollisionBox.Height
 		pColX := a.Pos.X + a.CollisionBox.X + a.CollisionBox.Width/2
-		// TODO
+
 		if oColX <= pColX && oColX+obj.CollisionRect.Width >= pColX &&
 			pColY >= oColY && pColY <= oColY+obj.CollisionRect.Height {
 			a.OnGround = true
@@ -184,4 +201,24 @@ func (a *Actor) checkCollision() {
 		}
 	}
 	a.OnGround = false
+}
+
+func (a *Actor) updateBotInput() {
+	a.Input = Input{}
+	if Pl.Pos.X < a.Pos.X {
+		a.Input.Right = true
+	}
+	if Pl.Pos.X > a.Pos.X {
+		a.Input.Left = true
+	}
+}
+
+func (a *Actor) updatePlayerInput() {
+	a.Input = Input{}
+	if rl.IsKeyDown(rl.KeyA) {
+		a.Input.Right = true
+	}
+	if rl.IsKeyDown(rl.KeyD) {
+		a.Input.Left = true
+	}
 }

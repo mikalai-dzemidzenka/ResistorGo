@@ -21,7 +21,8 @@ var (
 	MouseScreenPos Vector2i
 	MousePos       rl.Vector2
 	Cam            Camera
-	le             LevelEditor
+	LE             LevelEditor
+	Pl             *Actor
 )
 
 func DrawGUI() {
@@ -80,9 +81,10 @@ func Game() {
 	LoadTextures()
 
 	Cam = NewCamera(3)
-	pl := NewActor()
-	le = NewLevelEditor(39, 83)
-	le.LoadLevel("level_1.json")
+	Pl = NewActor(rl.Vector2{}, true)
+	enemy := NewActor(rl.Vector2{X: 50}, false)
+	LE = NewLevelEditor(39, 83)
+	LE.LoadLevel("level_1.json")
 
 	for !rl.WindowShouldClose() {
 		if rl.IsKeyPressed(rl.KeyGrave) {
@@ -100,22 +102,25 @@ func Game() {
 
 		for PhysicsTime < GameTimeSec {
 			PhysicsTime += FixedTimeStep
-			pl.UpdatePhysics()
+			Pl.UpdatePhysics()
+			enemy.UpdatePhysics()
 		}
 
 		dt = (PhysicsTime - GameTimeSec) / FixedTimeStep
-		pl.Update(dt)
-		le.Update(dt)
+		Pl.Update(dt)
+		enemy.Update(dt)
+		LE.Update(dt)
 
 		rl.BeginDrawing()
 		{
 			rl.ClearBackground(rl.Black)
 			rl.BeginMode2D(Cam.Camera2D)
 			{
-				le.Draw()
-				Cam.SetTarget(pl.Pos)
+				LE.Draw()
+				Cam.SetTarget(Pl.Pos)
 				Cam.Update(dt)
-				pl.Draw()
+				Pl.Draw()
+				enemy.Draw()
 			}
 			rl.EndMode2D()
 
@@ -131,5 +136,5 @@ func Game() {
 		}
 		rl.EndDrawing()
 	}
-	le.SaveLevel("level_1.json")
+	LE.SaveLevel("level_1.json")
 }
