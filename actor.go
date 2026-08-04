@@ -87,8 +87,13 @@ func (a *Actor) Update(dt float32) {
 
 	a.Speed.X = moveTo0(a.Speed.X, a.Friction*dt) // friction
 
-	if abs(a.Speed.X) < 0.001 {
+	absSpeed := abs(a.Speed.X)
+
+	if absSpeed < 0.001 {
+		a.State = Idle
 		a.Speed.X = 0
+	} else {
+		a.State = Run
 	}
 	a.Pos.X += a.Speed.X
 }
@@ -96,14 +101,14 @@ func (a *Actor) UpdatePhysics() {}
 
 func (a *Actor) Draw() {
 	if a.State == Idle {
-		rl.DrawTextureRec(TexTFIdle, rl.Rectangle{
+		rl.DrawTextureRec(resources["resources/threefour/idle.png"], rl.Rectangle{
 			X:      0,
 			Y:      0,
 			Width:  48 * float32(a.Orientation),
 			Height: 48,
 		}, a.Pos, rl.White)
 	} else {
-		a.PlayAnim(TexTFRun, 24, 10)
+		a.PlayAnim(resources["resources/threefour/run.png"], 24, 10)
 	}
 	rl.DrawRectangleLinesEx(rl.Rectangle{
 		X:      a.Pos.X,

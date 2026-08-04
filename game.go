@@ -5,6 +5,7 @@ import (
 	rlg "github.com/gen2brain/raylib-go/raygui"
 	rl "github.com/gen2brain/raylib-go/raylib"
 	"strconv"
+	"strings"
 )
 
 const (
@@ -13,23 +14,14 @@ const (
 )
 
 var (
-	Debug         = true
-	GameTimeSec   float32
-	PhysicsTime   float32
-	FixedTimeStep float32 = 1.0 / 30.0
+	Debug          = true
+	GameTimeSec    float32
+	PhysicsTime    float32
+	FixedTimeStep  float32 = 1.0 / 30.0
+	MouseScreenPos Vector2i
+	MousePos       rl.Vector2
+	Cam            Camera
 )
-
-var (
-	E1M1Wall1 rl.Texture2D
-	TexTFRun  rl.Texture2D
-	TexTFIdle rl.Texture2D
-)
-
-func LoadTextures() {
-	E1M1Wall1 = rl.LoadTexture("resources/blocks/e1m1_wall1.png")
-	TexTFRun = rl.LoadTexture("resources/threefour/run.png")
-	TexTFIdle = rl.LoadTexture("resources/threefour/idle.png")
-}
 
 func DrawGUI() {
 	rlg.Button(rl.Rectangle{0, 0, 200, 200}, "Press me")
@@ -38,6 +30,26 @@ func DrawGUI() {
 type Vector2i struct {
 	X int32
 	Y int32
+}
+
+func (v Vector2i) String() string {
+	return fmt.Sprintf("%d,%d", v.X, v.Y)
+}
+
+func (v Vector2i) MarshalJSON() ([]byte, error) {
+	return []byte(v.String()), nil
+}
+
+func (v *Vector2i) UnmarshalJSON(b []byte) error {
+	tokens := strings.Split(string(b), ",")
+	if len(tokens) != 2 {
+		return fmt.Errorf("malformed input: %s", b)
+	}
+	x, _ := strconv.Atoi(tokens[0])
+	y, _ := strconv.Atoi(tokens[0])
+	v.X = int32(x)
+	v.Y = int32(y)
+	return nil
 }
 
 func v2i(v rl.Vector2) Vector2i {
@@ -59,9 +71,10 @@ func Game() {
 
 	LoadTextures()
 
-	cam := NewCamera(3)
+	Cam = NewCamera(3)
 	pl := NewActor()
-	le := NewLevelEditor(32, 83)
+	le := NewLevelEditor(39, 83)
+	le.LoadLevel("level_1.json")
 
 	for !rl.WindowShouldClose() {
 		if rl.IsKeyPressed(rl.KeyGrave) {
@@ -74,6 +87,8 @@ func Game() {
 		}
 
 		GameTimeSec += dt
+		MousePos = rl.GetMousePosition()
+		MouseScreenPos = v2i(rl.GetScreenToWorld2D(MousePos, Cam.Camera2D))
 
 		for PhysicsTime < GameTimeSec {
 			PhysicsTime += FixedTimeStep
@@ -82,17 +97,17 @@ func Game() {
 
 		dt = (PhysicsTime - GameTimeSec) / FixedTimeStep
 		pl.Update(dt)
+		le.Update(dt)
 
 		rl.BeginDrawing()
 		{
 			rl.ClearBackground(rl.Black)
-			rl.BeginMode2D(cam.Camera2D)
+			rl.BeginMode2D(Cam.Camera2D)
 			{
-				le.DrawCursor(cam)
-				cam.SetTarget(pl.Pos)
-				cam.Update(dt)
+				le.Draw()
+				Cam.SetTarget(pl.Pos)
+				Cam.Update(dt)
 				pl.Draw()
-				le.DrawGrid()
 			}
 			rl.EndMode2D()
 
@@ -103,9 +118,10 @@ func Game() {
 				rl.DrawText("fps:"+fps, 20, 20, 2, rl.White)
 				rl.DrawText(fmt.Sprintf("gameTime:%f", GameTimeSec), 20, 30, 2, rl.White)
 				rl.DrawText(fmt.Sprintf("physTime:%f", PhysicsTime), 20, 40, 2, rl.White)
-				rl.DrawText(fmt.Sprintf("camera zoom speed %f", cam.ZoomSpeed), 20, 50, 2, rl.White)
+				rl.DrawText(fmt.Sprintf("camera zoom speed %f", Cam.ZoomSpeed), 20, 50, 2, rl.White)
 			}
 		}
 		rl.EndDrawing()
 	}
+	le.SaveLevel("level_1.json")
 }
