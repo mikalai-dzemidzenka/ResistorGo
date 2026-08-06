@@ -77,32 +77,16 @@ func (a *Actor) Update(dt float32) {
 }
 
 func (a *Actor) updateRewind() {
-	if rl.IsKeyPressed(rl.KeyR) {
-		RewindIdx--
-		RewindLeft--
-		data := a.RewindData[RewindIdx%RewindFrames]
-		a.Pos = data.Pos
-		a.Speed = data.Speed
-		a.Orientation = data.Orientation
-	}
-	if rl.IsKeyDown(rl.KeyR) && RewindLeft > 0 {
-		IsRewinding = true
-		RewindIdx--
-		RewindLeft--
+	if IsRewinding {
 		data := a.RewindData[RewindIdx%RewindFrames]
 		a.Pos = data.Pos
 		a.Speed = data.Speed
 		a.Orientation = data.Orientation
 	} else {
-		IsRewinding = false
 		a.RewindData[RewindIdx%RewindFrames] = ActorRewindFrame{
 			Pos:         a.Pos,
 			Speed:       a.Speed,
 			Orientation: a.Orientation,
-		}
-		RewindIdx++
-		if RewindLeft < RewindFrames {
-			RewindLeft++
 		}
 	}
 }

@@ -110,6 +110,7 @@ func Game() {
 		Pl.Update(dt)
 		enemy.Update(dt)
 		LE.Update(dt)
+		UpdateRewind(dt)
 
 		rl.BeginDrawing()
 		{

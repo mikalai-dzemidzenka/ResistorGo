@@ -17,3 +17,21 @@ type ActorRewindFrame struct {
 	Speed       rl.Vector2
 	Orientation int8
 }
+
+func UpdateRewind(dt float32) {
+	if rl.IsKeyPressed(rl.KeyR) {
+		RewindIdx--
+		RewindLeft--
+	}
+	if rl.IsKeyDown(rl.KeyR) && RewindLeft > 0 {
+		IsRewinding = true
+		RewindIdx--
+		RewindLeft--
+	} else {
+		IsRewinding = false
+		RewindIdx++
+		if RewindLeft < RewindFrames {
+			RewindLeft++
+		}
+	}
+}
