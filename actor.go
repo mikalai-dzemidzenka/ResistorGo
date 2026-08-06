@@ -35,8 +35,9 @@ type Actor struct {
 	Input        Input
 }
 type Input struct {
-	Left  bool
-	Right bool
+	Left   bool
+	Right  bool
+	Attack bool
 }
 
 func NewActor(pos rl.Vector2, isPlayer bool) *Actor {
@@ -204,12 +205,17 @@ func (a *Actor) checkCollision() {
 }
 
 func (a *Actor) updateBotInput() {
+	const near = 50
 	a.Input = Input{}
 	if Pl.Pos.X < a.Pos.X {
-		a.Input.Right = true
+		if a.Pos.X-Pl.Pos.X > near {
+			a.Input.Right = true
+		}
 	}
 	if Pl.Pos.X > a.Pos.X {
-		a.Input.Left = true
+		if Pl.Pos.X-a.Pos.X > near {
+			a.Input.Left = true
+		}
 	}
 }
 
