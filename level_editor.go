@@ -79,20 +79,20 @@ func NewLevelEditor(gridW, gridH int32) LevelEditor {
 }
 
 func (le *LevelEditor) updateCursor() {
-	le.obj.X = MouseScreenPos.X
-	le.obj.Y = MouseScreenPos.Y
-	if MouseScreenPos.X < 0 {
+	le.obj.X = MouseWorldPos.X
+	le.obj.Y = MouseWorldPos.Y
+	if MouseWorldPos.X < 0 {
 		le.obj.X -= le.gridW
 	}
-	if MouseScreenPos.Y < 0 {
+	if MouseWorldPos.Y < 0 {
 		le.obj.Y -= le.gridH
 	}
-	if MouseScreenPos.X != 0 {
+	if MouseWorldPos.X != 0 {
 		le.obj.X /= le.gridW
 		le.obj.X *= le.gridW
 	}
 
-	if MouseScreenPos.Y != 0 {
+	if MouseWorldPos.Y != 0 {
 		le.obj.Y /= le.gridH
 		le.obj.Y *= le.gridH
 	}

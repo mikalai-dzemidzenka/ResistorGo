@@ -14,15 +14,15 @@ const (
 )
 
 var (
-	Debug          = true
-	GameTimeSec    float32
-	PhysicsTime    float32
-	FixedTimeStep  float32 = 1.0 / 30.0
-	MouseScreenPos Vector2i
-	MousePos       rl.Vector2
-	Cam            Camera
-	LE             LevelEditor
-	Pl             *Actor
+	Debug         = true
+	GameTimeSec   float32
+	PhysicsTime   float32
+	FixedTimeStep float32 = 1.0 / 30.0
+	MouseWorldPos Vector2i
+	MousePos      rl.Vector2
+	Cam           Camera
+	LE            LevelEditor
+	Pl            *Actor
 )
 
 func DrawGUI() {
@@ -98,7 +98,7 @@ func Game() {
 
 		GameTimeSec += dt
 		MousePos = rl.GetMousePosition()
-		MouseScreenPos = v2i(rl.GetScreenToWorld2D(MousePos, Cam.Camera2D))
+		MouseWorldPos = v2i(rl.GetScreenToWorld2D(MousePos, Cam.Camera2D))
 
 		for PhysicsTime < GameTimeSec {
 			PhysicsTime += FixedTimeStep
@@ -120,8 +120,8 @@ func Game() {
 				LE.Draw()
 				Cam.SetTarget(Pl.Pos)
 				Cam.Update(dt)
-				Pl.Draw()
-				enemy.Draw()
+				Pl.Draw(dt)
+				enemy.Draw(dt)
 			}
 			rl.EndMode2D()
 

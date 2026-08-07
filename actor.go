@@ -3,6 +3,7 @@ package resistor
 import (
 	"fmt"
 	rl "github.com/gen2brain/raylib-go/raylib"
+	"strings"
 )
 
 const (
@@ -22,17 +23,26 @@ const (
 )
 
 type Actor struct {
-	Pos          rl.Vector2
-	Speed        rl.Vector2
-	Acc          float32
-	Friction     float32
-	Orientation  int8
-	State        ActorState
-	RewindData   [RewindFrames]ActorRewindFrame
-	CollisionBox rl.Rectangle
-	OnGround     bool
-	IsPlayer     bool
-	Input        Input
+	Pos             rl.Vector2
+	Speed           rl.Vector2
+	Acc             float32
+	Friction        float32
+	Orientation     int8
+	State           ActorState
+	RewindData      [RewindFrames]ActorRewindFrame
+	CollisionBox    rl.Rectangle
+	OnGround        bool
+	IsPlayer        bool
+	Input           Input
+	PrevUpdown      uint8
+	Updown          uint8
+	AnimTime        float32
+	Anim            string
+	AnimFPS         uint8
+	AnimOffset      uint8
+	AnimTotalFrames uint8
+	AnimOnce        bool
+	AnimFinished    bool
 }
 type Input struct {
 	Left   bool
@@ -53,7 +63,10 @@ func NewActor(pos rl.Vector2, isPlayer bool) *Actor {
 			Width:  17,
 			Height: 42,
 		},
-		IsPlayer: isPlayer,
+		IsPlayer:        isPlayer,
+		Anim:            "resources/threefour/updown.png",
+		AnimTotalFrames: 1,
+		AnimFPS:         1,
 	}
 }
 
@@ -70,6 +83,7 @@ func (a *Actor) Update(dt float32) {
 	}
 	a.updateHorSpeed(dt)
 	a.updateVertSpeed(dt)
+	a.updateUpdown(dt)
 	a.checkCollision()
 
 	a.Pos.X += a.Speed.X
@@ -92,21 +106,11 @@ func (a *Actor) updateRewind() {
 }
 func (a *Actor) UpdatePhysics() {}
 
-func (a *Actor) Draw() {
-	if a.State == Idle {
-		rl.DrawTextureRec(resources["resources/threefour/idle.png"], rl.Rectangle{
-			X:      0,
-			Y:      0,
-			Width:  48 * float32(a.Orientation),
-			Height: 48,
-		}, a.Pos, rl.White)
+func (a *Actor) Draw(dt float32) {
+	if a.AnimOnce {
+		a.AnimFinished = a.DrawAnimOnce(dt)
 	} else {
-		absSpeed := abs(a.Speed.X)
-		var fps float32 = 24
-		if absSpeed < MaxSpeed {
-			fps = 12
-		}
-		a.PlayAnim(resources["resources/threefour/run.png"], fps, 10)
+		a.DrawAnim()
 	}
 	rl.DrawRectangleLinesEx(rl.Rectangle{
 		X:      a.Pos.X,
@@ -126,10 +130,52 @@ func (a *Actor) Draw() {
 	rl.DrawPixel(int32(px), int32(a.Pos.Y+a.CollisionBox.Y+a.CollisionBox.Height), rl.Red)
 }
 
-func (a *Actor) PlayAnim(tex rl.Texture2D, framesPerSecond float32, totalFrames int) {
-	frameTimeMs := 1000 / framesPerSecond
+func (a *Actor) SetAnimFrame(anim string, offset uint8) {
+	a.AnimTime = 0
+	a.Anim = anim
+	a.AnimFPS = 1
+	a.AnimTotalFrames = 1
+	a.AnimOnce = false
+	a.AnimOffset = offset
+}
+
+func (a *Actor) SetAnim(anim string, fps uint8, totalFrames uint8, once bool) {
+	a.AnimTime = 0
+	a.Anim = anim
+	a.AnimFPS = fps
+	a.AnimTotalFrames = totalFrames
+	a.AnimOnce = once
+	a.AnimOffset = 0
+}
+
+func (a *Actor) DrawAnimOnce(dt float32) bool {
+	frameTimeMs := 1000 / float32(a.AnimFPS)
+	a.AnimTime += dt
+	a.AnimTime = clamp(a.AnimTime, 0, frameTimeMs*float32(a.AnimTotalFrames))
+	frame := int(a.AnimTime*1000/frameTimeMs) / int(a.AnimTotalFrames)
+	finished := frame >= int(a.AnimTotalFrames)
+	frame = clamp(frame, 0, int(a.AnimTotalFrames)-1)
+	tex, ok := resources[a.Anim]
+	if !ok {
+		panic(a.Anim)
+	}
 	rl.DrawTextureRec(tex, rl.Rectangle{
-		X:      float32(int(GameTimeSec*1000/frameTimeMs)%totalFrames) * 48,
+		X:      float32(frame) * 48,
+		Y:      0,
+		Width:  48 * float32(a.Orientation),
+		Height: 48,
+	}, a.Pos, rl.White)
+	return finished
+}
+
+func (a *Actor) DrawAnim() {
+	frameTimeMs := 1000 / float32(a.AnimFPS)
+	tex, ok := resources[a.Anim]
+	if !ok {
+		panic(a.Anim)
+	}
+	rl.DrawTextureRec(tex, rl.Rectangle{
+		X:      float32(a.AnimOffset*48) + float32(int(GameTimeSec*1000/frameTimeMs)%int(a.AnimTotalFrames))*48,
 		Y:      0,
 		Width:  48 * float32(a.Orientation),
 		Height: 48,
@@ -157,8 +203,16 @@ func (a *Actor) updateHorSpeed(dt float32) {
 	if absSpeed < 0.001 {
 		a.State = Idle
 		a.Speed.X = 0
+		if !strings.Contains(a.Anim, "updown") {
+			a.SetAnim("resources/threefour/idle.png", 1, 1, true)
+		}
 	} else {
 		a.State = Run
+		var fps uint8 = 24
+		if absSpeed < MaxSpeed {
+			fps = 12
+		}
+		a.SetAnim("resources/threefour/run.png", fps, 8, false)
 	}
 }
 
@@ -211,4 +265,27 @@ func (a *Actor) updatePlayerInput() {
 	if rl.IsKeyDown(rl.KeyD) {
 		a.Input.Left = true
 	}
+}
+
+func (a *Actor) updateUpdown(dt float32) {
+	if a.State != Idle {
+		return
+	}
+	var updown uint8
+	switch {
+	case float32(MouseWorldPos.Y) >= a.Pos.Y+40:
+		updown = 0
+	case float32(MouseWorldPos.Y) >= a.Pos.Y+14 && float32(MouseWorldPos.Y) < a.Pos.Y+40:
+		updown = 1
+	case float32(MouseWorldPos.Y) < a.Pos.Y+14:
+		updown = 2
+	}
+	if updown != a.Updown {
+		a.PrevUpdown = a.Updown
+		anim := fmt.Sprintf("resources/threefour/updown-%d-%d.png", a.PrevUpdown, updown)
+		a.SetAnim(anim, 8, 4, true)
+	} else if a.AnimFinished && strings.Contains(a.Anim, "updown-") {
+		a.SetAnimFrame("resources/threefour/updown.png", a.Updown)
+	}
+	a.Updown = updown
 }
