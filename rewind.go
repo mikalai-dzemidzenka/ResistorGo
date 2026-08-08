@@ -16,6 +16,8 @@ type ActorRewindFrame struct {
 	Pos         rl.Vector2
 	Speed       rl.Vector2
 	Orientation int8
+	Anim        string
+	AnimFrame   uint8
 }
 
 func UpdateRewind(dt float32) {

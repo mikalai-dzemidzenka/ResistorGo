@@ -41,6 +41,7 @@ type Actor struct {
 	AnimFPS         uint8
 	AnimOffset      uint8
 	AnimTotalFrames uint8
+	AnimFrame       uint8
 	AnimOnce        bool
 	AnimFinished    bool
 }
@@ -101,17 +102,31 @@ func (a *Actor) updateRewind() {
 			Pos:         a.Pos,
 			Speed:       a.Speed,
 			Orientation: a.Orientation,
+			Anim:        a.Anim,
+			AnimFrame:   a.AnimFrame,
 		}
 	}
 }
 func (a *Actor) UpdatePhysics() {}
 
 func (a *Actor) Draw(dt float32) {
-	if a.AnimOnce {
-		a.AnimFinished = a.DrawAnimOnce(dt)
+	if IsRewinding {
+		data := a.RewindData[RewindIdx%RewindFrames]
+		//a.SetAnimFrame(data.Anim, data.AnimFrame)
+		rl.DrawTextureRec(resources[data.Anim], rl.Rectangle{
+			X:      float32(data.AnimFrame) * 48,
+			Y:      0,
+			Width:  48 * float32(a.Orientation),
+			Height: 48,
+		}, a.Pos, rl.White)
 	} else {
-		a.DrawAnim()
+		if a.AnimOnce {
+			a.AnimFinished = a.DrawAnimOnce(dt)
+		} else {
+			a.DrawAnim()
+		}
 	}
+
 	rl.DrawRectangleLinesEx(rl.Rectangle{
 		X:      a.Pos.X,
 		Y:      a.Pos.Y,
@@ -159,6 +174,7 @@ func (a *Actor) DrawAnimOnce(dt float32) bool {
 	if !ok {
 		panic(a.Anim)
 	}
+	a.AnimFrame = uint8(frame)
 	rl.DrawTextureRec(tex, rl.Rectangle{
 		X:      float32(frame) * 48,
 		Y:      0,
@@ -174,8 +190,10 @@ func (a *Actor) DrawAnim() {
 	if !ok {
 		panic(a.Anim)
 	}
+	frame := float32(a.AnimOffset*48) + float32(int(GameTimeSec*1000/frameTimeMs)%int(a.AnimTotalFrames))
+	a.AnimFrame = uint8(frame)
 	rl.DrawTextureRec(tex, rl.Rectangle{
-		X:      float32(a.AnimOffset*48) + float32(int(GameTimeSec*1000/frameTimeMs)%int(a.AnimTotalFrames))*48,
+		X:      frame * 48,
 		Y:      0,
 		Width:  48 * float32(a.Orientation),
 		Height: 48,
