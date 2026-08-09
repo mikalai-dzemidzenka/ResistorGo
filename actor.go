@@ -68,6 +68,9 @@ func NewActor(pos rl.Vector2, isPlayer bool) *Actor {
 		Anim:            "resources/threefour/updown.png",
 		AnimTotalFrames: 1,
 		AnimFPS:         1,
+		AnimFinished:    false,
+		PrevUpdown:      2,
+		Updown:          0,
 	}
 }
 
@@ -112,7 +115,6 @@ func (a *Actor) UpdatePhysics() {}
 func (a *Actor) Draw(dt float32) {
 	if IsRewinding {
 		data := a.RewindData[RewindIdx%RewindFrames]
-		//a.SetAnimFrame(data.Anim, data.AnimFrame)
 		rl.DrawTextureRec(resources[data.Anim], rl.Rectangle{
 			X:      float32(data.AnimFrame) * 48,
 			Y:      0,
@@ -139,8 +141,14 @@ func (a *Actor) Draw(dt float32) {
 		Width:  a.CollisionBox.Width,
 		Height: a.CollisionBox.Height,
 	}, 1, rl.SkyBlue)
-	rl.DrawText(fmt.Sprintf("RewindIndex: %d", RewindIdx), int32(a.Pos.X), int32(a.Pos.Y), 2, rl.White)
-	rl.DrawText(fmt.Sprintf("RewindLeft: %d", RewindLeft), int32(a.Pos.X), int32(a.Pos.Y)-8, 2, rl.White)
+	if a.IsPlayer {
+		rl.DrawText(fmt.Sprintf("RewindIndex: %d", RewindIdx), int32(a.Pos.X), int32(a.Pos.Y), 2, rl.White)
+		rl.DrawText(fmt.Sprintf("RewindLeft: %d", RewindLeft), int32(a.Pos.X), int32(a.Pos.Y)-8, 2, rl.White)
+		rl.DrawText(fmt.Sprintf("Mouse X, Y: %d %d", MouseWorldPos.X, MouseWorldPos.Y), int32(a.Pos.X), int32(a.Pos.Y)-16, 2, rl.White)
+		rl.DrawText(fmt.Sprintf("PrevUpdown, Updown: %d %d", a.PrevUpdown, a.Updown), int32(a.Pos.X), int32(a.Pos.Y)-24, 2, rl.White)
+		rl.DrawText(fmt.Sprintf("Frame: %d", a.AnimFrame), int32(a.Pos.X), int32(a.Pos.Y)-32, 2, rl.White)
+
+	}
 	px := a.Pos.X + a.CollisionBox.X + a.CollisionBox.Width/2
 	rl.DrawPixel(int32(px), int32(a.Pos.Y+a.CollisionBox.Y+a.CollisionBox.Height), rl.Red)
 }
@@ -190,7 +198,7 @@ func (a *Actor) DrawAnim() {
 	if !ok {
 		panic(a.Anim)
 	}
-	frame := float32(a.AnimOffset*48) + float32(int(GameTimeSec*1000/frameTimeMs)%int(a.AnimTotalFrames))
+	frame := float32(a.AnimOffset) + float32(int(GameTimeSec*1000/frameTimeMs)%int(a.AnimTotalFrames))
 	a.AnimFrame = uint8(frame)
 	rl.DrawTextureRec(tex, rl.Rectangle{
 		X:      frame * 48,
@@ -222,7 +230,7 @@ func (a *Actor) updateHorSpeed(dt float32) {
 		a.State = Idle
 		a.Speed.X = 0
 		if !strings.Contains(a.Anim, "updown") {
-			a.SetAnim("resources/threefour/idle.png", 1, 1, true)
+			a.SetAnimFrame("resources/threefour/updown.png", a.Updown)
 		}
 	} else {
 		a.State = Run
@@ -286,17 +294,17 @@ func (a *Actor) updatePlayerInput() {
 }
 
 func (a *Actor) updateUpdown(dt float32) {
-	if a.State != Idle {
+	if a.State != Idle || !a.AnimFinished && strings.Contains(a.Anim, "updown-") {
 		return
 	}
 	var updown uint8
 	switch {
-	case float32(MouseWorldPos.Y) >= a.Pos.Y+40:
-		updown = 0
-	case float32(MouseWorldPos.Y) >= a.Pos.Y+14 && float32(MouseWorldPos.Y) < a.Pos.Y+40:
-		updown = 1
-	case float32(MouseWorldPos.Y) < a.Pos.Y+14:
+	case float32(MouseWorldPos.Y) <= a.Pos.Y+14:
 		updown = 2
+	case float32(MouseWorldPos.Y) <= a.Pos.Y+32:
+		updown = 1
+	default:
+		updown = 0
 	}
 	if updown != a.Updown {
 		a.PrevUpdown = a.Updown

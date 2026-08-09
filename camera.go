@@ -23,6 +23,6 @@ func (c *Camera) Update(dt float32) {
 
 	c.ZoomSpeed = moveTo0(c.ZoomSpeed, 0.025*dt)
 
-	c.Zoom = clamp(c.Zoom, 1, 3)
+	c.Zoom = clamp(c.Zoom, 1, 4)
 	c.ZoomSpeed = clamp(c.ZoomSpeed, -2, 2)
 }
