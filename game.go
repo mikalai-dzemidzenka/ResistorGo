@@ -26,7 +26,7 @@ var (
 )
 
 func DrawGUI() {
-	rlg.Button(rl.Rectangle{0, 0, 200, 200}, "Press me")
+	LE.DrawGui()
 }
 
 type Vector2i struct {

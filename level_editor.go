@@ -3,7 +3,9 @@ package resistor
 import (
 	"cmp"
 	"encoding/json"
+	rlg "github.com/gen2brain/raylib-go/raygui"
 	rl "github.com/gen2brain/raylib-go/raylib"
+	"image/color"
 	"os"
 	"slices"
 	"strconv"
@@ -43,12 +45,14 @@ func (ll *LevelLayer) UnmarshalJSON(b []byte) error {
 }
 
 type LevelEditor struct {
-	obj            LevelObject // current object
-	layer          int         // current layer
-	gridW          int32
-	gridH          int32
-	objects        map[int]LevelLayer // layer - pos - object
-	objectsIndexed []LevelObject
+	isObjectsViewerEnabled bool
+	levelObjects           []LevelObject
+	obj                    LevelObject // current object
+	layer                  int         // current layer
+	gridW                  int32
+	gridH                  int32
+	objects                map[int]LevelLayer // layer - pos - object
+	objectsIndexed         []LevelObject
 }
 type LevelObject struct {
 	Resource      string        `json:"resource,omitempty"`
@@ -59,22 +63,13 @@ type LevelObject struct {
 }
 
 func NewLevelEditor(gridW, gridH int32) LevelEditor {
+	levelObjects := LoadLevelObjects()
 	return LevelEditor{
-		obj: LevelObject{
-			Resource: "resources/blocks/e1m1_wall1.png",
-			Layer:    0,
-			X:        0,
-			Y:        0,
-			CollisionRect: &rl.Rectangle{
-				X:      0,
-				Y:      86,
-				Width:  40,
-				Height: 20,
-			},
-		},
-		gridW:   gridW,
-		gridH:   gridH,
-		objects: make(map[int]LevelLayer),
+		obj:          levelObjects[0],
+		levelObjects: levelObjects,
+		gridW:        gridW,
+		gridH:        gridH,
+		objects:      make(map[int]LevelLayer),
 	}
 }
 
@@ -99,6 +94,9 @@ func (le *LevelEditor) updateCursor() {
 }
 
 func (le *LevelEditor) Update(dt float32) {
+	if rl.IsKeyPressed(rl.KeyTab) {
+		LE.OpenObjects()
+	}
 	le.updateCursor()
 
 	pos := Vector2i{
@@ -233,5 +231,29 @@ func (le *LevelEditor) SaveLevel(path string) {
 	if err != nil {
 		rl.TraceLog(rl.LogError, "failed to save level: save file: %s", err.Error())
 		return
+	}
+}
+
+func (le *LevelEditor) OpenObjects() {
+	le.isObjectsViewerEnabled = !le.isObjectsViewerEnabled
+}
+
+func (le *LevelEditor) DrawGui() {
+	if le.isObjectsViewerEnabled {
+		rlg.SetStyle(rlg.BUTTON, rlg.BASE_COLOR_NORMAL, int64(rl.ColorToInt(color.RGBA{0, 0, 0, 0})))
+		rlg.SetStyle(rlg.BUTTON, rlg.BASE_COLOR_FOCUSED, int64(rl.ColorToInt(color.RGBA{0, 0, 0, 25})))
+		for i, obj := range le.levelObjects {
+			tex := resources[obj.Resource]
+			rl.DrawTexturePro(tex,
+				rl.Rectangle{Width: float32(tex.Width), Height: float32(tex.Height)},
+				rl.Rectangle{X: float32((i * 100) + 25), Y: 35, Width: 100, Height: 100},
+				rl.Vector2{},
+				0,
+				rl.White,
+			)
+			if rlg.Button(rl.Rectangle{float32((i * 100) + 25), 35, 100, 100}, "") {
+				le.obj = obj
+			}
+		}
 	}
 }

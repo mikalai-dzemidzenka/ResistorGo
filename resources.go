@@ -8,6 +8,8 @@ var (
 
 func LoadTextures() {
 	load("resources/blocks/e1m1_wall1.png")
+	load("resources/blocks/e1m1_platform1.png")
+	load("resources/blocks/e1m1_door1.png")
 	load("resources/threefour/run.png")
 	load("resources/threefour/idle.png")
 	load("resources/threefour/updown.png")
@@ -17,6 +19,45 @@ func LoadTextures() {
 	load("resources/threefour/updown-1-2.png")
 	load("resources/threefour/updown-2-0.png")
 	load("resources/threefour/updown-2-1.png")
+}
+
+func LoadLevelObjects() []LevelObject {
+	return []LevelObject{
+		{
+			Resource: "resources/blocks/e1m1_wall1.png",
+			Layer:    0,
+			X:        0,
+			Y:        0,
+			CollisionRect: &rl.Rectangle{
+				X:      0,
+				Y:      86,
+				Width:  40,
+				Height: 20,
+			},
+		}, {
+			Resource: "resources/blocks/e1m1_door1.png",
+			Layer:    0,
+			X:        0,
+			Y:        0,
+			CollisionRect: &rl.Rectangle{
+				X:      0,
+				Y:      86,
+				Width:  40,
+				Height: 20,
+			},
+		}, {
+			Resource: "resources/blocks/e1m1_platform1.png",
+			Layer:    0,
+			X:        0,
+			Y:        0,
+			CollisionRect: &rl.Rectangle{
+				X:      0,
+				Y:      86,
+				Width:  40,
+				Height: 20,
+			},
+		},
+	}
 }
 
 func load(path string) {
