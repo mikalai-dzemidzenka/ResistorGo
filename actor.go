@@ -8,8 +8,8 @@ import (
 )
 
 const (
-	DefaultAcc      = 4
-	DefaultFriction = 0.7
+	DefaultAcc      = 1
+	DefaultFriction = 2
 	MaxSpeed        = 7
 	Gravity         = 0.3
 	MaxJumpSpeed    = -10
@@ -25,27 +25,27 @@ const (
 )
 
 type Actor struct {
-	Pos             rl.Vector2
-	Speed           rl.Vector2
-	Acc             float32
-	Friction        float32
-	Orientation     int8
-	State           ActorState
-	RewindData      [RewindFrames]ActorRewindFrame
-	CollisionBox    rl.Rectangle
-	OnGround        bool
-	IsPlayer        bool
-	Input           Input
-	PrevUpdown      uint8
-	Updown          uint8
-	AnimTime        float32
-	Anim            string
-	AnimFPS         uint8
-	AnimOffset      uint8
-	AnimTotalFrames uint8
-	AnimFrame       uint8
-	AnimOnce        bool
-	AnimFinished    bool
+	Pos               rl.Vector2
+	Speed             rl.Vector2
+	Acc               float32
+	Friction          float32
+	Orientation       int8
+	State             ActorState
+	RewindData        [RewindFrames]ActorRewindFrame
+	CollisionBox      rl.Rectangle
+	OnGround          bool
+	IsPlayer          bool
+	Input             Input
+	PrevUpdown        uint8
+	Updown            uint8
+	AnimGameTimeStart float32
+	Anim              string
+	AnimDuration      float32
+	AnimOffset        uint8
+	AnimTotalFrames   uint8
+	AnimFrame         uint8
+	AnimOnce          bool
+	AnimFinished      bool
 }
 type Input struct {
 	Left   bool
@@ -70,7 +70,7 @@ func NewActor(pos rl.Vector2, isPlayer bool) *Actor {
 		IsPlayer:        isPlayer,
 		Anim:            "resources/threefour/updown.png",
 		AnimTotalFrames: 1,
-		AnimFPS:         1,
+		AnimDuration:    1,
 		AnimFinished:    false,
 		PrevUpdown:      2,
 		Updown:          0,
@@ -127,7 +127,7 @@ func (a *Actor) Draw(dt float32) {
 		}, a.Pos, rl.White)
 	} else {
 		if a.AnimOnce {
-			a.AnimFinished = a.DrawAnimOnce(dt)
+			a.AnimFinished = a.DrawAnimOnce()
 		} else {
 			a.DrawAnim()
 		}
@@ -160,37 +160,37 @@ func (a *Actor) Draw(dt float32) {
 }
 
 func (a *Actor) SetAnimFrame(anim string, offset uint8) {
-	a.AnimTime = 0
+	a.AnimGameTimeStart = GameTimeSec
 	a.Anim = anim
-	a.AnimFPS = 1
+	a.AnimDuration = 1
 	a.AnimTotalFrames = 1
 	a.AnimOnce = false
 	a.AnimOffset = offset
 }
 
-func (a *Actor) SetAnim(anim string, fps uint8, totalFrames uint8, once bool) {
-	a.AnimTime = 0
+func (a *Actor) SetAnim(anim string, animDuration float32, totalFrames uint8, once bool) {
+	a.AnimGameTimeStart = GameTimeSec
 	a.Anim = anim
-	a.AnimFPS = fps
+	a.AnimDuration = animDuration
 	a.AnimTotalFrames = totalFrames
 	a.AnimOnce = once
 	a.AnimOffset = 0
 }
 
-func (a *Actor) DrawAnimOnce(dt float32) bool {
-	frameTimeMs := 1000 / float32(a.AnimFPS)
-	a.AnimTime += dt
-	a.AnimTime = clamp(a.AnimTime, 0, frameTimeMs*float32(a.AnimTotalFrames))
-	frame := int(a.AnimTime*1000/frameTimeMs) / int(a.AnimTotalFrames)
-	finished := frame >= int(a.AnimTotalFrames)
-	frame = clamp(frame, 0, int(a.AnimTotalFrames)-1)
+func (a *Actor) DrawAnimOnce() bool {
 	tex, ok := resources[a.Anim]
 	if !ok {
 		panic(a.Anim)
 	}
+
+	frameTimeMs := a.AnimDuration / float32(a.AnimTotalFrames)
+	frame := int((GameTimeSec - a.AnimGameTimeStart) / frameTimeMs)
+	finished := frame >= int(a.AnimTotalFrames)
+	frame = clamp(frame, 0, int(a.AnimTotalFrames)-1)
+
 	a.AnimFrame = uint8(frame)
 	rl.DrawTextureRec(tex, rl.Rectangle{
-		X:      float32(frame) * 48,
+		X:      float32(a.AnimFrame) * 48,
 		Y:      0,
 		Width:  48 * float32(a.Orientation),
 		Height: 48,
@@ -199,15 +199,19 @@ func (a *Actor) DrawAnimOnce(dt float32) bool {
 }
 
 func (a *Actor) DrawAnim() {
-	frameTimeMs := 1000 / float32(a.AnimFPS)
 	tex, ok := resources[a.Anim]
 	if !ok {
 		panic(a.Anim)
 	}
-	frame := float32(a.AnimOffset) + float32(int(GameTimeSec*1000/frameTimeMs)%int(a.AnimTotalFrames+1))
-	a.AnimFrame = uint8(frame)
+	frameTimeMs := a.AnimDuration / float32(a.AnimTotalFrames)
+	if GameTimeSec-a.AnimGameTimeStart > a.AnimDuration {
+		a.AnimGameTimeStart += a.AnimDuration
+	}
+	frame := int((GameTimeSec - a.AnimGameTimeStart) / frameTimeMs)
+	frame = clamp(frame, 0, int(a.AnimTotalFrames)-1)
+	a.AnimFrame = a.AnimOffset + uint8(frame)
 	rl.DrawTextureRec(tex, rl.Rectangle{
-		X:      frame * 48,
+		X:      float32(a.AnimFrame) * 48,
 		Y:      0,
 		Width:  48 * float32(a.Orientation),
 		Height: 48,
@@ -243,11 +247,9 @@ func (a *Actor) updateHorSpeed(dt float32) {
 		}
 	} else {
 		a.State = StateRun
-		var fps uint8 = 24
-		if absSpeed < MaxSpeed {
-			fps = 12
+		if a.Anim != "resources/threefour/run.png" {
+			a.SetAnim("resources/threefour/run.png", 0.4, 10, false)
 		}
-		a.SetAnim("resources/threefour/run.png", fps, 8, false)
 	}
 }
 
@@ -331,7 +333,7 @@ func (a *Actor) updateUpdown(dt float32) {
 	if updown != a.Updown {
 		a.PrevUpdown = a.Updown
 		anim := fmt.Sprintf("resources/threefour/updown-%d-%d.png", a.PrevUpdown, updown)
-		a.SetAnim(anim, 8, 4, true)
+		a.SetAnim(anim, 0.1, 4, true)
 	} else if a.AnimFinished && strings.Contains(a.Anim, "updown-") {
 		a.SetAnimFrame("resources/threefour/updown.png", a.Updown)
 	}
@@ -343,11 +345,11 @@ func (a *Actor) updateAttack() {
 		a.State = StateAttack
 		switch a.Updown {
 		case 0:
-			a.SetAnim("resources/threefour/attack-low.png", 4, 8, true)
+			a.SetAnim("resources/threefour/attack-low.png", 0.4, 8, true)
 		case 1:
-			a.SetAnim("resources/threefour/attack-mid.png", 4, 8, true)
+			a.SetAnim("resources/threefour/attack-mid.png", 0.4, 8, true)
 		case 2:
-			a.SetAnim("resources/threefour/attack-high.png", 4, 8, true)
+			a.SetAnim("resources/threefour/attack-high.png", 0.4, 8, true)
 		}
 		return
 	}

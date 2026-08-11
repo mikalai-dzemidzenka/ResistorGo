@@ -17,6 +17,7 @@ var (
 	Debug         = true
 	GameTimeSec   float32
 	PhysicsTime   float32
+	Ticks         int
 	FixedTimeStep float32 = 1.0 / 30.0
 	MouseWorldPos Vector2i
 	MousePos      rl.Vector2
@@ -98,6 +99,7 @@ func Game() {
 
 		for PhysicsTime < GameTimeSec {
 			PhysicsTime += FixedTimeStep
+			Ticks++
 			Pl.UpdatePhysics()
 			enemy.UpdatePhysics()
 		}
