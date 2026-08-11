@@ -3,6 +3,7 @@ package resistor
 import (
 	"fmt"
 	rl "github.com/gen2brain/raylib-go/raylib"
+	"math/rand"
 	"strings"
 )
 
@@ -18,8 +19,9 @@ const (
 type ActorState uint8
 
 const (
-	Idle ActorState = iota
-	Run
+	StateIdle ActorState = iota
+	StateRun
+	StateAttack
 )
 
 type Actor struct {
@@ -57,6 +59,7 @@ func NewActor(pos rl.Vector2, isPlayer bool) *Actor {
 		Speed:       rl.Vector2{},
 		Acc:         DefaultAcc,
 		Friction:    DefaultFriction,
+		State:       StateIdle,
 		Orientation: 1,
 		CollisionBox: rl.Rectangle{
 			X:      11,
@@ -89,6 +92,7 @@ func (a *Actor) Update(dt float32) {
 	a.updateVertSpeed(dt)
 	a.updateUpdown(dt)
 	a.checkCollision()
+	a.updateAttack()
 
 	a.Pos.X += a.Speed.X
 	a.Pos.Y += a.Speed.Y
@@ -129,28 +133,30 @@ func (a *Actor) Draw(dt float32) {
 		}
 	}
 
-	rl.DrawRectangleLinesEx(rl.Rectangle{
-		X:      a.Pos.X,
-		Y:      a.Pos.Y,
-		Width:  48,
-		Height: 48,
-	}, 1, rl.Blue)
-	rl.DrawRectangleLinesEx(rl.Rectangle{
-		X:      a.Pos.X + a.CollisionBox.X,
-		Y:      a.Pos.Y + a.CollisionBox.Y,
-		Width:  a.CollisionBox.Width,
-		Height: a.CollisionBox.Height,
-	}, 1, rl.SkyBlue)
-	if a.IsPlayer {
-		rl.DrawText(fmt.Sprintf("RewindIndex: %d", RewindIdx), int32(a.Pos.X), int32(a.Pos.Y), 2, rl.White)
-		rl.DrawText(fmt.Sprintf("RewindLeft: %d", RewindLeft), int32(a.Pos.X), int32(a.Pos.Y)-8, 2, rl.White)
-		rl.DrawText(fmt.Sprintf("Mouse X, Y: %d %d", MouseWorldPos.X, MouseWorldPos.Y), int32(a.Pos.X), int32(a.Pos.Y)-16, 2, rl.White)
-		rl.DrawText(fmt.Sprintf("PrevUpdown, Updown: %d %d", a.PrevUpdown, a.Updown), int32(a.Pos.X), int32(a.Pos.Y)-24, 2, rl.White)
-		rl.DrawText(fmt.Sprintf("Frame: %d", a.AnimFrame), int32(a.Pos.X), int32(a.Pos.Y)-32, 2, rl.White)
-
+	if Debug {
+		rl.DrawRectangleLinesEx(rl.Rectangle{
+			X:      a.Pos.X,
+			Y:      a.Pos.Y,
+			Width:  48,
+			Height: 48,
+		}, 1, rl.Blue)
+		rl.DrawRectangleLinesEx(rl.Rectangle{
+			X:      a.Pos.X + a.CollisionBox.X,
+			Y:      a.Pos.Y + a.CollisionBox.Y,
+			Width:  a.CollisionBox.Width,
+			Height: a.CollisionBox.Height,
+		}, 1, rl.SkyBlue)
+		if a.IsPlayer {
+			rl.DrawText(fmt.Sprintf("RewindIndex: %d", RewindIdx), int32(a.Pos.X), int32(a.Pos.Y), 2, rl.White)
+			rl.DrawText(fmt.Sprintf("RewindLeft: %d", RewindLeft), int32(a.Pos.X), int32(a.Pos.Y)-8, 2, rl.White)
+			rl.DrawText(fmt.Sprintf("Mouse X, Y: %d %d", MouseWorldPos.X, MouseWorldPos.Y), int32(a.Pos.X), int32(a.Pos.Y)-16, 2, rl.White)
+			rl.DrawText(fmt.Sprintf("PrevUpdown, Updown: %d %d", a.PrevUpdown, a.Updown), int32(a.Pos.X), int32(a.Pos.Y)-24, 2, rl.White)
+			rl.DrawText(fmt.Sprintf("Frame, Finished: %d %t", a.AnimFrame, a.AnimFinished), int32(a.Pos.X), int32(a.Pos.Y)-32, 2, rl.White)
+		}
+		px := a.Pos.X + a.CollisionBox.X + a.CollisionBox.Width/2
+		rl.DrawPixel(int32(px), int32(a.Pos.Y+a.CollisionBox.Y+a.CollisionBox.Height), rl.Red)
 	}
-	px := a.Pos.X + a.CollisionBox.X + a.CollisionBox.Width/2
-	rl.DrawPixel(int32(px), int32(a.Pos.Y+a.CollisionBox.Y+a.CollisionBox.Height), rl.Red)
+
 }
 
 func (a *Actor) SetAnimFrame(anim string, offset uint8) {
@@ -198,7 +204,7 @@ func (a *Actor) DrawAnim() {
 	if !ok {
 		panic(a.Anim)
 	}
-	frame := float32(a.AnimOffset) + float32(int(GameTimeSec*1000/frameTimeMs)%int(a.AnimTotalFrames))
+	frame := float32(a.AnimOffset) + float32(int(GameTimeSec*1000/frameTimeMs)%int(a.AnimTotalFrames+1))
 	a.AnimFrame = uint8(frame)
 	rl.DrawTextureRec(tex, rl.Rectangle{
 		X:      frame * 48,
@@ -209,6 +215,9 @@ func (a *Actor) DrawAnim() {
 }
 
 func (a *Actor) updateHorSpeed(dt float32) {
+	if a.State != StateIdle && a.State != StateRun {
+		return
+	}
 	var movePressed bool
 	if a.Input.Right {
 		movePressed = true
@@ -227,13 +236,13 @@ func (a *Actor) updateHorSpeed(dt float32) {
 
 	absSpeed := abs(a.Speed.X)
 	if absSpeed < 0.001 {
-		a.State = Idle
+		a.State = StateIdle
 		a.Speed.X = 0
 		if !strings.Contains(a.Anim, "updown") {
 			a.SetAnimFrame("resources/threefour/updown.png", a.Updown)
 		}
 	} else {
-		a.State = Run
+		a.State = StateRun
 		var fps uint8 = 24
 		if absSpeed < MaxSpeed {
 			fps = 12
@@ -274,12 +283,22 @@ func (a *Actor) updateBotInput() {
 	if Pl.Pos.X < a.Pos.X {
 		if a.Pos.X-Pl.Pos.X > near {
 			a.Input.Right = true
+		} else {
+			if rand.Int()%61 == 3 {
+				a.Input.Attack = true
+			}
 		}
+		a.Orientation = -1
 	}
 	if Pl.Pos.X > a.Pos.X {
 		if Pl.Pos.X-a.Pos.X > near {
 			a.Input.Left = true
+		} else {
+			if rand.Int()%61 == 3 {
+				a.Input.Attack = true
+			}
 		}
+		a.Orientation = 1
 	}
 }
 
@@ -291,10 +310,13 @@ func (a *Actor) updatePlayerInput() {
 	if rl.IsKeyDown(rl.KeyD) {
 		a.Input.Left = true
 	}
+	if rl.IsMouseButtonPressed(rl.MouseButtonLeft) {
+		a.Input.Attack = true
+	}
 }
 
 func (a *Actor) updateUpdown(dt float32) {
-	if a.State != Idle || !a.AnimFinished && strings.Contains(a.Anim, "updown-") {
+	if a.State != StateIdle || !a.AnimFinished && strings.Contains(a.Anim, "updown-") {
 		return
 	}
 	var updown uint8
@@ -314,4 +336,27 @@ func (a *Actor) updateUpdown(dt float32) {
 		a.SetAnimFrame("resources/threefour/updown.png", a.Updown)
 	}
 	a.Updown = updown
+}
+
+func (a *Actor) updateAttack() {
+	if a.Input.Attack && a.State != StateAttack {
+		a.State = StateAttack
+		switch a.Updown {
+		case 0:
+			a.SetAnim("resources/threefour/attack-low.png", 4, 8, true)
+		case 1:
+			a.SetAnim("resources/threefour/attack-mid.png", 4, 8, true)
+		case 2:
+			a.SetAnim("resources/threefour/attack-high.png", 4, 8, true)
+		}
+		return
+	}
+	if a.State != StateAttack {
+		return
+	}
+
+	if a.AnimFinished {
+		a.State = StateIdle
+		return
+	}
 }

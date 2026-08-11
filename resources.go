@@ -19,6 +19,9 @@ func LoadTextures() {
 	load("resources/threefour/updown-1-2.png")
 	load("resources/threefour/updown-2-0.png")
 	load("resources/threefour/updown-2-1.png")
+	load("resources/threefour/attack-high.png")
+	load("resources/threefour/attack-mid.png")
+	load("resources/threefour/attack-low.png")
 }
 
 func LoadLevelObjects() []LevelObject {

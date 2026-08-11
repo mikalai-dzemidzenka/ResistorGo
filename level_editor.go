@@ -152,20 +152,22 @@ func (le *LevelEditor) Draw() {
 	for _, obj := range le.objectsIndexed {
 		rl.DrawTexture(resources[obj.Resource], obj.X, obj.Y, rl.White)
 	}
-	for _, obj := range le.objectsIndexed {
-		if obj.CollisionRect != nil {
-			rl.DrawRectangleLinesEx(rl.Rectangle{
-				X:      float32(obj.X) + obj.CollisionRect.X,
-				Y:      float32(obj.Y) + obj.CollisionRect.Y,
-				Width:  obj.CollisionRect.Width,
-				Height: obj.CollisionRect.Height,
-			}, 1, rl.SkyBlue)
+	if Debug {
+		for _, obj := range le.objectsIndexed {
+			if obj.CollisionRect != nil {
+				rl.DrawRectangleLinesEx(rl.Rectangle{
+					X:      float32(obj.X) + obj.CollisionRect.X,
+					Y:      float32(obj.Y) + obj.CollisionRect.Y,
+					Width:  obj.CollisionRect.Width,
+					Height: obj.CollisionRect.Height,
+				}, 1, rl.SkyBlue)
+			}
 		}
+		le.DrawCursor()
+
+		le.DrawGrid()
 	}
 
-	le.DrawCursor()
-
-	le.DrawGrid()
 }
 
 func (le *LevelEditor) DrawCursor() {

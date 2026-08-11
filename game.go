@@ -25,10 +25,6 @@ var (
 	Pl            *Actor
 )
 
-func DrawGUI() {
-	LE.DrawGui()
-}
-
 type Vector2i struct {
 	X int32
 	Y int32
@@ -109,7 +105,9 @@ func Game() {
 		dt = (PhysicsTime - GameTimeSec) / FixedTimeStep
 		Pl.Update(dt)
 		enemy.Update(dt)
-		LE.Update(dt)
+		if Debug {
+			LE.Update(dt)
+		}
 		UpdateRewind(dt)
 
 		rl.BeginDrawing()
@@ -125,7 +123,9 @@ func Game() {
 			}
 			rl.EndMode2D()
 
-			DrawGUI()
+			if Debug {
+				LE.DrawGui()
+			}
 
 			if Debug {
 				fps := strconv.Itoa(int(rl.GetFPS()))
