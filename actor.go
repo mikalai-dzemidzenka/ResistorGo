@@ -11,6 +11,7 @@ const (
 	DefaultAcc      = 1
 	DefaultFriction = 2
 	MaxSpeed        = 7
+	MaxAttackSpeed  = 2
 	Gravity         = 0.3
 	MaxJumpSpeed    = -10
 	MaxFallSpeed    = 4
@@ -105,31 +106,46 @@ func (a *Actor) Update(dt float32) {
 		a.updateBotInput()
 	}
 	a.checkCollision()
+	a.updateHorSpeed(dt)
+	a.updateVertSpeed(dt)
 
 	switch a.State {
 	case StateIdle:
 		a.updateUpdown()
-		a.updateHorSpeed(dt)
-		a.updateVertSpeed(dt)
+		absSpeed := abs(a.Speed.X)
+		if absSpeed < 0.001 {
+			a.enterIdleState()
+		} else {
+			a.enterRunState()
+		}
 		if a.Input.Attack {
 			a.enterAttackState()
 		}
 	case StateRun:
-		a.updateHorSpeed(dt)
-		a.updateVertSpeed(dt)
+		absSpeed := abs(a.Speed.X)
+		if absSpeed < 0.001 {
+			a.enterIdleState()
+		} else {
+			a.enterRunState()
+		}
 		if a.Input.Attack {
 			a.enterAttackState()
 		}
 	case StateAttack:
+		a.Speed.X = clamp(a.Speed.X, -MaxAttackSpeed, MaxAttackSpeed)
 		a.updateAttack()
 	case StateAttacked:
+		a.Speed.X = clamp(a.Speed.X, -MaxAttackSpeed, MaxAttackSpeed)
 		a.updateAttacked()
 	case StateBlock:
+		a.Speed.X = clamp(a.Speed.X, -MaxAttackSpeed, MaxAttackSpeed)
 		a.updateBlock()
 	}
 
 	a.Pos.X += a.Speed.X
 	a.Pos.Y += a.Speed.Y
+	a.Pos.X = float32(int(a.Pos.X))
+	a.Pos.Y = float32(int(a.Pos.Y))
 }
 
 func (a *Actor) updateRewind() {
@@ -275,9 +291,6 @@ func (a *Actor) DrawAnim() {
 }
 
 func (a *Actor) updateHorSpeed(dt float32) {
-	if a.State != StateIdle && a.State != StateRun {
-		return
-	}
 	var movePressed bool
 	if a.Input.Right {
 		movePressed = true
@@ -293,13 +306,6 @@ func (a *Actor) updateHorSpeed(dt float32) {
 		a.Speed.X = moveTo0(a.Speed.X, a.Friction*dt) // friction
 	}
 	a.Speed.X = clamp(a.Speed.X, -MaxSpeed, MaxSpeed)
-
-	absSpeed := abs(a.Speed.X)
-	if absSpeed < 0.001 {
-		a.enterIdleState()
-	} else {
-		a.enterRunState()
-	}
 }
 
 func (a *Actor) updateVertSpeed(dt float32) {
