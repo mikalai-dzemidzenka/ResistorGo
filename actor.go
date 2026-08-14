@@ -72,13 +72,13 @@ func NewActor(pos rl.Vector2, isPlayer bool) *Actor {
 			Height: 42,
 		},
 		AttackBoxHigh: rl.Rectangle{
-			12, 5, 24, 6,
+			0, 5, 24, 6,
 		},
 		AttackBoxMid: rl.Rectangle{
-			12, 14, 24, 6,
+			0, 14, 24, 6,
 		},
 		AttackBoxLow: rl.Rectangle{
-			12, 24, 24, 6,
+			0, 24, 24, 6,
 		},
 		IsPlayer:        isPlayer,
 		Anim:            "resources/threefour/updown.png",
@@ -176,19 +176,19 @@ func (a *Actor) Draw() {
 			Height: a.CollisionBox.Height,
 		}, 1, rl.SkyBlue)
 		rl.DrawRectangleLinesEx(rl.Rectangle{
-			X:      12 + a.Pos.X + a.AttackBoxHigh.X*float32(a.Orientation),
+			X:      a.Pos.X + a.AttackBoxHigh.X + 12*float32(a.Orientation+1),
 			Y:      a.Pos.Y + a.AttackBoxHigh.Y,
 			Width:  a.AttackBoxHigh.Width,
 			Height: a.AttackBoxHigh.Height,
 		}, 1, rl.Red)
 		rl.DrawRectangleLinesEx(rl.Rectangle{
-			X:      12 + a.Pos.X + a.AttackBoxMid.X*float32(a.Orientation),
+			X:      a.Pos.X + a.AttackBoxMid.X + 12*float32(a.Orientation+1),
 			Y:      a.Pos.Y + a.AttackBoxMid.Y,
 			Width:  a.AttackBoxMid.Width,
 			Height: a.AttackBoxMid.Height,
 		}, 1, rl.Red)
 		rl.DrawRectangleLinesEx(rl.Rectangle{
-			X:      12 + a.Pos.X + a.AttackBoxLow.X*float32(a.Orientation),
+			X:      a.Pos.X + a.AttackBoxLow.X + 12*float32(a.Orientation+1),
 			Y:      a.Pos.Y + a.AttackBoxLow.Y,
 			Width:  a.AttackBoxLow.Width,
 			Height: a.AttackBoxLow.Height,
@@ -202,6 +202,7 @@ func (a *Actor) Draw() {
 		}
 		px := a.Pos.X + a.CollisionBox.X + a.CollisionBox.Width/2
 		rl.DrawPixel(int32(px), int32(a.Pos.Y+a.CollisionBox.Y+a.CollisionBox.Height), rl.Red)
+		rl.DrawText(fmt.Sprintf("State: %d", a.State), int32(a.Pos.X), int32(a.Pos.Y+a.CollisionBox.Y+a.CollisionBox.Height), 2, rl.White)
 	}
 
 }
@@ -394,7 +395,7 @@ func (a *Actor) enterAttackState() {
 
 func (a *Actor) enterAttackedState() {
 	a.State = StateAttacked
-	a.SetAnim("resources/threefour/hit-top.png", 0.5, 4, true)
+	a.SetAnim("resources/threefour/hit-top.png", 0.35, 4, true)
 }
 
 func (a *Actor) enterIdleState() {
@@ -429,39 +430,41 @@ func (a *Actor) updateAttack() {
 	switch a.Updown {
 	case 2:
 		r1 = rl.Rectangle{
-			X:      12 + a.Pos.X + a.AttackBoxHigh.X*float32(a.Orientation),
+			X:      a.Pos.X + a.AttackBoxHigh.X + 12*float32(a.Orientation+1),
 			Y:      a.Pos.Y + a.AttackBoxHigh.Y,
 			Width:  a.AttackBoxHigh.Width,
 			Height: a.AttackBoxHigh.Height,
 		}
 	case 1:
 		r1 = rl.Rectangle{
-			X:      12 + a.Pos.X + a.AttackBoxMid.X*float32(a.Orientation),
+			X:      a.Pos.X + a.AttackBoxMid.X + 12*float32(a.Orientation+1),
 			Y:      a.Pos.Y + a.AttackBoxMid.Y,
 			Width:  a.AttackBoxMid.Width,
 			Height: a.AttackBoxMid.Height,
 		}
 	case 0:
 		r1 = rl.Rectangle{
-			X:      12 + a.Pos.X + a.AttackBoxLow.X*float32(a.Orientation),
+			X:      a.Pos.X + a.AttackBoxLow.X + 12*float32(a.Orientation+1),
 			Y:      a.Pos.Y + a.AttackBoxLow.Y,
 			Width:  a.AttackBoxLow.Width,
 			Height: a.AttackBoxLow.Height,
 		}
 	}
 
-	for _, actor := range Actors {
-		if a == actor {
-			continue
-		}
-		r2 := rl.Rectangle{
-			X:      actor.Pos.X + a.CollisionBox.X,
-			Y:      actor.Pos.Y + a.CollisionBox.Y,
-			Width:  a.CollisionBox.Width,
-			Height: a.CollisionBox.Height,
-		}
-		if aabb(r1, r2) && actor.State != StateAttacked {
-			actor.enterAttackedState()
+	if a.AnimFrame > 4 {
+		for _, actor := range Actors {
+			if a == actor {
+				continue
+			}
+			r2 := rl.Rectangle{
+				X:      actor.Pos.X + actor.CollisionBox.X,
+				Y:      actor.Pos.Y + actor.CollisionBox.Y,
+				Width:  actor.CollisionBox.Width,
+				Height: actor.CollisionBox.Height,
+			}
+			if aabb(r1, r2) && actor.State != StateAttacked {
+				actor.enterAttackedState()
+			}
 		}
 	}
 
