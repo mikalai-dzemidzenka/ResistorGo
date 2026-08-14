@@ -22,6 +22,7 @@ const (
 	StateIdle ActorState = iota
 	StateRun
 	StateAttack
+	StateAttacked
 )
 
 type Actor struct {
@@ -33,6 +34,9 @@ type Actor struct {
 	State             ActorState
 	RewindData        [RewindFrames]ActorRewindFrame
 	CollisionBox      rl.Rectangle
+	AttackBoxHigh     rl.Rectangle
+	AttackBoxMid      rl.Rectangle
+	AttackBoxLow      rl.Rectangle
 	OnGround          bool
 	IsPlayer          bool
 	Input             Input
@@ -67,6 +71,15 @@ func NewActor(pos rl.Vector2, isPlayer bool) *Actor {
 			Width:  17,
 			Height: 42,
 		},
+		AttackBoxHigh: rl.Rectangle{
+			12, 5, 24, 6,
+		},
+		AttackBoxMid: rl.Rectangle{
+			12, 14, 24, 6,
+		},
+		AttackBoxLow: rl.Rectangle{
+			12, 24, 24, 6,
+		},
 		IsPlayer:        isPlayer,
 		Anim:            "resources/threefour/updown.png",
 		AnimTotalFrames: 1,
@@ -88,11 +101,27 @@ func (a *Actor) Update(dt float32) {
 	} else {
 		a.updateBotInput()
 	}
-	a.updateHorSpeed(dt)
-	a.updateVertSpeed(dt)
-	a.updateUpdown(dt)
 	a.checkCollision()
-	a.updateAttack()
+
+	switch a.State {
+	case StateIdle:
+		a.updateUpdown(dt)
+		a.updateHorSpeed(dt)
+		a.updateVertSpeed(dt)
+		if a.Input.Attack {
+			a.enterAttackState()
+		}
+	case StateRun:
+		a.updateHorSpeed(dt)
+		a.updateVertSpeed(dt)
+		if a.Input.Attack {
+			a.enterAttackState()
+		}
+	case StateAttack:
+		a.updateAttack()
+	case StateAttacked:
+		a.updateAttacked()
+	}
 
 	a.Pos.X += a.Speed.X
 	a.Pos.Y += a.Speed.Y
@@ -116,7 +145,7 @@ func (a *Actor) updateRewind() {
 }
 func (a *Actor) UpdatePhysics() {}
 
-func (a *Actor) Draw(dt float32) {
+func (a *Actor) Draw() {
 	if IsRewinding {
 		data := a.RewindData[RewindIdx%RewindFrames]
 		rl.DrawTextureRec(resources[data.Anim], rl.Rectangle{
@@ -146,6 +175,24 @@ func (a *Actor) Draw(dt float32) {
 			Width:  a.CollisionBox.Width,
 			Height: a.CollisionBox.Height,
 		}, 1, rl.SkyBlue)
+		rl.DrawRectangleLinesEx(rl.Rectangle{
+			X:      12 + a.Pos.X + a.AttackBoxHigh.X*float32(a.Orientation),
+			Y:      a.Pos.Y + a.AttackBoxHigh.Y,
+			Width:  a.AttackBoxHigh.Width,
+			Height: a.AttackBoxHigh.Height,
+		}, 1, rl.Red)
+		rl.DrawRectangleLinesEx(rl.Rectangle{
+			X:      12 + a.Pos.X + a.AttackBoxMid.X*float32(a.Orientation),
+			Y:      a.Pos.Y + a.AttackBoxMid.Y,
+			Width:  a.AttackBoxMid.Width,
+			Height: a.AttackBoxMid.Height,
+		}, 1, rl.Red)
+		rl.DrawRectangleLinesEx(rl.Rectangle{
+			X:      12 + a.Pos.X + a.AttackBoxLow.X*float32(a.Orientation),
+			Y:      a.Pos.Y + a.AttackBoxLow.Y,
+			Width:  a.AttackBoxLow.Width,
+			Height: a.AttackBoxLow.Height,
+		}, 1, rl.Red)
 		if a.IsPlayer {
 			rl.DrawText(fmt.Sprintf("RewindIndex: %d", RewindIdx), int32(a.Pos.X), int32(a.Pos.Y), 2, rl.White)
 			rl.DrawText(fmt.Sprintf("RewindLeft: %d", RewindLeft), int32(a.Pos.X), int32(a.Pos.Y)-8, 2, rl.White)
@@ -240,16 +287,9 @@ func (a *Actor) updateHorSpeed(dt float32) {
 
 	absSpeed := abs(a.Speed.X)
 	if absSpeed < 0.001 {
-		a.State = StateIdle
-		a.Speed.X = 0
-		if !strings.Contains(a.Anim, "updown") {
-			a.SetAnimFrame("resources/threefour/updown.png", a.Updown)
-		}
+		a.enterIdleState()
 	} else {
-		a.State = StateRun
-		if a.Anim != "resources/threefour/run.png" {
-			a.SetAnim("resources/threefour/run.png", 0.4, 10, false)
-		}
+		a.enterRunState()
 	}
 }
 
@@ -340,21 +380,89 @@ func (a *Actor) updateUpdown(dt float32) {
 	a.Updown = updown
 }
 
-func (a *Actor) updateAttack() {
-	if a.Input.Attack && a.State != StateAttack {
-		a.State = StateAttack
-		switch a.Updown {
-		case 0:
-			a.SetAnim("resources/threefour/attack-low.png", 0.4, 8, true)
-		case 1:
-			a.SetAnim("resources/threefour/attack-mid.png", 0.4, 8, true)
-		case 2:
-			a.SetAnim("resources/threefour/attack-high.png", 0.4, 8, true)
-		}
+func (a *Actor) enterAttackState() {
+	a.State = StateAttack
+	switch a.Updown {
+	case 0:
+		a.SetAnim("resources/threefour/attack-low.png", 0.4, 8, true)
+	case 1:
+		a.SetAnim("resources/threefour/attack-mid.png", 0.4, 8, true)
+	case 2:
+		a.SetAnim("resources/threefour/attack-high.png", 0.4, 8, true)
+	}
+}
+
+func (a *Actor) enterAttackedState() {
+	a.State = StateAttacked
+	a.SetAnim("resources/threefour/hit-top.png", 0.5, 4, true)
+}
+
+func (a *Actor) enterIdleState() {
+	a.State = StateIdle
+	a.Speed.X = 0
+	if !strings.Contains(a.Anim, "updown") {
+		a.SetAnimFrame("resources/threefour/updown.png", a.Updown)
+	}
+}
+
+func (a *Actor) enterRunState() {
+	a.State = StateRun
+	if a.Anim != "resources/threefour/run.png" {
+		a.SetAnim("resources/threefour/run.png", 0.4, 10, false)
+	}
+}
+
+func (a *Actor) updateAttacked() {
+	if a.State != StateAttacked {
 		return
 	}
+	if a.AnimFinished {
+		a.enterIdleState()
+	}
+}
+
+func (a *Actor) updateAttack() {
 	if a.State != StateAttack {
 		return
+	}
+	var r1 rl.Rectangle
+	switch a.Updown {
+	case 2:
+		r1 = rl.Rectangle{
+			X:      12 + a.Pos.X + a.AttackBoxHigh.X*float32(a.Orientation),
+			Y:      a.Pos.Y + a.AttackBoxHigh.Y,
+			Width:  a.AttackBoxHigh.Width,
+			Height: a.AttackBoxHigh.Height,
+		}
+	case 1:
+		r1 = rl.Rectangle{
+			X:      12 + a.Pos.X + a.AttackBoxMid.X*float32(a.Orientation),
+			Y:      a.Pos.Y + a.AttackBoxMid.Y,
+			Width:  a.AttackBoxMid.Width,
+			Height: a.AttackBoxMid.Height,
+		}
+	case 0:
+		r1 = rl.Rectangle{
+			X:      12 + a.Pos.X + a.AttackBoxLow.X*float32(a.Orientation),
+			Y:      a.Pos.Y + a.AttackBoxLow.Y,
+			Width:  a.AttackBoxLow.Width,
+			Height: a.AttackBoxLow.Height,
+		}
+	}
+
+	for _, actor := range Actors {
+		if a == actor {
+			continue
+		}
+		r2 := rl.Rectangle{
+			X:      actor.Pos.X + a.CollisionBox.X,
+			Y:      actor.Pos.Y + a.CollisionBox.Y,
+			Width:  a.CollisionBox.Width,
+			Height: a.CollisionBox.Height,
+		}
+		if aabb(r1, r2) && actor.State != StateAttacked {
+			actor.enterAttackedState()
+		}
 	}
 
 	if a.AnimFinished {

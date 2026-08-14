@@ -103,13 +103,13 @@ func (le *LevelEditor) Update(dt float32) {
 		X: le.obj.X,
 		Y: le.obj.Y,
 	}
-	if rl.IsMouseButtonPressed(rl.MouseButtonRight) {
+	if rl.IsMouseButtonPressed(rl.MouseButtonRight) && !le.isObjectsViewerEnabled {
 		if le.objects[le.layer] != nil {
 			delete(le.objects[le.layer], pos)
 		}
 
 		le.buildIndex()
-	} else if rl.IsMouseButtonPressed(rl.MouseButtonLeft) {
+	} else if rl.IsMouseButtonPressed(rl.MouseButtonLeft) && !le.isObjectsViewerEnabled {
 		if le.objects[le.layer] == nil {
 			le.objects[le.layer] = make(map[Vector2i]LevelObject)
 		}

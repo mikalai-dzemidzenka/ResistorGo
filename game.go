@@ -4,6 +4,7 @@ import (
 	"fmt"
 	rlg "github.com/gen2brain/raylib-go/raygui"
 	rl "github.com/gen2brain/raylib-go/raylib"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -24,6 +25,7 @@ var (
 	Cam           Camera
 	LE            LevelEditor
 	Pl            *Actor
+	Actors        []*Actor
 )
 
 type Vector2i struct {
@@ -83,6 +85,8 @@ func Game() {
 	LE = NewLevelEditor(39, 83)
 	LE.LoadLevel("level_1.json")
 
+	Actors = []*Actor{Pl, enemy}
+
 	for !rl.WindowShouldClose() {
 		if rl.IsKeyPressed(rl.KeyGrave) {
 			Debug = !Debug
@@ -120,8 +124,13 @@ func Game() {
 				LE.Draw()
 				Cam.SetTarget(Pl.Pos)
 				Cam.Update(dt)
-				Pl.Draw(dt)
-				enemy.Draw(dt)
+
+				slices.SortFunc(Actors, func(a, b *Actor) int {
+					return int(b.Pos.X - a.Pos.X)
+				})
+				for _, a := range Actors {
+					a.Draw()
+				}
 			}
 			rl.EndMode2D()
 
