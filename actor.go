@@ -23,6 +23,7 @@ const (
 	StateRun
 	StateAttack
 	StateAttacked
+	StateBlock
 )
 
 type Actor struct {
@@ -42,14 +43,16 @@ type Actor struct {
 	Input             Input
 	PrevUpdown        uint8
 	Updown            uint8
-	AnimGameTimeStart float32
+	AnimPhysTimeStart float64
 	Anim              string
-	AnimDuration      float32
+	AnimDuration      float64
 	AnimOffset        uint8
 	AnimTotalFrames   uint8
 	AnimFrame         uint8
 	AnimOnce          bool
 	AnimFinished      bool
+	Attacker          *Actor
+	AttackQueued      bool
 }
 type Input struct {
 	Left   bool
@@ -66,9 +69,9 @@ func NewActor(pos rl.Vector2, isPlayer bool) *Actor {
 		State:       StateIdle,
 		Orientation: 1,
 		CollisionBox: rl.Rectangle{
-			X:      11,
+			X:      14,
 			Y:      6,
-			Width:  17,
+			Width:  14,
 			Height: 42,
 		},
 		AttackBoxHigh: rl.Rectangle{
@@ -105,7 +108,7 @@ func (a *Actor) Update(dt float32) {
 
 	switch a.State {
 	case StateIdle:
-		a.updateUpdown(dt)
+		a.updateUpdown()
 		a.updateHorSpeed(dt)
 		a.updateVertSpeed(dt)
 		if a.Input.Attack {
@@ -121,6 +124,8 @@ func (a *Actor) Update(dt float32) {
 		a.updateAttack()
 	case StateAttacked:
 		a.updateAttacked()
+	case StateBlock:
+		a.updateBlock()
 	}
 
 	a.Pos.X += a.Speed.X
@@ -208,7 +213,7 @@ func (a *Actor) Draw() {
 }
 
 func (a *Actor) SetAnimFrame(anim string, offset uint8) {
-	a.AnimGameTimeStart = GameTimeSec
+	a.AnimPhysTimeStart = PhysicsTime
 	a.Anim = anim
 	a.AnimDuration = 1
 	a.AnimTotalFrames = 1
@@ -217,8 +222,8 @@ func (a *Actor) SetAnimFrame(anim string, offset uint8) {
 	a.AnimOffset = offset
 }
 
-func (a *Actor) SetAnim(anim string, animDuration float32, totalFrames uint8, once bool) {
-	a.AnimGameTimeStart = GameTimeSec
+func (a *Actor) SetAnim(anim string, animDuration float64, totalFrames uint8, once bool) {
+	a.AnimPhysTimeStart = PhysicsTime
 	a.Anim = anim
 	a.AnimFinished = false
 	a.AnimDuration = animDuration
@@ -233,8 +238,9 @@ func (a *Actor) DrawAnimOnce() bool {
 		panic(a.Anim)
 	}
 
-	frameTimeMs := a.AnimDuration / float32(a.AnimTotalFrames)
-	frame := int((GameTimeSec - a.AnimGameTimeStart) / frameTimeMs)
+	frameTimeMs := a.AnimDuration / float64(a.AnimTotalFrames)
+	diff := PhysicsTime - a.AnimPhysTimeStart
+	frame := int(diff / frameTimeMs)
 	finished := frame >= int(a.AnimTotalFrames)
 	frame = clamp(frame, 0, int(a.AnimTotalFrames)-1)
 
@@ -253,11 +259,11 @@ func (a *Actor) DrawAnim() {
 	if !ok {
 		panic(a.Anim)
 	}
-	frameTimeMs := a.AnimDuration / float32(a.AnimTotalFrames)
-	if GameTimeSec-a.AnimGameTimeStart > a.AnimDuration {
-		a.AnimGameTimeStart += a.AnimDuration
+	frameTimeMs := a.AnimDuration / float64(a.AnimTotalFrames)
+	if PhysicsTime-a.AnimPhysTimeStart > a.AnimDuration {
+		a.AnimPhysTimeStart += a.AnimDuration
 	}
-	frame := int((GameTimeSec - a.AnimGameTimeStart) / frameTimeMs)
+	frame := int((PhysicsTime - a.AnimPhysTimeStart) / frameTimeMs)
 	frame = clamp(frame, 0, int(a.AnimTotalFrames)-1)
 	a.AnimFrame = a.AnimOffset + uint8(frame)
 	rl.DrawTextureRec(tex, rl.Rectangle{
@@ -360,19 +366,27 @@ func (a *Actor) updatePlayerInput() {
 	}
 }
 
-func (a *Actor) updateUpdown(dt float32) {
+func (a *Actor) updateUpdown() {
 	if a.State != StateIdle || !a.AnimFinished && strings.Contains(a.Anim, "updown-") {
 		return
 	}
 	var updown uint8
-	switch {
-	case float32(MouseWorldPos.Y) <= a.Pos.Y+14:
-		updown = 2
-	case float32(MouseWorldPos.Y) <= a.Pos.Y+32:
-		updown = 1
-	default:
-		updown = 0
+	if a.IsPlayer {
+		switch {
+		case float32(MouseWorldPos.Y) <= a.Pos.Y+14:
+			updown = 2
+		case float32(MouseWorldPos.Y) <= a.Pos.Y+32:
+			updown = 1
+		default:
+			updown = 0
+		}
+	} else {
+		updown = a.Updown
+		if rand.Int()%61 == 0 {
+			updown = uint8(rand.Int() % 3)
+		}
 	}
+
 	if updown != a.Updown {
 		a.PrevUpdown = a.Updown
 		anim := fmt.Sprintf("resources/threefour/updown-%d-%d.png", a.PrevUpdown, updown)
@@ -398,6 +412,16 @@ func (a *Actor) enterAttackState() {
 func (a *Actor) enterAttackedState() {
 	a.State = StateAttacked
 	a.SetAnim("resources/threefour/hit-top.png", 0.35, 4, true)
+}
+
+func (a *Actor) enterBlockState() {
+	a.State = StateBlock
+	switch a.Updown {
+	case 0:
+		a.SetAnim("resources/threefour/block-low-start.png", 0.1, 5, true)
+	case 1, 2:
+		a.SetAnim("resources/threefour/block-mid-start.png", 0.1, 5, true)
+	}
 }
 
 func (a *Actor) enterIdleState() {
@@ -428,6 +452,9 @@ func (a *Actor) updateAttack() {
 	if a.State != StateAttack {
 		return
 	}
+	if a.Input.Attack {
+		a.AttackQueued = true
+	}
 	var r1 rl.Rectangle
 	switch a.Updown {
 	case 2:
@@ -453,25 +480,75 @@ func (a *Actor) updateAttack() {
 		}
 	}
 
-	if a.AnimFrame > 4 {
-		for _, actor := range Actors {
-			if a == actor {
-				continue
-			}
-			r2 := rl.Rectangle{
-				X:      actor.Pos.X + actor.CollisionBox.X,
-				Y:      actor.Pos.Y + actor.CollisionBox.Y,
-				Width:  actor.CollisionBox.Width,
-				Height: actor.CollisionBox.Height,
-			}
-			if aabb(r1, r2) && actor.State != StateAttacked {
+	for _, actor := range Actors {
+		if a == actor {
+			continue
+		}
+		r2 := rl.Rectangle{
+			X:      actor.Pos.X + actor.CollisionBox.X,
+			Y:      actor.Pos.Y + actor.CollisionBox.Y,
+			Width:  actor.CollisionBox.Width,
+			Height: actor.CollisionBox.Height,
+		}
+		if aabb(r1, r2) && actor.State != StateAttacked && actor.State != StateBlock {
+			actor.Attacker = a
+			if a.Updown == actor.Updown {
+				actor.enterBlockState()
+			} else if a.AnimFrame > 4 {
 				actor.enterAttackedState()
 			}
 		}
 	}
 
 	if a.AnimFinished {
-		a.State = StateIdle
+		if strings.Contains(a.Anim, "back") {
+			a.enterIdleState()
+			return
+		}
+
+		if !a.AttackQueued || strings.Contains(a.Anim, "mid-2") {
+			switch a.Updown {
+			case 0:
+				a.SetAnim("resources/threefour/back-attack-low-1.png", 0.2, 4, true)
+			case 1:
+				a.SetAnim("resources/threefour/back-attack-mid-1.png", 0.2, 4, true)
+			case 2:
+				a.SetAnim("resources/threefour/back-attack-high-1.png", 0.2, 4, true)
+			}
+			return
+		}
+
+		a.AttackQueued = false
+
+		switch a.Updown {
+		case 0:
+			a.SetAnim("resources/threefour/attack-mid-2.png", 0.2, 6, true)
+		case 1:
+			a.SetAnim("resources/threefour/attack-mid-2.png", 0.2, 6, true)
+		case 2:
+			a.SetAnim("resources/threefour/attack-mid-2.png", 0.2, 6, true)
+		}
+	}
+}
+
+func (a *Actor) updateBlock() {
+	if a.Attacker.State != StateAttack && a.AnimFinished {
+		a.enterIdleState()
 		return
+	}
+	if strings.HasSuffix(a.Anim, "start.png") && a.AnimFinished && a.Attacker.AnimFrame > 4 {
+		switch a.Updown {
+		case 0:
+			a.SetAnim("resources/threefour/block-low-1.png", 0.2, 3, true)
+		case 1, 2:
+			a.SetAnim("resources/threefour/block-mid-1.png", 0.2, 3, true)
+		}
+	} else if a.AnimFinished && a.Attacker.AnimFrame > 4 {
+		switch a.Updown {
+		case 0:
+			a.SetAnim("resources/threefour/block-low-1.png", 0.2, 3, true)
+		case 1, 2:
+			a.SetAnim("resources/threefour/block-mid-2.png", 0.2, 3, true)
+		}
 	}
 }

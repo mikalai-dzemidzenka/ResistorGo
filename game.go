@@ -16,10 +16,10 @@ const (
 
 var (
 	Debug         = true
-	GameTimeSec   float32
-	PhysicsTime   float32
+	GameTimeSec   float64
+	PhysicsTime   float64
 	Ticks         int
-	FixedTimeStep float32 = 1.0 / 30.0
+	FixedTimeStep float64 = 1.0 / 30.0
 	MouseWorldPos Vector2i
 	MousePos      rl.Vector2
 	Cam           Camera
@@ -97,7 +97,7 @@ func Game() {
 			dt = 0.25
 		}
 
-		GameTimeSec += dt
+		GameTimeSec += float64(dt)
 		MousePos = rl.GetMousePosition()
 		MouseWorldPos = v2i(rl.GetScreenToWorld2D(MousePos, Cam.Camera2D))
 
@@ -108,7 +108,7 @@ func Game() {
 			enemy.UpdatePhysics()
 		}
 
-		dt = (PhysicsTime - GameTimeSec) / FixedTimeStep
+		dt = float32((PhysicsTime - GameTimeSec) / FixedTimeStep)
 		Pl.Update(dt)
 		enemy.Update(dt)
 		if Debug {
