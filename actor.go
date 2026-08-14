@@ -212,6 +212,7 @@ func (a *Actor) SetAnimFrame(anim string, offset uint8) {
 	a.Anim = anim
 	a.AnimDuration = 1
 	a.AnimTotalFrames = 1
+	a.AnimFinished = false
 	a.AnimOnce = false
 	a.AnimOffset = offset
 }
@@ -219,6 +220,7 @@ func (a *Actor) SetAnimFrame(anim string, offset uint8) {
 func (a *Actor) SetAnim(anim string, animDuration float32, totalFrames uint8, once bool) {
 	a.AnimGameTimeStart = GameTimeSec
 	a.Anim = anim
+	a.AnimFinished = false
 	a.AnimDuration = animDuration
 	a.AnimTotalFrames = totalFrames
 	a.AnimOnce = once
