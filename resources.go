@@ -4,36 +4,42 @@ import rl "github.com/gen2brain/raylib-go/raylib"
 
 var (
 	resources = make(map[string]rl.Texture2D)
+	models    = make(map[string]rl.Model)
 )
 
 func LoadTextures() {
-	load("resources/blocks/e1m1_wall1.png")
-	load("resources/blocks/e1m1_platform1.png")
-	load("resources/blocks/e1m1_door1.png")
-	load("resources/threefour/run.png")
-	load("resources/threefour/idle.png")
-	load("resources/threefour/updown.png")
-	load("resources/threefour/updown-0-1.png")
-	load("resources/threefour/updown-0-2.png")
-	load("resources/threefour/updown-1-0.png")
-	load("resources/threefour/updown-1-2.png")
-	load("resources/threefour/updown-2-0.png")
-	load("resources/threefour/updown-2-1.png")
-	load("resources/threefour/attack-high.png")
-	load("resources/threefour/attack-mid.png")
-	load("resources/threefour/attack-mid-2.png")
-	load("resources/threefour/attack-low.png")
-	load("resources/threefour/hit-top.png")
-	load("resources/threefour/back-attack-low-1.png")
-	load("resources/threefour/back-attack-mid-1.png")
-	load("resources/threefour/back-attack-high-1.png")
+	loadTex("resources/blocks/e1m1_wall1.png")
+	loadTex("resources/blocks/e1m1_platform1.png")
+	loadTex("resources/blocks/e1m1_door1.png")
+	loadTex("resources/threefour/run.png")
+	loadTex("resources/threefour/idle.png")
+	loadTex("resources/threefour/updown.png")
+	loadTex("resources/threefour/updown-0-1.png")
+	loadTex("resources/threefour/updown-0-2.png")
+	loadTex("resources/threefour/updown-1-0.png")
+	loadTex("resources/threefour/updown-1-2.png")
+	loadTex("resources/threefour/updown-2-0.png")
+	loadTex("resources/threefour/updown-2-1.png")
+	loadTex("resources/threefour/attack-high.png")
+	loadTex("resources/threefour/attack-mid.png")
+	loadTex("resources/threefour/attack-mid-2.png")
+	loadTex("resources/threefour/attack-low.png")
+	loadTex("resources/threefour/hit-top.png")
+	loadTex("resources/threefour/back-attack-low-1.png")
+	loadTex("resources/threefour/back-attack-mid-1.png")
+	loadTex("resources/threefour/back-attack-high-1.png")
 
-	load("resources/threefour/block-low-start.png")
-	load("resources/threefour/block-low-1.png")
+	loadTex("resources/threefour/block-low-start.png")
+	loadTex("resources/threefour/block-low-1.png")
 
-	load("resources/threefour/block-mid-start.png")
-	load("resources/threefour/block-mid-1.png")
-	load("resources/threefour/block-mid-2.png")
+	loadTex("resources/threefour/block-mid-start.png")
+	loadTex("resources/threefour/block-mid-1.png")
+	loadTex("resources/threefour/block-mid-2.png")
+	loadTex("resources/main_menu/resistor.png")
+
+	loadModel("resources/main_menu/head.obj")
+	loadModel("resources/main_menu/jab1.obj")
+	loadModel("resources/main_menu/jab2.obj")
 }
 
 func LoadLevelObjects() []LevelObject {
@@ -75,6 +81,10 @@ func LoadLevelObjects() []LevelObject {
 	}
 }
 
-func load(path string) {
+func loadTex(path string) {
 	resources[path] = rl.LoadTexture(path)
+}
+
+func loadModel(path string) {
+	models[path] = rl.LoadModel(path)
 }
