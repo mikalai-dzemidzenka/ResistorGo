@@ -40,6 +40,8 @@ func LoadTextures() {
 	loadModel("resources/main_menu/head.obj")
 	loadModel("resources/main_menu/jab1.obj")
 	loadModel("resources/main_menu/jab2.obj")
+	loadModel("resources/main_menu/kick.obj")
+	loadModel("resources/main_menu/martelo.obj")
 }
 
 func LoadLevelObjects() []LevelObject {
