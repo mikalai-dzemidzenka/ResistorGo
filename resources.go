@@ -13,6 +13,8 @@ func LoadTextures() {
 	loadTex("resources/blocks/e1m1_door1.png")
 	loadTex("resources/threefour/run.png")
 	loadTex("resources/threefour/idle.png")
+	loadTex("resources/threefour/jump-start.png")
+	loadTex("resources/threefour/jump-climb.png")
 	loadTex("resources/threefour/updown.png")
 	loadTex("resources/threefour/updown-0-1.png")
 	loadTex("resources/threefour/updown-0-2.png")

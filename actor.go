@@ -12,9 +12,9 @@ const (
 	DefaultFriction = 2
 	MaxSpeed        = 7
 	MaxAttackSpeed  = 2
-	Gravity         = 0.3
-	MaxJumpSpeed    = -10
-	MaxFallSpeed    = 4
+	Gravity         = 0.4
+	MaxJumpSpeed    = -4
+	MaxFallSpeed    = 8
 )
 
 type ActorState uint8
@@ -25,6 +25,7 @@ const (
 	StateAttack
 	StateAttacked
 	StateBlock
+	StateJump
 )
 
 type Actor struct {
@@ -47,18 +48,23 @@ type Actor struct {
 	AnimPhysTimeStart float64
 	Anim              string
 	AnimDuration      float64
-	AnimOffset        uint8
-	AnimTotalFrames   uint8
+	AnimYOffset       int8
 	AnimFrame         uint8
+	AnimTotalFrames   uint8
+	AnimCurrentFrame  uint8
 	AnimOnce          bool
 	AnimFinished      bool
 	Attacker          *Actor
 	AttackQueued      bool
+	Jumped            bool
+	CanClimbRight     bool
+	CanClimbLeft      bool
 }
 type Input struct {
 	Left   bool
 	Right  bool
 	Attack bool
+	Jump   bool
 }
 
 func NewActor(pos rl.Vector2, isPlayer bool) *Actor {
@@ -120,6 +126,11 @@ func (a *Actor) Update(dt float32) {
 		}
 		if a.Input.Attack {
 			a.enterAttackState()
+			return
+		}
+		if a.Input.Jump {
+			a.enterJumpState()
+			return
 		}
 	case StateRun:
 		absSpeed := abs(a.Speed.X)
@@ -140,6 +151,24 @@ func (a *Actor) Update(dt float32) {
 	case StateBlock:
 		a.Speed.X = clamp(a.Speed.X, -MaxAttackSpeed, MaxAttackSpeed)
 		a.updateBlock()
+	case StateJump:
+		if (a.OnGround && a.Jumped) || a.AnimFinished && strings.HasSuffix(a.Anim, "jump-climb.png") {
+			a.Jumped = false
+			a.enterIdleState()
+			return
+		}
+		if !a.AnimFinished && strings.HasSuffix(a.Anim, "jump-climb.png") {
+			a.Speed.Y = 0
+		}
+		if a.AnimFinished && strings.HasSuffix(a.Anim, "jump-start.png") && a.OnGround {
+			a.Jumped = true
+			a.Speed.Y += MaxJumpSpeed * 25 * dt
+		}
+		if (a.CanClimbRight && a.Orientation == 1) || (a.CanClimbLeft && a.Orientation == -1) {
+			a.CanClimbRight = false
+			a.CanClimbLeft = false
+			a.SetAnim("resources/threefour/jump-climb.png", AnimOptions{animDuration: 1.2, totalFrames: 16, once: true})
+		}
 	}
 
 	a.Pos.X += a.Speed.X
@@ -160,7 +189,7 @@ func (a *Actor) updateRewind() {
 			Speed:       a.Speed,
 			Orientation: a.Orientation,
 			Anim:        a.Anim,
-			AnimFrame:   a.AnimFrame,
+			AnimFrame:   a.AnimCurrentFrame,
 		}
 	}
 }
@@ -219,7 +248,7 @@ func (a *Actor) Draw() {
 			rl.DrawText(fmt.Sprintf("RewindLeft: %d", RewindLeft), int32(a.Pos.X), int32(a.Pos.Y)-8, 2, rl.White)
 			rl.DrawText(fmt.Sprintf("Mouse X, Y: %d %d", MouseWorldPos.X, MouseWorldPos.Y), int32(a.Pos.X), int32(a.Pos.Y)-16, 2, rl.White)
 			rl.DrawText(fmt.Sprintf("PrevUpdown, Updown: %d %d", a.PrevUpdown, a.Updown), int32(a.Pos.X), int32(a.Pos.Y)-24, 2, rl.White)
-			rl.DrawText(fmt.Sprintf("Frame, Finished: %d %t", a.AnimFrame, a.AnimFinished), int32(a.Pos.X), int32(a.Pos.Y)-32, 2, rl.White)
+			rl.DrawText(fmt.Sprintf("Frame, Finished: %d %t", a.AnimCurrentFrame, a.AnimFinished), int32(a.Pos.X), int32(a.Pos.Y)-32, 2, rl.White)
 		}
 		px := a.Pos.X + a.CollisionBox.X + a.CollisionBox.Width/2
 		rl.DrawPixel(int32(px), int32(a.Pos.Y+a.CollisionBox.Y+a.CollisionBox.Height), rl.Red)
@@ -235,17 +264,25 @@ func (a *Actor) SetAnimFrame(anim string, offset uint8) {
 	a.AnimTotalFrames = 1
 	a.AnimFinished = false
 	a.AnimOnce = false
-	a.AnimOffset = offset
+	a.AnimFrame = offset
 }
 
-func (a *Actor) SetAnim(anim string, animDuration float64, totalFrames uint8, once bool) {
+type AnimOptions struct {
+	animDuration float64
+	totalFrames  uint8
+	once         bool
+	animYOffset  int8
+}
+
+func (a *Actor) SetAnim(anim string, o AnimOptions) {
 	a.AnimPhysTimeStart = PhysicsTime
 	a.Anim = anim
 	a.AnimFinished = false
-	a.AnimDuration = animDuration
-	a.AnimTotalFrames = totalFrames
-	a.AnimOnce = once
-	a.AnimOffset = 0
+	a.AnimDuration = o.animDuration
+	a.AnimTotalFrames = o.totalFrames
+	a.AnimOnce = o.once
+	a.AnimFrame = 0
+	a.AnimYOffset = o.animYOffset
 }
 
 func (a *Actor) DrawAnimOnce() bool {
@@ -260,13 +297,16 @@ func (a *Actor) DrawAnimOnce() bool {
 	finished := frame >= int(a.AnimTotalFrames)
 	frame = clamp(frame, 0, int(a.AnimTotalFrames)-1)
 
-	a.AnimFrame = uint8(frame)
+	a.AnimCurrentFrame = uint8(frame)
 	rl.DrawTextureRec(tex, rl.Rectangle{
-		X:      float32(a.AnimFrame) * 48,
+		X:      float32(a.AnimCurrentFrame) * 48,
 		Y:      0,
 		Width:  48 * float32(a.Orientation),
-		Height: 48,
-	}, a.Pos, rl.White)
+		Height: float32(tex.Height),
+	}, rl.Vector2{
+		X: a.Pos.X,
+		Y: a.Pos.Y + float32(a.AnimYOffset),
+	}, rl.White)
 	return finished
 }
 
@@ -281,9 +321,9 @@ func (a *Actor) DrawAnim() {
 	}
 	frame := int((PhysicsTime - a.AnimPhysTimeStart) / frameTimeMs)
 	frame = clamp(frame, 0, int(a.AnimTotalFrames)-1)
-	a.AnimFrame = a.AnimOffset + uint8(frame)
+	a.AnimCurrentFrame = a.AnimFrame + uint8(frame)
 	rl.DrawTextureRec(tex, rl.Rectangle{
-		X:      float32(a.AnimFrame) * 48,
+		X:      float32(a.AnimCurrentFrame) * 48,
 		Y:      0,
 		Width:  48 * float32(a.Orientation),
 		Height: 48,
@@ -302,6 +342,7 @@ func (a *Actor) updateHorSpeed(dt float32) {
 		a.Speed.X += a.Acc * dt
 		a.Orientation = 1
 	}
+
 	if !movePressed {
 		a.Speed.X = moveTo0(a.Speed.X, a.Friction*dt) // friction
 	}
@@ -316,25 +357,46 @@ func (a *Actor) updateVertSpeed(dt float32) {
 }
 
 func (a *Actor) checkCollision() {
+	a.OnGround = false
 	for _, obj := range LE.objectsIndexed {
 		oColY := float32(obj.Y + int32(obj.CollisionRect.Y))
 		oColX := float32(obj.X + int32(obj.CollisionRect.X))
 
-		pColY := a.Pos.Y + a.CollisionBox.Y + a.CollisionBox.Height
-		pColX := a.Pos.X + a.CollisionBox.X + a.CollisionBox.Width/2
+		pColDownY := a.Pos.Y + a.CollisionBox.Y + a.CollisionBox.Height
+		pColCenterX := a.Pos.X + a.CollisionBox.X + a.CollisionBox.Width/2
 
-		if oColX <= pColX && oColX+obj.CollisionRect.Width >= pColX &&
-			pColY >= oColY && pColY <= oColY+obj.CollisionRect.Height {
+		if oColX <= pColCenterX && oColX+obj.CollisionRect.Width >= pColCenterX &&
+			pColDownY >= oColY && pColDownY <= oColY+obj.CollisionRect.Height {
 			a.OnGround = true
 			a.Speed.Y = 0
 			a.Pos.Y = oColY - (a.CollisionBox.Y + a.CollisionBox.Height)
-			return
+			continue
+		}
+		pColUpY := a.Pos.Y + a.CollisionBox.Y
+		const climbOffset = 16
+		if oColX+climbOffset <= pColCenterX && oColX+obj.CollisionRect.Width-climbOffset >= pColCenterX &&
+			pColUpY >= oColY && pColUpY <= oColY+obj.CollisionRect.Height {
+			a.Speed.Y = 0
+			a.Pos.Y = oColY + obj.CollisionRect.Height
+			continue
+		} else if oColX <= pColCenterX && oColX+climbOffset >= pColCenterX &&
+			pColUpY >= oColY && pColUpY <= oColY+obj.CollisionRect.Height && a.Orientation == 1 {
+			a.CanClimbRight = true
+			a.Pos.X = oColX - 1
+			a.Pos.Y = oColY - (a.CollisionBox.Y + a.CollisionBox.Height)
+			continue
+		} else if oColX+obj.CollisionRect.Width-climbOffset <= pColCenterX && oColX+obj.CollisionRect.Width >= pColCenterX &&
+			pColUpY >= oColY && pColUpY <= oColY+obj.CollisionRect.Height && a.Orientation == -1 {
+			a.CanClimbLeft = true
+			a.Pos.X = oColX + obj.CollisionRect.Width + 1
+			a.Pos.Y = oColY - (a.CollisionBox.Y + a.CollisionBox.Height)
+			continue
 		}
 	}
-	a.OnGround = false
 }
 
 func (a *Actor) updateBotInput() {
+	return
 	const near = 50
 	a.Input = Input{}
 	if Pl.Pos.X < a.Pos.X {
@@ -370,6 +432,9 @@ func (a *Actor) updatePlayerInput() {
 	if rl.IsMouseButtonPressed(rl.MouseButtonLeft) {
 		a.Input.Attack = true
 	}
+	if rl.IsKeyPressed(rl.KeyW) {
+		a.Input.Jump = true
+	}
 }
 
 func (a *Actor) updateUpdown() {
@@ -396,7 +461,7 @@ func (a *Actor) updateUpdown() {
 	if updown != a.Updown {
 		a.PrevUpdown = a.Updown
 		anim := fmt.Sprintf("resources/threefour/updown-%d-%d.png", a.PrevUpdown, updown)
-		a.SetAnim(anim, 0.1, 4, true)
+		a.SetAnim(anim, AnimOptions{animDuration: 0.1, totalFrames: 4, once: true})
 	} else if a.AnimFinished && strings.Contains(a.Anim, "updown-") {
 		a.SetAnimFrame("resources/threefour/updown.png", a.Updown)
 	}
@@ -407,26 +472,26 @@ func (a *Actor) enterAttackState() {
 	a.State = StateAttack
 	switch a.Updown {
 	case 0:
-		a.SetAnim("resources/threefour/attack-low.png", 0.4, 8, true)
+		a.SetAnim("resources/threefour/attack-low.png", AnimOptions{animDuration: 0.4, totalFrames: 8, once: true})
 	case 1:
-		a.SetAnim("resources/threefour/attack-mid.png", 0.4, 8, true)
+		a.SetAnim("resources/threefour/attack-mid.png", AnimOptions{animDuration: 0.4, totalFrames: 8, once: true})
 	case 2:
-		a.SetAnim("resources/threefour/attack-high.png", 0.4, 8, true)
+		a.SetAnim("resources/threefour/attack-high.png", AnimOptions{animDuration: 0.4, totalFrames: 8, once: true})
 	}
 }
 
 func (a *Actor) enterAttackedState() {
 	a.State = StateAttacked
-	a.SetAnim("resources/threefour/hit-top.png", 0.35, 4, true)
+	a.SetAnim("resources/threefour/hit-top.png", AnimOptions{animDuration: 0.35, totalFrames: 4, once: true})
 }
 
 func (a *Actor) enterBlockState() {
 	a.State = StateBlock
 	switch a.Updown {
 	case 0:
-		a.SetAnim("resources/threefour/block-low-start.png", 0.1, 5, true)
+		a.SetAnim("resources/threefour/block-low-start.png", AnimOptions{animDuration: 0.1, totalFrames: 5, once: true})
 	case 1, 2:
-		a.SetAnim("resources/threefour/block-mid-start.png", 0.1, 5, true)
+		a.SetAnim("resources/threefour/block-mid-start.png", AnimOptions{animDuration: 0.1, totalFrames: 5, once: true})
 	}
 }
 
@@ -441,7 +506,7 @@ func (a *Actor) enterIdleState() {
 func (a *Actor) enterRunState() {
 	a.State = StateRun
 	if a.Anim != "resources/threefour/run.png" {
-		a.SetAnim("resources/threefour/run.png", 0.4, 10, false)
+		a.SetAnim("resources/threefour/run.png", AnimOptions{animDuration: 0.4, totalFrames: 10})
 	}
 }
 
@@ -500,7 +565,7 @@ func (a *Actor) updateAttack() {
 			actor.Attacker = a
 			if a.Updown == actor.Updown {
 				actor.enterBlockState()
-			} else if a.AnimFrame > 4 {
+			} else if a.AnimCurrentFrame > 4 {
 				actor.enterAttackedState()
 			}
 		}
@@ -515,11 +580,11 @@ func (a *Actor) updateAttack() {
 		if !a.AttackQueued || strings.Contains(a.Anim, "mid-2") {
 			switch a.Updown {
 			case 0:
-				a.SetAnim("resources/threefour/back-attack-low-1.png", 0.2, 4, true)
+				a.SetAnim("resources/threefour/back-attack-low-1.png", AnimOptions{animDuration: 0.2, totalFrames: 4, once: true})
 			case 1:
-				a.SetAnim("resources/threefour/back-attack-mid-1.png", 0.2, 4, true)
+				a.SetAnim("resources/threefour/back-attack-mid-1.png", AnimOptions{animDuration: 0.2, totalFrames: 4, once: true})
 			case 2:
-				a.SetAnim("resources/threefour/back-attack-high-1.png", 0.2, 4, true)
+				a.SetAnim("resources/threefour/back-attack-high-1.png", AnimOptions{animDuration: 0.2, totalFrames: 4, once: true})
 			}
 			return
 		}
@@ -528,11 +593,11 @@ func (a *Actor) updateAttack() {
 
 		switch a.Updown {
 		case 0:
-			a.SetAnim("resources/threefour/attack-mid-2.png", 0.2, 6, true)
+			a.SetAnim("resources/threefour/attack-mid-2.png", AnimOptions{animDuration: 0.2, totalFrames: 6, once: true})
 		case 1:
-			a.SetAnim("resources/threefour/attack-mid-2.png", 0.2, 6, true)
+			a.SetAnim("resources/threefour/attack-mid-2.png", AnimOptions{animDuration: 0.2, totalFrames: 6, once: true})
 		case 2:
-			a.SetAnim("resources/threefour/attack-mid-2.png", 0.2, 6, true)
+			a.SetAnim("resources/threefour/attack-mid-2.png", AnimOptions{animDuration: 0.2, totalFrames: 6, once: true})
 		}
 	}
 }
@@ -542,19 +607,25 @@ func (a *Actor) updateBlock() {
 		a.enterIdleState()
 		return
 	}
-	if strings.HasSuffix(a.Anim, "start.png") && a.AnimFinished && a.Attacker.AnimFrame > 4 {
+	if strings.HasSuffix(a.Anim, "start.png") && a.AnimFinished && a.Attacker.AnimCurrentFrame > 4 {
 		switch a.Updown {
 		case 0:
-			a.SetAnim("resources/threefour/block-low-1.png", 0.2, 3, true)
+			a.SetAnim("resources/threefour/block-low-1.png", AnimOptions{animDuration: 0.2, totalFrames: 3, once: true})
 		case 1, 2:
-			a.SetAnim("resources/threefour/block-mid-1.png", 0.2, 3, true)
+			a.SetAnim("resources/threefour/block-mid-1.png", AnimOptions{animDuration: 0.2, totalFrames: 3, once: true})
 		}
-	} else if a.AnimFinished && a.Attacker.AnimFrame > 4 {
+	} else if a.AnimFinished && a.Attacker.AnimCurrentFrame > 4 {
 		switch a.Updown {
 		case 0:
-			a.SetAnim("resources/threefour/block-low-1.png", 0.2, 3, true)
+			a.SetAnim("resources/threefour/block-low-1.png", AnimOptions{animDuration: 0.2, totalFrames: 3, once: true})
 		case 1, 2:
-			a.SetAnim("resources/threefour/block-mid-2.png", 0.2, 3, true)
+			a.SetAnim("resources/threefour/block-mid-2.png", AnimOptions{animDuration: 0.2, totalFrames: 3, once: true})
 		}
 	}
+}
+
+func (a *Actor) enterJumpState() {
+	a.Jumped = false
+	a.State = StateJump
+	a.SetAnim("resources/threefour/jump-start.png", AnimOptions{animDuration: 0.7, totalFrames: 13, once: true, animYOffset: -48})
 }
