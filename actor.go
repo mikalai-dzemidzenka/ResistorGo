@@ -382,13 +382,13 @@ func (a *Actor) checkCollision() {
 		} else if oColX <= pColCenterX && oColX+climbOffset >= pColCenterX &&
 			pColUpY >= oColY && pColUpY <= oColY+obj.CollisionRect.Height && a.Orientation == 1 {
 			a.CanClimbRight = true
-			a.Pos.X = oColX - 1
+			a.Pos.X = oColX - (a.CollisionBox.X + a.CollisionBox.Width/2) + 3
 			a.Pos.Y = oColY - (a.CollisionBox.Y + a.CollisionBox.Height)
 			continue
 		} else if oColX+obj.CollisionRect.Width-climbOffset <= pColCenterX && oColX+obj.CollisionRect.Width >= pColCenterX &&
 			pColUpY >= oColY && pColUpY <= oColY+obj.CollisionRect.Height && a.Orientation == -1 {
 			a.CanClimbLeft = true
-			a.Pos.X = oColX + obj.CollisionRect.Width + 1
+			a.Pos.X = oColX + (a.CollisionBox.X + a.CollisionBox.Width/2) - 3
 			a.Pos.Y = oColY - (a.CollisionBox.Y + a.CollisionBox.Height)
 			continue
 		}

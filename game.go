@@ -139,7 +139,7 @@ func runLevel(dt float32) {
 		rl.ClearBackground(rl.Black)
 		rl.BeginMode2D(Cam.Camera2D)
 		{
-			LE.Draw()
+			LE.Draw() // TODO sort objects with actors
 			Cam.SetTarget(Pl.Pos)
 			Cam.Update(dt)
 
