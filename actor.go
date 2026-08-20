@@ -30,6 +30,7 @@ const (
 
 type Actor struct {
 	Pos               rl.Vector2
+	MoveToPos         rl.Vector2
 	Speed             rl.Vector2
 	Acc               float32
 	Friction          float32
@@ -373,7 +374,7 @@ func (a *Actor) checkCollision() {
 			continue
 		}
 		pColUpY := a.Pos.Y + a.CollisionBox.Y
-		const climbOffset = 16
+		const climbOffset = 32
 		if oColX+climbOffset <= pColCenterX && oColX+obj.CollisionRect.Width-climbOffset >= pColCenterX &&
 			pColUpY >= oColY && pColUpY <= oColY+obj.CollisionRect.Height {
 			a.Speed.Y = 0
@@ -382,14 +383,14 @@ func (a *Actor) checkCollision() {
 		} else if oColX <= pColCenterX && oColX+climbOffset >= pColCenterX &&
 			pColUpY >= oColY && pColUpY <= oColY+obj.CollisionRect.Height && a.Orientation == 1 {
 			a.CanClimbRight = true
-			a.Pos.X = oColX - (a.CollisionBox.X + a.CollisionBox.Width/2) + 3
-			a.Pos.Y = oColY - (a.CollisionBox.Y + a.CollisionBox.Height)
+			a.Pos.X = float32(int32(oColX - (a.CollisionBox.X - a.CollisionBox.Width/2) + 3))
+			a.Pos.Y = float32(int32(oColY - (a.CollisionBox.Y + a.CollisionBox.Height)))
 			continue
 		} else if oColX+obj.CollisionRect.Width-climbOffset <= pColCenterX && oColX+obj.CollisionRect.Width >= pColCenterX &&
 			pColUpY >= oColY && pColUpY <= oColY+obj.CollisionRect.Height && a.Orientation == -1 {
 			a.CanClimbLeft = true
-			a.Pos.X = oColX + (a.CollisionBox.X + a.CollisionBox.Width/2) - 3
-			a.Pos.Y = oColY - (a.CollisionBox.Y + a.CollisionBox.Height)
+			a.Pos.X = float32(int32(oColX + (a.CollisionBox.X - a.CollisionBox.Width/2) - 3))
+			a.Pos.Y = float32(int32(oColY - (a.CollisionBox.Y + a.CollisionBox.Height)))
 			continue
 		}
 	}
