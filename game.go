@@ -22,9 +22,10 @@ const (
 var (
 	Debug         = true
 	GameTimeSec   float64
+	Accumulator   float64
 	PhysicsTime   float64
 	Ticks         int
-	FixedTimeStep float64 = 1.0 / 30.0
+	FixedTimeStep float64 = 1.0 / 60.0
 	MouseWorldPos Vector2i
 	MousePos      rl.Vector2
 	Cam           Camera
@@ -117,18 +118,22 @@ func Game() {
 }
 
 func runLevel(dt float32) {
-	for PhysicsTime < GameTimeSec {
+	Accumulator += float64(dt)
+
+	for Accumulator > FixedTimeStep {
 		PhysicsTime += FixedTimeStep
-		Ticks++
 		for _, actor := range Actors {
-			actor.UpdatePhysics()
+			actor.Update(float32(FixedTimeStep))
 		}
+		Accumulator -= FixedTimeStep
 	}
 
-	dt = float32((PhysicsTime - GameTimeSec) / FixedTimeStep)
+	alpha := float32(Accumulator / FixedTimeStep)
+
 	for _, actor := range Actors {
-		actor.Update(dt)
+		actor.Interp(alpha)
 	}
+
 	if Debug {
 		LE.Update(dt)
 	}

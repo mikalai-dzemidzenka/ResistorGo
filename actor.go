@@ -8,13 +8,13 @@ import (
 )
 
 const (
-	DefaultAcc      = 1
-	DefaultFriction = 2
-	MaxSpeed        = 7
+	DefaultAcc      = 10
+	DefaultFriction = 20
+	MaxSpeed        = 70
 	MaxAttackSpeed  = 2
-	Gravity         = 0.4
-	MaxJumpSpeed    = -4
-	MaxFallSpeed    = 8
+	Gravity         = 20
+	MaxJumpSpeed    = -15
+	MaxFallSpeed    = 80
 )
 
 type ActorState uint8
@@ -30,6 +30,8 @@ const (
 
 type Actor struct {
 	Pos               rl.Vector2
+	PrevPos           rl.Vector2
+	InterpolatedPos   rl.Vector2
 	MoveToPos         rl.Vector2
 	Speed             rl.Vector2
 	Acc               float32
@@ -102,6 +104,8 @@ func NewActor(pos rl.Vector2, isPlayer bool) *Actor {
 }
 
 func (a *Actor) Update(dt float32) {
+	a.PrevPos = a.Pos
+
 	a.updateRewind()
 
 	if IsRewinding {
@@ -204,7 +208,7 @@ func (a *Actor) Draw() {
 			Y:      0,
 			Width:  48 * float32(a.Orientation),
 			Height: 48,
-		}, a.Pos, rl.White)
+		}, a.InterpolatedPos, rl.White)
 	} else {
 		if a.AnimOnce {
 			a.AnimFinished = a.DrawAnimOnce()
@@ -305,8 +309,8 @@ func (a *Actor) DrawAnimOnce() bool {
 		Width:  48 * float32(a.Orientation),
 		Height: float32(tex.Height),
 	}, rl.Vector2{
-		X: a.Pos.X,
-		Y: a.Pos.Y + float32(a.AnimYOffset),
+		X: a.InterpolatedPos.X,
+		Y: a.InterpolatedPos.Y + float32(a.AnimYOffset),
 	}, rl.White)
 	return finished
 }
@@ -328,7 +332,7 @@ func (a *Actor) DrawAnim() {
 		Y:      0,
 		Width:  48 * float32(a.Orientation),
 		Height: 48,
-	}, a.Pos, rl.White)
+	}, a.InterpolatedPos, rl.White)
 }
 
 func (a *Actor) updateHorSpeed(dt float32) {
@@ -383,13 +387,13 @@ func (a *Actor) checkCollision() {
 		} else if oColX <= pColCenterX && oColX+climbOffset >= pColCenterX &&
 			pColUpY >= oColY && pColUpY <= oColY+obj.CollisionRect.Height && a.Orientation == 1 {
 			a.CanClimbRight = true
-			a.Pos.X = float32(int32(oColX - (a.CollisionBox.X - a.CollisionBox.Width/2) + 3))
+			a.Pos.X = float32(int32(oColX - (a.CollisionBox.X - a.CollisionBox.Width/2)))
 			a.Pos.Y = float32(int32(oColY - (a.CollisionBox.Y + a.CollisionBox.Height)))
 			continue
 		} else if oColX+obj.CollisionRect.Width-climbOffset <= pColCenterX && oColX+obj.CollisionRect.Width >= pColCenterX &&
 			pColUpY >= oColY && pColUpY <= oColY+obj.CollisionRect.Height && a.Orientation == -1 {
 			a.CanClimbLeft = true
-			a.Pos.X = float32(int32(oColX + (a.CollisionBox.X - a.CollisionBox.Width/2) - 3))
+			a.Pos.X = float32(int32(oColX + (a.CollisionBox.X - a.CollisionBox.Width/2)))
 			a.Pos.Y = float32(int32(oColY - (a.CollisionBox.Y + a.CollisionBox.Height)))
 			continue
 		}
@@ -629,4 +633,9 @@ func (a *Actor) enterJumpState() {
 	a.Jumped = false
 	a.State = StateJump
 	a.SetAnim("resources/threefour/jump-start.png", AnimOptions{animDuration: 0.7, totalFrames: 13, once: true, animYOffset: -48})
+}
+
+func (a *Actor) Interp(alpha float32) {
+	a.InterpolatedPos.X = a.PrevPos.X*(1-alpha) + a.Pos.X*alpha
+	a.InterpolatedPos.Y = a.PrevPos.Y*(1-alpha) + a.Pos.Y*alpha
 }
