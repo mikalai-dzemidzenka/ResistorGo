@@ -374,23 +374,23 @@ func (a *Actor) checkCollision() {
 			pColDownY >= oColY && pColDownY <= oColY+obj.CollisionRect.Height {
 			a.OnGround = true
 			a.Speed.Y = 0
-			a.Pos.Y = oColY - (a.CollisionBox.Y + a.CollisionBox.Height)
+			a.Pos.Y = float32(int32(oColY - (a.CollisionBox.Y + a.CollisionBox.Height)))
 			continue
 		}
 		pColUpY := a.Pos.Y + a.CollisionBox.Y
 		const climbOffset = 32
-		if oColX+climbOffset <= pColCenterX && oColX+obj.CollisionRect.Width-climbOffset >= pColCenterX &&
+		if oColX <= pColCenterX && oColX+obj.CollisionRect.Width >= pColCenterX &&
 			pColUpY >= oColY && pColUpY <= oColY+obj.CollisionRect.Height {
 			a.Speed.Y = 0
-			a.Pos.Y = oColY + obj.CollisionRect.Height
+			a.Pos.Y = float32(int32(oColY + obj.CollisionRect.Height))
 			continue
-		} else if oColX <= pColCenterX && oColX+climbOffset >= pColCenterX &&
+		} else if oColX-climbOffset <= pColCenterX && oColX >= pColCenterX &&
 			pColUpY >= oColY && pColUpY <= oColY+obj.CollisionRect.Height && a.Orientation == 1 {
 			a.CanClimbRight = true
 			a.Pos.X = float32(int32(oColX - (a.CollisionBox.X - a.CollisionBox.Width/2)))
 			a.Pos.Y = float32(int32(oColY - (a.CollisionBox.Y + a.CollisionBox.Height)))
 			continue
-		} else if oColX+obj.CollisionRect.Width-climbOffset <= pColCenterX && oColX+obj.CollisionRect.Width >= pColCenterX &&
+		} else if oColX+obj.CollisionRect.Width <= pColCenterX && oColX+obj.CollisionRect.Width+climbOffset >= pColCenterX &&
 			pColUpY >= oColY && pColUpY <= oColY+obj.CollisionRect.Height && a.Orientation == -1 {
 			a.CanClimbLeft = true
 			a.Pos.X = float32(int32(oColX + (a.CollisionBox.X - a.CollisionBox.Width/2)))
@@ -401,7 +401,6 @@ func (a *Actor) checkCollision() {
 }
 
 func (a *Actor) updateBotInput() {
-	return
 	const near = 50
 	a.Input = Input{}
 	if Pl.Pos.X < a.Pos.X {

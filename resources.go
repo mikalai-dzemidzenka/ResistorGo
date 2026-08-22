@@ -54,7 +54,7 @@ func LoadLevelObjects() []LevelObject {
 			X:        0,
 			Y:        0,
 			CollisionRect: &rl.Rectangle{
-				X:      10,
+				X:      15,
 				Y:      86,
 				Width:  40,
 				Height: 20,
