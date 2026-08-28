@@ -41,3 +41,18 @@ func abs(x float32) float32 {
 func aabb(a, b rl.Rectangle) bool {
 	return a.X < b.X+b.Width && a.X+a.Width > b.X && a.Y < b.Y+b.Height && a.Y+a.Height > b.Y
 }
+
+func distance(a, b rl.Vector2) float32 {
+	return length(sub(a, b))
+}
+
+func length(v rl.Vector2) float32 {
+	return float32(math.Sqrt(float64(v.X*v.X + v.Y*v.Y)))
+}
+
+func sub(a, b rl.Vector2) rl.Vector2 {
+	return rl.Vector2{
+		X: a.X - b.X,
+		Y: a.Y - b.Y,
+	}
+}
