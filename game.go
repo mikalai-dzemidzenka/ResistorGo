@@ -149,31 +149,30 @@ func runLevel(dt float32) {
 	oldOffset := Cam.Camera2D.Offset
 	Cam.Camera2D.Offset = rl.Vector2{SW * 0.9 / 2, SH / 2}
 	Cam.Camera2D.Zoom /= WindowScale
-	pl := rl.GetWorldToScreen2D(Pl.Pos, Cam.Camera2D)
 	type world struct {
 		Coord rl.Vector2
 		Col   rl.Vector2
 	}
 	objCoords := make([]world, 0, len(LE.objectsIndexed))
 	for _, obj := range LE.objectsIndexed {
-		worldCoord := rl.GetWorldToScreen2D(rl.Vector2{
+		worldCoord := rl.Vector2{
 			X: float32(obj.X) + obj.CollisionRect.X,
 			Y: float32(obj.Y) + obj.CollisionRect.Y,
-		}, Cam.Camera2D)
+		}
 		objCoords = append(objCoords, world{worldCoord, rl.Vector2{obj.CollisionRect.Width, obj.CollisionRect.Height}})
 	}
-	for y := -SH; y < SH; y++ {
-		for x := -SW; x < SW; x++ {
-			coord := rl.GetWorldToScreen2D(rl.Vector2{X: float32(x) + Pl.Pos.X, Y: float32(y) + Pl.Pos.Y}, Cam.Camera2D)
-			//coord := rl.GetScreenToWorld2D(rl.Vector2{float32(x), float32(y)}, Cam.Camera2D)
+	for y := 0; y < SH; y++ {
+		for x := 0; x < SW; x++ {
+			//coord := rl.GetWorldToScreen2D(rl.Vector2{X: float32(x) + Pl.Pos.X, Y: float32(y) + Pl.Pos.Y}, Cam.Camera2D)
+			coord := rl.GetScreenToWorld2D(rl.Vector2{float32(x), float32(y)}, Cam.Camera2D)
 			for _, worldCoord := range objCoords {
-				if segmentIntersectsRect(coord, pl, rl.Rectangle{
+				if segmentIntersectsRect(coord, Pl.Pos, rl.Rectangle{
 					X:      worldCoord.Coord.X,
 					Y:      worldCoord.Coord.Y,
-					Width:  worldCoord.Col.X * Cam.Zoom,
-					Height: worldCoord.Col.Y * Cam.Zoom,
+					Width:  worldCoord.Col.X,
+					Height: worldCoord.Col.Y,
 				}) {
-					rl.DrawPixelV(coord, rl.Color{0, 0, 0, 255})
+					rl.DrawPixel(int32(x), int32(y), rl.Black)
 				}
 			}
 		}
