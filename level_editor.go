@@ -126,7 +126,12 @@ func (le *LevelEditor) Update(dt float32) {
 				Width:  le.obj.CollisionRect.Width,
 				Height: le.obj.CollisionRect.Height,
 			},
-			LightRect: le.obj.LightRect,
+			LightRect: &rl.Rectangle{
+				X:      le.obj.LightRect.X,
+				Y:      le.obj.LightRect.Y,
+				Width:  le.obj.LightRect.Width,
+				Height: le.obj.LightRect.Height,
+			},
 		}
 		le.buildIndex()
 	}
@@ -268,4 +273,19 @@ func (le *LevelEditor) DrawGui() {
 			}
 		}
 	}
+}
+
+func (le *LevelEditor) LightOccluders() []rl.Rectangle {
+	var result []rl.Rectangle
+	for _, obj := range le.objectsIndexed {
+		if obj.LightRect != nil {
+			result = append(result, rl.Rectangle{
+				X:      float32(obj.X) + obj.LightRect.X,
+				Y:      float32(obj.Y) + obj.LightRect.Y,
+				Width:  obj.LightRect.Width,
+				Height: obj.LightRect.Height,
+			})
+		}
+	}
+	return result
 }

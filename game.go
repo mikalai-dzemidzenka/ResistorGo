@@ -40,6 +40,8 @@ var (
 	ScreenImage        *rl.Image
 	ScreenImageTexture rl.Texture2D
 	Black              = rl.Color{39, 35, 36, 255}
+	Sh                 *Shaders
+	light1             *ZimaLight
 )
 
 type Vector2i struct {
@@ -105,6 +107,10 @@ func Game() {
 	rl.SetTextureFilter(ScreenTexture.Texture, rl.FilterPoint)
 	ScreenImage = rl.GenImageColor(SW, SH, rl.Red)
 	Cam.Camera2D.Offset = rl.Vector2{SW * WindowScale * 0.9 / 2, SH * WindowScale / 2}
+
+	Sh = loadShaders()
+	light1 = newZimaLight()
+
 	for !rl.WindowShouldClose() {
 		if rl.IsKeyPressed(rl.KeyGrave) {
 			Debug = !Debug
@@ -150,41 +156,34 @@ func runLevel(dt float32) {
 	UpdateRewind(dt)
 	Cam.SetTarget(Pl.Pos)
 	Cam.Update(dt)
-	lights()
 
+	tex1 := light1.Compute(Sh, Pl.Pos, rl.NewColor(255, 225, 170, 255), LE.LightOccluders())
 	rl.BeginDrawing()
 	{
 		rl.ClearBackground(Black)
 		rl.BeginMode2D(Cam.Camera2D)
-		{
-			LE.Draw() // TODO sort objects with actors
 
-			slices.SortFunc(Actors, func(a, b *Actor) int {
-				return int(b.Pos.X - a.Pos.X)
-			})
-			for _, a := range Actors {
-				a.Draw()
-			}
+		LE.Draw() // TODO sort objects with actors
+
+		slices.SortFunc(Actors, func(a, b *Actor) int {
+			return int(b.Pos.X - a.Pos.X)
+		})
+		for _, a := range Actors {
+			a.Draw()
 		}
+
+		rl.BeginBlendMode(rl.BlendAdditive)
+		for _, lp := range []struct {
+			pos rl.Vector2
+			tex rl.Texture2D
+		}{{Pl.Pos, tex1}} {
+			src := rl.NewRectangle(0, 0, LA, -LA) // флип по Y для render-текстуры
+			dst := rl.NewRectangle(lp.pos.X-LA/2, lp.pos.Y-LA/2, LA, LA)
+			rl.DrawTexturePro(lp.tex, src, dst, rl.Vector2{}, 0, rl.White)
+		}
+		rl.EndBlendMode()
+
 		rl.EndMode2D()
-
-		ScreenImageTexture = rl.LoadTextureFromImage(ScreenImage)
-		rl.SetTextureFilter(ScreenImageTexture, rl.TextureFilterNearest)
-
-		rl.DrawTexturePro(ScreenImageTexture,
-			rl.Rectangle{
-				X:      0,
-				Y:      0,
-				Width:  float32(SW),
-				Height: float32(SH),
-			},
-			rl.Rectangle{
-				X:      0,
-				Y:      0,
-				Width:  SW * WindowScale,
-				Height: SH * WindowScale,
-			},
-			rl.Vector2{}, 0, rl.White)
 
 		if Debug {
 			LE.DrawGui()
@@ -200,7 +199,6 @@ func runLevel(dt float32) {
 
 	}
 	rl.EndDrawing()
-	rl.UnloadTexture(ScreenImageTexture)
 }
 
 func lights() {

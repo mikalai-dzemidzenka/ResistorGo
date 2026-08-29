@@ -299,6 +299,7 @@ func main() {
 	sh := loadShaders()
 	light1 := newZimaLight()
 	light2 := newZimaLight()
+	light3 := newZimaLight()
 
 	occluders := []Occluder{
 		{Rect: rl.NewRectangle(200, 150, 120, 80)},
@@ -312,9 +313,11 @@ func main() {
 	for !rl.WindowShouldClose() {
 		lightPos1 := rl.GetMousePosition()
 		lightPos2 := rl.Vector2{X: 750, Y: 500}
+		lightPos3 := rl.Vector2{X: 250, Y: 500}
 
 		tex1 := light1.Compute(sh, lightPos1, rl.NewColor(255, 225, 170, 255), occluders)
 		tex2 := light2.Compute(sh, lightPos2, rl.NewColor(140, 190, 255, 255), occluders)
+		tex3 := light3.Compute(sh, lightPos3, rl.Red, occluders)
 
 		rl.BeginDrawing()
 		rl.ClearBackground(ambient)
@@ -329,7 +332,7 @@ func main() {
 		for _, lp := range []struct {
 			pos rl.Vector2
 			tex rl.Texture2D
-		}{{lightPos1, tex1}, {lightPos2, tex2}} {
+		}{{lightPos1, tex1}, {lightPos2, tex2}, {lightPos3, tex3}} {
 			src := rl.NewRectangle(0, 0, LA, -LA) // флип по Y для render-текстуры
 			dst := rl.NewRectangle(lp.pos.X-LA/2, lp.pos.Y-LA/2, LA, LA)
 			rl.DrawTexturePro(lp.tex, src, dst, rl.Vector2{}, 0, rl.White)
@@ -338,6 +341,7 @@ func main() {
 
 		rl.DrawCircleV(lightPos1, 5, rl.Yellow)
 		rl.DrawCircleV(lightPos2, 5, rl.SkyBlue)
+		rl.DrawCircleV(lightPos3, 5, rl.Red)
 		rl.DrawFPS(10, 10)
 		rl.DrawText("Мышь — свет 1. Второй свет фиксирован.", 10, 40, 18, rl.RayWhite)
 
