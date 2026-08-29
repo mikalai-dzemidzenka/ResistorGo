@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"unsafe"
 )
 
 const (
@@ -22,19 +23,23 @@ const (
 )
 
 var (
-	Debug         = true
-	GameTimeSec   float64
-	Accumulator   float64
-	PhysicsTime   float64
-	Ticks         int
-	FixedTimeStep float64 = 1.0 / 60.0
-	MouseWorldPos Vector2i
-	MousePos      rl.Vector2
-	Cam           Camera
-	LE            LevelEditor
-	Pl            *Actor
-	Actors        []*Actor
-	Stage         int = StageLevel
+	Debug              = true
+	GameTimeSec        float64
+	Accumulator        float64
+	PhysicsTime        float64
+	Ticks              int
+	FixedTimeStep      float64 = 1.0 / 60.0
+	MouseWorldPos      Vector2i
+	MousePos           rl.Vector2
+	Cam                Camera
+	LE                 LevelEditor
+	Pl                 *Actor
+	Actors             []*Actor
+	Stage              int = StageLevel
+	ScreenTexture      rl.RenderTexture2D
+	ScreenImage        *rl.Image
+	ScreenImageTexture rl.Texture2D
+	Black              = rl.Color{39, 35, 36, 255}
 )
 
 type Vector2i struct {
@@ -98,6 +103,7 @@ func Game() {
 
 	ScreenTexture = rl.LoadRenderTexture(SW, SH)
 	rl.SetTextureFilter(ScreenTexture.Texture, rl.FilterPoint)
+	ScreenImage = rl.GenImageColor(SW, SH, rl.Red)
 	Cam.Camera2D.Offset = rl.Vector2{SW * WindowScale * 0.9 / 2, SH * WindowScale / 2}
 	for !rl.WindowShouldClose() {
 		if rl.IsKeyPressed(rl.KeyGrave) {
@@ -144,13 +150,11 @@ func runLevel(dt float32) {
 	UpdateRewind(dt)
 	Cam.SetTarget(Pl.Pos)
 	Cam.Update(dt)
-	if !Debug {
-		lights()
-	}
+	lights()
 
 	rl.BeginDrawing()
 	{
-		rl.ClearBackground(rl.Black)
+		rl.ClearBackground(Black)
 		rl.BeginMode2D(Cam.Camera2D)
 		{
 			LE.Draw() // TODO sort objects with actors
@@ -164,22 +168,23 @@ func runLevel(dt float32) {
 		}
 		rl.EndMode2D()
 
-		if !Debug {
-			rl.DrawTexturePro(ScreenTexture.Texture,
-				rl.Rectangle{
-					X:      0,
-					Y:      0,
-					Width:  float32(ScreenTexture.Texture.Width),
-					Height: -float32(ScreenTexture.Texture.Height),
-				},
-				rl.Rectangle{
-					X:      0,
-					Y:      0,
-					Width:  SW * WindowScale,
-					Height: SH * WindowScale,
-				},
-				rl.Vector2{}, 0, rl.White)
-		}
+		ScreenImageTexture = rl.LoadTextureFromImage(ScreenImage)
+		rl.SetTextureFilter(ScreenImageTexture, rl.TextureFilterNearest)
+
+		rl.DrawTexturePro(ScreenImageTexture,
+			rl.Rectangle{
+				X:      0,
+				Y:      0,
+				Width:  float32(SW),
+				Height: float32(SH),
+			},
+			rl.Rectangle{
+				X:      0,
+				Y:      0,
+				Width:  SW * WindowScale,
+				Height: SH * WindowScale,
+			},
+			rl.Vector2{}, 0, rl.White)
 
 		if Debug {
 			LE.DrawGui()
@@ -195,11 +200,11 @@ func runLevel(dt float32) {
 
 	}
 	rl.EndDrawing()
+	rl.UnloadTexture(ScreenImageTexture)
 }
 
 func lights() {
-	rl.BeginTextureMode(ScreenTexture)
-	rl.ClearBackground(rl.Color{255, 255, 255, 0})
+	rl.ImageClearBackground(ScreenImage, rl.Color{255, 255, 255, 0})
 	oldOffset := Cam.Camera2D.Offset
 	Cam.Camera2D.Offset = rl.Vector2{SW * 0.9 / 2, SH / 2}
 	Cam.Camera2D.Zoom /= WindowScale
@@ -210,10 +215,10 @@ func lights() {
 	objCoords := make([]world, 0, len(LE.objectsIndexed))
 	for _, obj := range LE.objectsIndexed {
 		worldCoord := rl.Vector2{
-			X: float32(obj.X) + obj.CollisionRect.X,
-			Y: float32(obj.Y) + obj.CollisionRect.Y - 1,
+			X: float32(obj.X) + obj.LightRect.X,
+			Y: float32(obj.Y) + obj.LightRect.Y,
 		}
-		objCoords = append(objCoords, world{Coord: worldCoord, Col: rl.Vector2{obj.CollisionRect.Width, obj.CollisionRect.Height}})
+		objCoords = append(objCoords, world{Coord: worldCoord, Col: rl.Vector2{obj.LightRect.Width, obj.LightRect.Height}})
 	}
 	for y := 0; y < SH; y++ {
 	next:
@@ -238,15 +243,35 @@ func lights() {
 					}, coord)
 					dist = float32(math.Pow(float64(dist), 1.5))
 					dist = clamp(dist, 0, 255)
-					rl.DrawPixel(int32(x), int32(y), rl.Color{0, 0, 0, uint8(dist)})
+					rl.ImageDrawPixel(ScreenImage, int32(x), int32(y), rl.Color{Black.R, Black.G, Black.B, uint8(dist)})
 					continue next
 				}
 			}
 		}
 	}
+	data := unsafe.Slice((*byte)(ScreenImage.Data), SW*SH*4)
+	for i := 0; i < len(data); i += 4 {
+		left := func(j int, b []byte) [4]byte {
+			j -= 4
+			j = clamp(j, 0, SW*SH*4-4)
+			return [4]byte{b[j], b[j+1], b[j+2], b[j+3]}
+		}
+		right := func(j int, b []byte) [4]byte {
+			j += 4
+			j = clamp(j, 0, SW*SH*4-4)
+			return [4]byte{b[j], b[j+1], b[j+2], b[j+3]}
+		}
+
+		if left(i, data) == ([4]byte{255, 255, 255, 0}) && right(i, data) == ([4]byte{Black.R, Black.G, Black.B, Black.A}) ||
+			right(i, data) == ([4]byte{255, 255, 255, 0}) && left(i, data) == ([4]byte{Black.R, Black.G, Black.B, Black.A}) {
+			data[i+0] = 85
+			data[i+1] = 43
+			data[i+2] = 55
+			data[i+3] = 255
+		}
+	}
 	Cam.Camera2D.Zoom *= WindowScale
 	Cam.Camera2D.Offset = oldOffset
-	rl.EndTextureMode()
 }
 
 func segmentIntersectsRect(

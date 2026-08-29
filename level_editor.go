@@ -60,6 +60,7 @@ type LevelObject struct {
 	X             int32         `json:"x,omitempty"`
 	Y             int32         `json:"y,omitempty"`
 	CollisionRect *rl.Rectangle `json:"collisionRect,omitempty"`
+	LightRect     *rl.Rectangle `json:"lightRect,omitempty"`
 }
 
 func NewLevelEditor(gridW, gridH int32) LevelEditor {
@@ -125,6 +126,7 @@ func (le *LevelEditor) Update(dt float32) {
 				Width:  le.obj.CollisionRect.Width,
 				Height: le.obj.CollisionRect.Height,
 			},
+			LightRect: le.obj.LightRect,
 		}
 		le.buildIndex()
 	}
@@ -161,6 +163,14 @@ func (le *LevelEditor) Draw() {
 					Width:  obj.CollisionRect.Width,
 					Height: obj.CollisionRect.Height,
 				}, 1, rl.SkyBlue)
+			}
+			if obj.LightRect != nil {
+				rl.DrawRectangleLinesEx(rl.Rectangle{
+					X:      float32(obj.X) + obj.LightRect.X,
+					Y:      float32(obj.Y) + obj.LightRect.Y,
+					Width:  obj.LightRect.Width,
+					Height: obj.LightRect.Height,
+				}, 1, rl.Yellow)
 			}
 		}
 		le.DrawCursor()

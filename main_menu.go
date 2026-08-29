@@ -5,8 +5,6 @@ import (
 	"math"
 )
 
-var ScreenTexture rl.RenderTexture2D
-
 func runMainMenu(dt float32) {
 	rl.BeginTextureMode(ScreenTexture)
 	rl.ClearBackground(rl.Color{0, 0, 0, 0})
