@@ -252,8 +252,8 @@ func (le *LevelEditor) OpenObjects() {
 
 func (le *LevelEditor) DrawGui() {
 	if le.isObjectsViewerEnabled {
-		rlg.SetStyle(rlg.BUTTON, rlg.BASE_COLOR_NORMAL, int64(rl.ColorToInt(color.RGBA{0, 0, 0, 0})))
-		rlg.SetStyle(rlg.BUTTON, rlg.BASE_COLOR_FOCUSED, int64(rl.ColorToInt(color.RGBA{0, 0, 0, 25})))
+		rlg.SetStyle(rlg.BUTTON, rlg.BASE_COLOR_NORMAL, rlg.PropertyValue(rl.ColorToInt(color.RGBA{0, 0, 0, 0})))
+		rlg.SetStyle(rlg.BUTTON, rlg.BASE_COLOR_FOCUSED, rlg.PropertyValue(rl.ColorToInt(color.RGBA{0, 0, 0, 25})))
 		for i, obj := range le.levelObjects {
 			tex := resources[obj.Resource]
 			rl.DrawTexturePro(tex,
