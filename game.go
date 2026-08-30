@@ -4,11 +4,9 @@ import (
 	"fmt"
 	rlg "github.com/gen2brain/raylib-go/raygui"
 	rl "github.com/gen2brain/raylib-go/raylib"
-	"math"
 	"slices"
 	"strconv"
 	"strings"
-	"unsafe"
 )
 
 const (
@@ -23,25 +21,26 @@ const (
 )
 
 var (
-	Debug              = true
-	GameTimeSec        float64
-	Accumulator        float64
-	PhysicsTime        float64
-	Ticks              int
-	FixedTimeStep      float64 = 1.0 / 60.0
-	MouseWorldPos      Vector2i
-	MousePos           rl.Vector2
-	Cam                Camera
-	LE                 LevelEditor
-	Pl                 *Actor
-	Actors             []*Actor
-	Stage              int = StageLevel
-	ScreenTexture      rl.RenderTexture2D
-	ScreenImage        *rl.Image
-	ScreenImageTexture rl.Texture2D
-	Black              = rl.Color{39, 35, 36, 255}
-	Sh                 *Shaders
-	light1             *ZimaLight
+	Debug                = true
+	GameTimeSec          float64
+	Accumulator          float64
+	PhysicsTime          float64
+	Ticks                int
+	FixedTimeStep        float64 = 1.0 / 60.0
+	MouseWorldPos        Vector2i
+	MousePos             rl.Vector2
+	Cam                  Camera
+	LE                   LevelEditor
+	Pl                   *Actor
+	Actors               []*Actor
+	Stage                int = StageLevel
+	ScreenTexture        rl.RenderTexture2D
+	ScreenFullTexture    rl.RenderTexture2D
+	ScreenPaletteTexture rl.Texture2D
+	PaletteShader        rl.Shader
+	Black                = rl.Color{39, 35, 36, 255}
+	Sh                   *Shaders
+	light1               *ZimaLight
 )
 
 type Vector2i struct {
@@ -105,11 +104,35 @@ func Game() {
 
 	ScreenTexture = rl.LoadRenderTexture(SW, SH)
 	rl.SetTextureFilter(ScreenTexture.Texture, rl.FilterPoint)
-	ScreenImage = rl.GenImageColor(SW, SH, rl.Red)
 	Cam.Camera2D.Offset = rl.Vector2{SW * WindowScale * 0.9 / 2, SH * WindowScale / 2}
 
 	Sh = loadShaders()
 	light1 = newZimaLight()
+
+	PaletteShader = rl.LoadShaderFromMemory("", fsPalette)
+
+	palette := []rl.Color{
+		rl.NewColor(57, 31, 33, 255),
+		rl.NewColor(39, 35, 36, 255),
+		rl.NewColor(60, 51, 53, 255),
+		rl.NewColor(87, 28, 39, 255),
+		rl.NewColor(85, 70, 78, 255),
+		rl.NewColor(91, 74, 100, 255),
+		rl.NewColor(117, 102, 108, 255),
+		rl.NewColor(137, 30, 43, 255),
+		rl.NewColor(196, 36, 48, 255),
+		rl.NewColor(234, 50, 60, 255),
+		rl.NewColor(138, 72, 54, 255),
+		rl.NewColor(191, 111, 74, 255),
+		rl.NewColor(230, 156, 105, 255),
+		rl.NewColor(156, 123, 132, 255),
+		rl.NewColor(173, 153, 140, 255),
+		rl.NewColor(186, 177, 155, 255),
+		rl.NewColor(212, 207, 107, 255),
+	}
+
+	ScreenPaletteTexture = makePaletteTexture(palette)
+	ScreenFullTexture = rl.LoadRenderTexture(SW*WindowScale, SH*WindowScale)
 
 	for !rl.WindowShouldClose() {
 		if rl.IsKeyPressed(rl.KeyGrave) {
@@ -158,7 +181,7 @@ func runLevel(dt float32) {
 	Cam.Update(dt)
 
 	tex1 := light1.Compute(Sh, Pl.Pos, rl.NewColor(255, 225, 170, 255), LE.LightOccluders())
-	rl.BeginDrawing()
+	rl.BeginTextureMode(ScreenFullTexture)
 	{
 		rl.ClearBackground(Black)
 		rl.BeginMode2D(Cam.Camera2D)
@@ -198,157 +221,41 @@ func runLevel(dt float32) {
 		}
 
 	}
+	rl.EndTextureMode()
+
+	rl.BeginDrawing()
+	rl.ClearBackground(rl.Black)
+
+	locTexture1 := rl.GetShaderLocation(PaletteShader, "texture1")
+	locPaletteSize := rl.GetShaderLocation(PaletteShader, "paletteSize")
+	locDither := rl.GetShaderLocation(PaletteShader, "ditherStrength")
+	rl.BeginShaderMode(PaletteShader)
+	rl.SetShaderValueTexture(PaletteShader, locTexture1, ScreenPaletteTexture)
+	palette := []rl.Color{
+		rl.NewColor(57, 31, 33, 255),
+		rl.NewColor(39, 35, 36, 255),
+		rl.NewColor(60, 51, 53, 255),
+		rl.NewColor(87, 28, 39, 255),
+		rl.NewColor(85, 70, 78, 255),
+		rl.NewColor(91, 74, 100, 255),
+		rl.NewColor(117, 102, 108, 255),
+		rl.NewColor(137, 30, 43, 255),
+		rl.NewColor(196, 36, 48, 255),
+		rl.NewColor(234, 50, 60, 255),
+		rl.NewColor(138, 72, 54, 255),
+		rl.NewColor(191, 111, 74, 255),
+		rl.NewColor(230, 156, 105, 255),
+		rl.NewColor(156, 123, 132, 255),
+		rl.NewColor(173, 153, 140, 255),
+		rl.NewColor(186, 177, 155, 255),
+		rl.NewColor(212, 207, 107, 255),
+	}
+	rl.SetShaderValue(PaletteShader, locPaletteSize, []float32{float32(len(palette))}, rl.ShaderUniformFloat)
+	rl.SetShaderValue(PaletteShader, locDither, []float32{1}, rl.ShaderUniformFloat)
+
+	src := rl.NewRectangle(0, 0, SW*WindowScale, -SH*WindowScale) // флип render-текстуры
+	dst := rl.NewRectangle(0, 0, SW*WindowScale, SH*WindowScale)
+	rl.DrawTexturePro(ScreenFullTexture.Texture, src, dst, rl.Vector2{}, 0, rl.White)
+	rl.EndShaderMode()
 	rl.EndDrawing()
-}
-
-func lights() {
-	rl.ImageClearBackground(ScreenImage, rl.Color{255, 255, 255, 0})
-	oldOffset := Cam.Camera2D.Offset
-	Cam.Camera2D.Offset = rl.Vector2{SW * 0.9 / 2, SH / 2}
-	Cam.Camera2D.Zoom /= WindowScale
-	type world struct {
-		Coord rl.Vector2
-		Col   rl.Vector2
-	}
-	objCoords := make([]world, 0, len(LE.objectsIndexed))
-	for _, obj := range LE.objectsIndexed {
-		worldCoord := rl.Vector2{
-			X: float32(obj.X) + obj.LightRect.X,
-			Y: float32(obj.Y) + obj.LightRect.Y,
-		}
-		objCoords = append(objCoords, world{Coord: worldCoord, Col: rl.Vector2{obj.LightRect.Width, obj.LightRect.Height}})
-	}
-	for y := 0; y < SH; y++ {
-	next:
-		for x := 0; x < SW; x++ {
-			coord := rl.GetScreenToWorld2D(rl.Vector2{float32(x), float32(y)}, Cam.Camera2D)
-			for _, worldCoord := range objCoords {
-				if coord.X >= worldCoord.Coord.X && coord.X <= worldCoord.Coord.X+worldCoord.Col.X &&
-					coord.Y >= worldCoord.Coord.Y && coord.Y <= worldCoord.Coord.Y+worldCoord.Col.Y {
-					continue next
-				}
-			}
-			for _, worldCoord := range objCoords {
-				if segmentIntersectsRect(coord, Pl.Pos, rl.Rectangle{
-					X:      worldCoord.Coord.X,
-					Y:      worldCoord.Coord.Y,
-					Width:  worldCoord.Col.X,
-					Height: worldCoord.Col.Y,
-				}) {
-					dist := distance(rl.Vector2{
-						X: Pl.Pos.X + 24,
-						Y: Pl.Pos.Y + 24,
-					}, coord)
-					dist = float32(math.Pow(float64(dist), 1.5))
-					dist = clamp(dist, 0, 255)
-					rl.ImageDrawPixel(ScreenImage, int32(x), int32(y), rl.Color{Black.R, Black.G, Black.B, uint8(dist)})
-					continue next
-				}
-			}
-		}
-	}
-	data := unsafe.Slice((*byte)(ScreenImage.Data), SW*SH*4)
-	for i := 0; i < len(data); i += 4 {
-		left := func(j int, b []byte) [4]byte {
-			j -= 4
-			j = clamp(j, 0, SW*SH*4-4)
-			return [4]byte{b[j], b[j+1], b[j+2], b[j+3]}
-		}
-		right := func(j int, b []byte) [4]byte {
-			j += 4
-			j = clamp(j, 0, SW*SH*4-4)
-			return [4]byte{b[j], b[j+1], b[j+2], b[j+3]}
-		}
-
-		if left(i, data) == ([4]byte{255, 255, 255, 0}) && right(i, data) == ([4]byte{Black.R, Black.G, Black.B, Black.A}) ||
-			right(i, data) == ([4]byte{255, 255, 255, 0}) && left(i, data) == ([4]byte{Black.R, Black.G, Black.B, Black.A}) {
-			data[i+0] = 85
-			data[i+1] = 43
-			data[i+2] = 55
-			data[i+3] = 255
-		}
-	}
-	Cam.Camera2D.Zoom *= WindowScale
-	Cam.Camera2D.Offset = oldOffset
-}
-
-func segmentIntersectsRect(
-	start rl.Vector2,
-	end rl.Vector2,
-	rect rl.Rectangle,
-) bool {
-
-	dx := end.X - start.X
-	dy := end.Y - start.Y
-
-	tMin := float32(0.0)
-	tMax := float32(1.0)
-
-	// --------------------------------------------------------
-	// X
-	// --------------------------------------------------------
-
-	if math.Abs(float64(dx)) < 0.000001 {
-
-		if start.X < rect.X ||
-			start.X > rect.X+rect.Width {
-			return false
-		}
-
-	} else {
-
-		tx1 := (rect.X - start.X) / dx
-		tx2 := (rect.X + rect.Width - start.X) / dx
-
-		if tx1 > tx2 {
-			tx1, tx2 = tx2, tx1
-		}
-
-		if tx1 > tMin {
-			tMin = tx1
-		}
-
-		if tx2 < tMax {
-			tMax = tx2
-		}
-
-		if tMin > tMax {
-			return false
-		}
-	}
-
-	// --------------------------------------------------------
-	// Y
-	// --------------------------------------------------------
-
-	if math.Abs(float64(dy)) < 0.000001 {
-
-		if start.Y < rect.Y ||
-			start.Y > rect.Y+rect.Height {
-			return false
-		}
-
-	} else {
-
-		ty1 := (rect.Y - start.Y) / dy
-		ty2 := (rect.Y + rect.Height - start.Y) / dy
-
-		if ty1 > ty2 {
-			ty1, ty2 = ty2, ty1
-		}
-
-		if ty1 > tMin {
-			tMin = ty1
-		}
-
-		if ty2 < tMax {
-			tMax = ty2
-		}
-
-		if tMin > tMax {
-			return false
-		}
-	}
-
-	return true
 }

@@ -80,42 +80,115 @@ in vec2 fragTexCoord;
 out vec4 finalColor;
 uniform sampler2D texture0; // финальная reduced shadow-map (ширина 2)
 uniform vec4 lightColor;
-
+ 
 float shadowDistanceH(vec2 uv)
 {
     float u = abs(uv.x - 0.5) * 2.0;
     float v = uv.y * 2.0 - 1.0;
     float v0 = v / max(u, 0.0001);
-    v0 = (v0 + 1.0) / 2.0;
+    v0 = clamp((v0 + 1.0) / 2.0, 0.0, 1.0);
     return texture(texture0, vec2(uv.x, v0)).r;
 }
-
+ 
 float shadowDistanceV(vec2 uv)
 {
     float u = abs(uv.y - 0.5) * 2.0;
     float v = uv.x * 2.0 - 1.0;
     float v0 = v / max(u, 0.0001);
-    v0 = (v0 + 1.0) / 2.0;
+    v0 = clamp((v0 + 1.0) / 2.0, 0.0, 1.0);
     return texture(texture0, vec2(uv.y, v0)).g;
 }
-
+ 
 void main()
 {
     float dist = distance(fragTexCoord, vec2(0.5));
     dist -= 0.006; // небольшой bias, чтобы убрать самозатенение
-
+ 
     float du = abs(fragTexCoord.x - 0.5);
     float dv = abs(fragTexCoord.y - 0.5);
-
-    // выбираем H- или V- карту в зависимости от доминирующего направления луча
-    float shadowMapDistance = (du > dv) ? shadowDistanceH(fragTexCoord) : shadowDistanceV(fragTexCoord);
-
+ 
+    // Обе карты (H и V) считаются всегда и плавно смешиваются около
+    // диагоналей (du ~ dv), где они сходятся. Жёсткое переключение
+    // (du > dv ? H : V) даёт видимый шов на диагоналях из-за
+    // дискретизации - H и V карты в этой точке не идеально совпадают.
+    float distH = shadowDistanceH(fragTexCoord);
+    float distV = shadowDistanceV(fragTexCoord);
+    float w = smoothstep(-0.0001, 0.0001, du - dv); // 0 -> берём V, 1 -> берём H
+    float shadowMapDistance = mix(distV, distH, w);
+ 
     float lit = (dist < shadowMapDistance) ? 1.0 : 0.0;
     float atten = clamp(1.0 - dist / 0.5, 0.0, 1.0);
     atten *= atten;
-
+ 
     finalColor = vec4(lightColor.rgb * lit * atten, 1.0);
 }`
+
+const fsPalette = `
+#version 330
+in vec2 fragTexCoord;
+out vec4 finalColor;
+
+uniform sampler2D texture0;   // сцена
+uniform sampler2D texture1;   // палитра, Nx1 текстура
+uniform float paletteSize;    // сколько цветов реально используется в палитре
+uniform float ditherStrength; // 0 = выключено, >0 - сила дизеринга (0..1)
+
+// Простой 4x4 Bayer-дизер, чтобы переходы между цветами палитры
+// не давали грубые полосы (banding), а выглядели немного "зашумлённо",
+// как на старых консолях.
+float bayer4x4(vec2 p)
+{
+    int x = int(mod(p.x, 4.0));
+    int y = int(mod(p.y, 4.0));
+    int idx = y * 4 + x;
+    float m[16] = float[16](
+         0.0,  8.0,  2.0, 10.0,
+        12.0,  4.0, 14.0,  6.0,
+         3.0, 11.0,  1.0,  9.0,
+        15.0,  7.0, 13.0,  5.0
+    );
+    return m[idx] / 16.0 - 0.5; // диапазон примерно [-0.5, 0.5]
+}
+
+void main()
+{
+    vec3 col = texture(texture0, fragTexCoord).rgb;
+
+    // лёгкий дизер перед квантованием сглаживает видимые "ступеньки"
+    float dith = bayer4x4(gl_FragCoord.xy) * ditherStrength * 0.06;
+    col += vec3(dith);
+
+    float bestDist = 1.0e9;
+    vec3 bestColor = col;
+
+    for (int i = 0; i < 256; i++)
+    {
+        if (float(i) >= paletteSize) break;
+        vec2 uv = vec2((float(i) + 0.5) / paletteSize, 0.5);
+        vec3 pal = texture(texture1, uv).rgb;
+        float d = distance(col, pal);
+        if (d < bestDist)
+        {
+            bestDist = d;
+            bestColor = pal;
+        }
+    }
+
+    finalColor = vec4(bestColor, 1.0);
+}`
+
+// makePaletteTexture строит Nx1 текстуру из списка цветов палитры.
+func makePaletteTexture(colors []rl.Color) rl.Texture2D {
+	img := rl.GenImageColor(len(colors), 1, rl.Blank)
+	for i, c := range colors {
+		rl.ImageDrawPixel(img, int32(i), 0, c)
+	}
+	tex := rl.LoadTextureFromImage(img)
+	rl.UnloadImage(img)
+	rl.SetTextureFilter(tex, rl.FilterPoint)
+	rl.SetTextureWrap(tex, rl.WrapClamp)
+	return tex
+}
 
 // ZimaLight содержит все промежуточные render-текстуры пайплайна для
 // одного источника света (переиспользуются между кадрами).

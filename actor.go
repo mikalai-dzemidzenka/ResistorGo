@@ -50,6 +50,8 @@ type Actor struct {
 	Updown            uint8
 	AnimPhysTimeStart float64
 	Anim              string
+	AnimPaused        bool
+	AnimPausedFor     float64
 	AnimDuration      float64
 	AnimYOffset       int8
 	AnimFrame         uint8
@@ -210,11 +212,21 @@ func (a *Actor) Draw() {
 			Height: 48,
 		}, a.InterpolatedPos, rl.White)
 	} else {
-		if a.AnimOnce {
-			a.AnimFinished = a.DrawAnimOnce()
+		if a.AnimPaused {
+			a.DrawFrame()
+			if a.AnimPausedFor > 0 && PhysicsTime-a.AnimPhysTimeStart > a.AnimPausedFor {
+				a.AnimPaused = false
+				a.AnimPausedFor = 0
+				a.AnimCurrentFrame++
+			}
 		} else {
-			a.DrawAnim()
+			if a.AnimOnce {
+				a.AnimFinished = a.DrawAnimOnce()
+			} else {
+				a.DrawAnim()
+			}
 		}
+
 	}
 
 	if Debug {
@@ -290,6 +302,22 @@ func (a *Actor) SetAnim(anim string, o AnimOptions) {
 	a.AnimYOffset = o.animYOffset
 }
 
+func (a *Actor) DrawFrame() {
+	tex, ok := resources[a.Anim]
+	if !ok {
+		panic(a.Anim)
+	}
+
+	rl.DrawTextureRec(tex, rl.Rectangle{
+		X:      float32(a.AnimCurrentFrame) * 48,
+		Y:      0,
+		Width:  48 * float32(a.Orientation),
+		Height: float32(tex.Height),
+	}, rl.Vector2{
+		X: a.InterpolatedPos.X,
+		Y: a.InterpolatedPos.Y + float32(a.AnimYOffset),
+	}, rl.White)
+}
 func (a *Actor) DrawAnimOnce() bool {
 	tex, ok := resources[a.Anim]
 	if !ok {
