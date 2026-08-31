@@ -2,10 +2,6 @@ package resistor
 
 import rl "github.com/gen2brain/raylib-go/raylib"
 
-const (
-	LA = 256 // размер квадратной области света (степень двойки)
-)
-
 // ---------------------------------------------------------------------
 // Шейдеры (GLSL 330, соответствуют HLSL-коду из статьи Zima практически
 // один в один, только переписаны под raylib/OpenGL).
@@ -132,10 +128,12 @@ uniform sampler2D texture0;   // сцена
 uniform sampler2D texture1;   // палитра, Nx1 текстура
 uniform float paletteSize;    // сколько цветов реально используется в палитре
 uniform float ditherStrength; // 0 = выключено, >0 - сила дизеринга (0..1)
+uniform vec2  resolution;     // размер экрана в пикселях
+uniform float pixelSize;      // размер "большого пикселя" в экранных пикселях (>=1)
 
-// Простой 4x4 Bayer-дизер, чтобы переходы между цветами палитры
-// не давали грубые полосы (banding), а выглядели немного "зашумлённо",
-// как на старых консолях.
+// Простой 4x4 Bayer-дизер. Принимает координату УЖЕ В БЛОКАХ (не в
+// реальных экранных пикселях) - иначе при крупных pixelSize узор
+// дизера останется мелким и "поедет" относительно крупных пикселей.
 float bayer4x4(vec2 p)
 {
     int x = int(mod(p.x, 4.0));
@@ -147,15 +145,24 @@ float bayer4x4(vec2 p)
          3.0, 11.0,  1.0,  9.0,
         15.0,  7.0, 13.0,  5.0
     );
-    return m[idx] / 16.0 - 0.5; // диапазон примерно [-0.5, 0.5]
+    return m[idx] / 16.0 - 0.5;
 }
 
 void main()
 {
-    vec3 col = texture(texture0, fragTexCoord).rgb;
+    float ps = max(pixelSize, 1.0);
 
-    // лёгкий дизер перед квантованием сглаживает видимые "ступеньки"
-    float dith = bayer4x4(gl_FragCoord.xy) * ditherStrength * 0.06;
+    // координата текущего "большого пикселя" в блоках сетки
+    vec2 blockIdx = floor(gl_FragCoord.xy / ps);
+
+    // центр этого блока в экранных пикселях -> в UV сцены
+    vec2 blockCenterPx = (blockIdx + 0.5) * ps;
+    vec2 uv = blockCenterPx / resolution;
+
+    vec3 col = texture(texture0, uv).rgb;
+
+    // дизер по индексу блока, не по реальному пикселю экрана
+    float dith = bayer4x4(blockIdx) * ditherStrength * 0.06;
     col += vec3(dith);
 
     float bestDist = 1.0e9;
@@ -164,8 +171,8 @@ void main()
     for (int i = 0; i < 256; i++)
     {
         if (float(i) >= paletteSize) break;
-        vec2 uv = vec2((float(i) + 0.5) / paletteSize, 0.5);
-        vec3 pal = texture(texture1, uv).rgb;
+        vec2 puv = vec2((float(i) + 0.5) / paletteSize, 0.5);
+        vec3 pal = texture(texture1, puv).rgb;
         float d = distance(col, pal);
         if (d < bestDist)
         {
@@ -193,6 +200,7 @@ func makePaletteTexture(colors []rl.Color) rl.Texture2D {
 // ZimaLight содержит все промежуточные render-текстуры пайплайна для
 // одного источника света (переиспользуются между кадрами).
 type ZimaLight struct {
+	LA      int32
 	caster  rl.RenderTexture2D
 	dist    rl.RenderTexture2D
 	distort rl.RenderTexture2D
@@ -200,8 +208,9 @@ type ZimaLight struct {
 	shadow  rl.RenderTexture2D
 }
 
-func newZimaLight() *ZimaLight {
+func newZimaLight(LA int32) *ZimaLight {
 	z := &ZimaLight{
+		LA:      LA,
 		caster:  rl.LoadRenderTexture(LA, LA),
 		dist:    rl.LoadRenderTexture(LA, LA),
 		distort: rl.LoadRenderTexture(LA, LA),
@@ -265,7 +274,7 @@ func (z *ZimaLight) Compute(sh *Shaders, lightPos rl.Vector2, color rl.Color, oc
 	// 1) caster map: рисуем окклюдеры в систему координат, центрированную на свете
 	rl.BeginTextureMode(z.caster)
 	rl.ClearBackground(rl.Blank)
-	cam := rl.Camera2D{Target: lightPos, Offset: rl.Vector2{X: LA / 2, Y: LA / 2}, Zoom: 1}
+	cam := rl.Camera2D{Target: lightPos, Offset: rl.Vector2{X: float32(z.LA) / 2, Y: float32(z.LA) / 2}, Zoom: 1}
 	rl.BeginMode2D(cam)
 	for _, o := range occluders {
 		rl.DrawRectangleRec(o, rl.White)
@@ -274,17 +283,17 @@ func (z *ZimaLight) Compute(sh *Shaders, lightPos rl.Vector2, color rl.Color, oc
 	rl.EndTextureMode()
 
 	// 2) distance pass
-	runPass(z.dist, LA, LA, z.caster.Texture, sh.distance)
+	runPass(z.dist, z.LA, z.LA, z.caster.Texture, sh.distance)
 
 	// 3) distort pass
-	runPass(z.distort, LA, LA, z.dist.Texture, sh.distort)
+	runPass(z.distort, z.LA, z.LA, z.dist.Texture, sh.distort)
 
 	// 4) каскад min-редукции: LA/2 -> ... -> 2 (ширина), высота остаётся LA
 	srcTex := z.distort.Texture
-	srcW := int32(LA)
+	srcW := z.LA
 	for _, rt := range z.reduce {
 		rl.SetShaderValue(sh.reduce, sh.locReduceSrcWidth, []float32{float32(srcW)}, rl.ShaderUniformFloat)
-		runPass(rt, rt.Texture.Width, LA, srcTex, sh.reduce)
+		runPass(rt, rt.Texture.Width, z.LA, srcTex, sh.reduce)
 		srcTex = rt.Texture
 		srcW = rt.Texture.Width
 	}
@@ -293,7 +302,7 @@ func (z *ZimaLight) Compute(sh *Shaders, lightPos rl.Vector2, color rl.Color, oc
 	// 5) shadow pass: сравниваем расстояние пикселя с shadow map по его лучу
 	col := []float32{float32(color.R) / 255, float32(color.G) / 255, float32(color.B) / 255, 1}
 	rl.SetShaderValue(sh.shadow, sh.locShadowColor, col, rl.ShaderUniformVec4)
-	runPass(z.shadow, LA, LA, shadowMap, sh.shadow)
+	runPass(z.shadow, z.LA, z.LA, shadowMap, sh.shadow)
 
 	return z.shadow.Texture
 }
