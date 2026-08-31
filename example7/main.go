@@ -26,7 +26,7 @@ import (
 const (
 	screenW = 960
 	screenH = 640
-	LA      = 256 // размер квадратной области света (степень двойки)
+	LA      = 128 // размер квадратной области света (степень двойки)
 )
 
 // ---------------------------------------------------------------------
@@ -50,95 +50,372 @@ void main()
 
 const fsDistort = `
 #version 330
+
 in vec2 fragTexCoord;
 out vec4 finalColor;
+
 uniform sampler2D texture0;
 
 void main()
 {
-    float u0 = fragTexCoord.x * 2.0 - 1.0;
-    float v0 = fragTexCoord.y * 2.0 - 1.0;
+    // ---------------------------------------------------------
+    // Переводим координаты в [-1, 1]
+    // ---------------------------------------------------------
 
-    // "разворачиваем" квадрант - лучи из центра становятся параллельными
-    v0 = v0 * abs(u0);
-    v0 = (v0 + 1.0) / 2.0;
+    float u0 =
+        fragTexCoord.x * 2.0 - 1.0;
 
-    vec2 newCoords = vec2(fragTexCoord.x, v0);
+    float v0 =
+        fragTexCoord.y * 2.0 - 1.0;
 
-    float horizontal = texture(texture0, newCoords).r;
-    float vertical   = texture(texture0, newCoords.yx).r;
 
-    finalColor = vec4(horizontal, vertical, 0.0, 1.0);
+    // ---------------------------------------------------------
+    // Catalin Zima distortion
+    // ---------------------------------------------------------
+
+    v0 =
+        v0 * abs(u0);
+
+
+    // обратно в [0, 1]
+
+    v0 =
+        (v0 + 1.0) * 0.5;
+
+
+    // distorted coordinates
+
+    vec2 newCoords =
+        vec2(
+            fragTexCoord.x,
+            v0
+        );
+
+
+    // ---------------------------------------------------------
+    // HORIZONTAL
+    // ---------------------------------------------------------
+
+    float horizontal =
+        texture(
+            texture0,
+            newCoords
+        ).a;
+
+
+    float distanceH =
+        horizontal > 0.3
+            ? length(
+                newCoords -
+                vec2(0.5)
+              )
+            : 1.0;
+
+
+    // ---------------------------------------------------------
+    // VERTICAL
+    //
+    // Именно newCoords.yx — это часть оригинального алгоритма.
+    // ---------------------------------------------------------
+
+    float vertical =
+        texture(
+            texture0,
+            newCoords.yx
+        ).a;
+
+
+    float distanceV =
+        vertical > 0.3
+            ? length(
+                newCoords -
+                vec2(0.5)
+              )
+            : 1.0;
+
+
+    // ---------------------------------------------------------
+    // R = horizontal
+    // G = vertical
+    // ---------------------------------------------------------
+
+    finalColor =
+        vec4(
+            distanceH,
+            distanceV,
+            0.0,
+            1.0
+        );
 }`
 
 const fsReduce = `
 #version 330
+
 in vec2 fragTexCoord;
 out vec4 finalColor;
+
 uniform sampler2D texture0;
-uniform float srcWidth; // ширина ВХОДНОЙ текстуры (не выходной)
+uniform float srcWidth;
 
 void main()
 {
-    // gl_FragCoord.x - точная позиция текущего выходного пикселя.
-    // Явно вычисляем координаты пары входных текселей (2*i, 2*i+1),
-    // вместо того чтобы приближать её через fragTexCoord выходного
-    // пикселя (это давало накапливающуюся погрешность по X на
-    // каждом из 7 проходов редукции).
-    float outX  = floor(gl_FragCoord.x - 0.5);
-    float srcX0 = outX * 2.0;
-    float srcX1 = srcX0 + 1.0;
+    float outX =
+        floor(gl_FragCoord.x - 0.5);
 
-    vec2 uv0 = vec2((srcX0 + 0.5) / srcWidth, fragTexCoord.y);
-    vec2 uv1 = vec2((srcX1 + 0.5) / srcWidth, fragTexCoord.y);
 
-    vec2 c0 = texture(texture0, uv0).rg;
-    vec2 c1 = texture(texture0, uv1).rg;
-    finalColor = vec4(min(c0, c1), 0.0, 1.0);
+    float srcX0 =
+        outX * 2.0;
+
+    float srcX1 =
+        srcX0 + 1.0;
+
+
+    vec2 uv0 =
+        vec2(
+            (srcX0 + 0.5) / srcWidth,
+            fragTexCoord.y
+        );
+
+    vec2 uv1 =
+        vec2(
+            (srcX1 + 0.5) / srcWidth,
+            fragTexCoord.y
+        );
+
+
+    vec2 a =
+        texture(
+            texture0,
+            uv0
+        ).rg;
+
+    vec2 b =
+        texture(
+            texture0,
+            uv1
+        ).rg;
+
+
+    finalColor =
+        vec4(
+            min(a, b),
+            0.0,
+            1.0
+        );
 }`
 
 const fsShadow = `
 #version 330
+
 in vec2 fragTexCoord;
 out vec4 finalColor;
-uniform sampler2D texture0; // финальная reduced shadow-map (ширина 2)
+
+uniform sampler2D texture0;
 uniform vec4 lightColor;
+
+
+// ============================================================
+// HORIZONTAL
+// ============================================================
 
 float shadowDistanceH(vec2 uv)
 {
-    float u = abs(uv.x - 0.5) * 2.0;
-    float v = uv.y * 2.0 - 1.0;
-    float v0 = v / max(u, 0.0001);
-    v0 = (v0 + 1.0) / 2.0;
-    return texture(texture0, vec2(uv.x, v0)).r;
+    float u =
+        abs(uv.x - 0.5) * 2.0;
+
+    float v =
+        uv.y * 2.0 - 1.0;
+
+
+    float v0 =
+        v / max(u, 0.000001);
+
+
+    v0 =
+        (v0 + 1.0) * 0.5;
+
+
+    // --------------------------------------------------------
+    // Реальный размер reduced shadow map.
+    //
+    // texture0 всегда имеет:
+    //
+    //     width  = 2
+    //     height = LA
+    //
+    // Поэтому никакого hardcoded 256.
+    // --------------------------------------------------------
+
+    ivec2 size =
+        textureSize(texture0, 0);
+
+
+    int height =
+        size.y;
+
+
+    int column =
+        (uv.x < 0.5)
+            ? 0
+            : 1;
+
+
+    int row =
+        int(
+            clamp(
+                floor(v0 * float(height)),
+                0.0,
+                float(height - 1)
+            )
+        );
+
+
+    return texelFetch(
+        texture0,
+        ivec2(column, row),
+        0
+    ).r;
 }
+
+
+// ============================================================
+// VERTICAL
+// ============================================================
 
 float shadowDistanceV(vec2 uv)
 {
-    float u = abs(uv.y - 0.5) * 2.0;
-    float v = uv.x * 2.0 - 1.0;
-    float v0 = v / max(u, 0.0001);
-    v0 = (v0 + 1.0) / 2.0;
-    return texture(texture0, vec2(uv.y, v0)).g;
+    float u =
+        abs(uv.y - 0.5) * 2.0;
+
+    float v =
+        uv.x * 2.0 - 1.0;
+
+
+    float v0 =
+        v / max(u, 0.000001);
+
+
+    v0 =
+        (v0 + 1.0) * 0.5;
+
+
+    ivec2 size =
+        textureSize(texture0, 0);
+
+
+    int height =
+        size.y;
+
+
+    int column =
+        (uv.y < 0.5)
+            ? 0
+            : 1;
+
+
+    int row =
+        int(
+            clamp(
+                floor(v0 * float(height)),
+                0.0,
+                float(height - 1)
+            )
+        );
+
+
+    return texelFetch(
+        texture0,
+        ivec2(column, row),
+        0
+    ).g;
 }
+
+
+// ============================================================
+// MAIN
+// ============================================================
 
 void main()
 {
-    float dist = distance(fragTexCoord, vec2(0.5));
-    dist -= 0.006; // небольшой bias, чтобы убрать самозатенение
+    vec2 p =
+        fragTexCoord -
+        vec2(0.5);
 
-    float du = abs(fragTexCoord.x - 0.5);
-    float dv = abs(fragTexCoord.y - 0.5);
 
-    // выбираем H- или V- карту в зависимости от доминирующего направления луча
-    float shadowMapDistance = (du > dv) ? shadowDistanceH(fragTexCoord) : shadowDistanceV(fragTexCoord);
+    float dist =
+        length(p);
 
-    float lit = (dist < shadowMapDistance) ? 1.0 : 0.0;
-    float atten = clamp(1.0 - dist / 0.5, 0.0, 1.0);
+
+    // --------------------------------------------------------
+    // Bias
+    // --------------------------------------------------------
+
+    dist -= 0.006;
+
+
+    // --------------------------------------------------------
+    // Выбор H / V
+    // --------------------------------------------------------
+
+    float du =
+        abs(p.x);
+
+    float dv =
+        abs(p.y);
+
+
+    float shadowMapDistance;
+
+
+    if (du > dv)
+    {
+        shadowMapDistance =
+            shadowDistanceH(
+                fragTexCoord
+            );
+    }
+    else
+    {
+        shadowMapDistance =
+            shadowDistanceV(
+                fragTexCoord
+            );
+    }
+
+
+    // --------------------------------------------------------
+    // Shadow test
+    // --------------------------------------------------------
+
+    float lit =
+        (dist < shadowMapDistance)
+            ? 1.0
+            : 0.0;
+
+
+    // --------------------------------------------------------
+    // Attenuation
+    // --------------------------------------------------------
+
+    float atten =
+        clamp(
+            1.0 - dist / 0.5,
+            0.0,
+            1.0
+        );
+
     atten *= atten;
 
-    finalColor = vec4(lightColor.rgb * lit * atten, 1.0);
-}`
+
+    finalColor =
+        vec4(
+            lightColor.rgb *
+            lit *
+            atten,
+            1.0
+        );
+}
+`
 
 const fsBlur = `
 #version 330
@@ -260,26 +537,55 @@ func (z *ZimaLight) Compute(sh *Shaders, lightPos rl.Vector2, color rl.Color, oc
 	rl.EndTextureMode()
 
 	// 2) distance pass
-	runPass(z.dist, LA, LA, z.caster.Texture, sh.distance)
+	//runPass(z.dist, LA, LA, z.caster.Texture, sh.distance)
 
 	// 3) distort pass
-	runPass(z.distort, LA, LA, z.dist.Texture, sh.distort)
+	runPass(z.distort, LA, LA, z.caster.Texture, sh.distort)
 
-	// 4) каскад min-редукции: LA/2 -> ... -> 2 (ширина), высота остаётся LA
 	srcTex := z.distort.Texture
 	srcW := int32(LA)
+
 	for _, rt := range z.reduce {
-		rl.SetShaderValue(sh.reduce, sh.locReduceSrcWidth, []float32{float32(srcW)}, rl.ShaderUniformFloat)
-		runPass(rt, rt.Texture.Width, LA, srcTex, sh.reduce)
+
+		rl.SetShaderValue(
+			sh.reduce,
+			sh.locReduceSrcWidth,
+			[]float32{
+				float32(srcW),
+			},
+			rl.ShaderUniformFloat,
+		)
+
+		runPass(
+			rt,
+			rt.Texture.Width,
+			LA,
+			srcTex,
+			sh.reduce,
+		)
+
 		srcTex = rt.Texture
 		srcW = rt.Texture.Width
 	}
-	shadowMap := srcTex // финальная 2xLA "радиальная shadow map"
+
+	shadowMap := srcTex
 
 	// 5) shadow pass: сравниваем расстояние пикселя с shadow map по его лучу
 	col := []float32{float32(color.R) / 255, float32(color.G) / 255, float32(color.B) / 255, 1}
-	rl.SetShaderValue(sh.shadow, sh.locShadowColor, col, rl.ShaderUniformVec4)
-	runPass(z.shadow, LA, LA, shadowMap, sh.shadow)
+	rl.SetShaderValue(
+		sh.shadow,
+		sh.locShadowColor,
+		col,
+		rl.ShaderUniformVec4,
+	)
+
+	runPass(
+		z.shadow,
+		LA,
+		LA,
+		shadowMap,
+		sh.shadow,
+	)
 
 	// 6) блюр (горизонтальный + вертикальный проход)
 	rl.SetShaderValue(sh.blur, sh.locBlurTexel, []float32{1.0 / float32(LA)}, rl.ShaderUniformFloat)
