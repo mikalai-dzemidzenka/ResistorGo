@@ -197,14 +197,7 @@ func main() {
 
 		rl.BeginDrawing()
 
-		rl.ClearBackground(
-			rl.NewColor(
-				25,
-				30,
-				40,
-				255,
-			),
-		)
+		rl.ClearBackground(rl.NewColor(25, 30, 40, 255))
 
 		drawWorld()
 		drawPlayers()
@@ -225,8 +218,7 @@ func processNetwork(
 
 		event := host.Service(0)
 
-		if event.GetType() ==
-			enet.EventNone {
+		if event.GetType() == enet.EventNone {
 			break
 		}
 
@@ -247,7 +239,6 @@ func processNetwork(
 			connected = false
 
 		case enet.EventReceive:
-
 			handlePacket(event)
 		}
 	}
@@ -355,20 +346,13 @@ func handleSnapshot(
 	lastSnapshotTick =
 		snapshot.Tick
 
-	seen := make(
-		map[uint16]bool,
-		len(snapshot.Players),
-	)
-
+	seen := make(map[uint16]bool, len(snapshot.Players))
 	for _, state := range snapshot.Players {
-
 		seen[state.ID] = true
 
-		player, ok :=
-			players[state.ID]
+		player, ok := players[state.ID]
 
 		if !ok {
-
 			player = &Player{
 				ID: state.ID,
 
@@ -382,93 +366,63 @@ func handleSnapshot(
 				TargetY: state.Y,
 			}
 
-			players[state.ID] =
-				player
+			players[state.ID] = player
 		}
 
-		player.VX =
-			state.VX
-
-		player.VY =
-			state.VY
-
-		player.Grounded =
-			state.Grounded
+		player.VX = state.VX
+		player.VY = state.VY
+		player.Grounded = state.Grounded
 
 		// ------------------------------------------------
 		// Local player.
 		// ------------------------------------------------
 
-		if state.ID ==
-			localPlayerID {
+		if state.ID == localPlayerID {
 
 			// Authoritative server state.
-			player.X =
-				state.X
+			player.X = state.X
 
-			player.Y =
-				state.Y
+			player.Y = state.Y
 
 			// Remove acknowledged inputs.
-			remaining :=
-				pendingInputs[:0]
+			remaining := pendingInputs[:0]
 
 			for _, pending := range pendingInputs {
 
-				if pending.Input.Sequence >
-					state.LastProcessedInput {
+				if pending.Input.Sequence > state.LastProcessedInput {
 
-					remaining =
-						append(
-							remaining,
-							pending,
-						)
+					remaining = append(remaining, pending)
 				}
 			}
 
-			pendingInputs =
-				remaining
+			pendingInputs = remaining
 
 			// Re-apply inputs that server
 			// has not processed yet.
 			for _, pending := range pendingInputs {
-
-				simulatePlayer(
-					player,
-					pending.Input,
-					1.0/shared.TickRate,
-				)
+				simulatePlayer(player, pending.Input, 1.0/shared.TickRate)
 			}
 
-			player.RenderX =
-				player.X
+			player.RenderX = player.X
 
-			player.RenderY =
-				player.Y
+			player.RenderY = player.Y
 
 		} else {
-
 			// Remote player.
-			player.TargetX =
-				state.X
+			player.TargetX = state.X
 
-			player.TargetY =
-				state.Y
+			player.TargetY = state.Y
 		}
 	}
 
 	// Remove disconnected players.
 	for id := range players {
-
 		if id == localPlayerID {
 			continue
 		}
 
 		if !seen[id] {
-			delete(
-				players,
-				id,
-			)
+			delete(players, id)
 		}
 	}
 }
@@ -499,32 +453,23 @@ func sendInput(
 	peer enet.Peer,
 	input shared.Input,
 ) {
-	data :=
-		shared.EncodeInput(input)
+	data := shared.EncodeInput(input)
 
-	err := peer.SendBytes(
-		data,
-		0,
-		0,
-	)
+	err := peer.SendBytes(data, 0, 0)
 
 	if err != nil {
 		return
 	}
 
-	pendingInputs =
-		append(
-			pendingInputs,
-			PendingInput{
-				Input: input,
-			},
-		)
+	pendingInputs = append(pendingInputs,
+		PendingInput{
+			Input: input,
+		})
 
 	// Safety limit.
 	if len(pendingInputs) > 120 {
 
-		pendingInputs =
-			pendingInputs[len(pendingInputs)-120:]
+		pendingInputs = pendingInputs[len(pendingInputs)-120:]
 	}
 }
 

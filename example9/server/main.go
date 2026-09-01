@@ -308,10 +308,7 @@ func update() {
 	const dt float32 = 1.0 / shared.TickRate
 
 	for _, player := range players {
-		updatePlayer(
-			player,
-			dt,
-		)
+		updatePlayer(player, dt)
 	}
 
 	// 60 / 20 = 3
@@ -397,16 +394,9 @@ func updatePlayer(
 		}
 
 		if player.VX > 0 {
-
-			player.X =
-				platform.X -
-					shared.PlayerWidth
-
+			player.X = platform.X - shared.PlayerWidth
 		} else if player.VX < 0 {
-
-			player.X =
-				platform.X +
-					platform.W
+			player.X = platform.X + platform.W
 		}
 
 		player.VX = 0

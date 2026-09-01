@@ -8,13 +8,14 @@ import (
 )
 
 const (
-	DefaultAcc      = 10
-	DefaultFriction = 20
-	MaxSpeed        = 70
+	DefaultAcc      = 500
+	DefaultFriction = 400
+	RunReach        = 200
+	MaxSpeed        = 420
 	MaxAttackSpeed  = 2
-	Gravity         = 20
-	MaxJumpSpeed    = -15
-	MaxFallSpeed    = 80
+	Gravity         = 1500
+	MaxJumpSpeed    = -520
+	MaxFallSpeed    = 900
 )
 
 type ActorState uint8
@@ -25,7 +26,13 @@ const (
 	StateAttack
 	StateAttacked
 	StateBlock
+	StateJumpStart
 	StateJump
+	StateClimb
+)
+
+const (
+	AttackFrame = 4
 )
 
 type Actor struct {
@@ -80,6 +87,7 @@ func NewActor(pos rl.Vector2, isPlayer bool) *Actor {
 		Friction:    DefaultFriction,
 		State:       StateIdle,
 		Orientation: 1,
+		OnGround:    false,
 		CollisionBox: rl.Rectangle{
 			X:      14,
 			Y:      6,
@@ -116,7 +124,7 @@ func (a *Actor) Update(dt float32) {
 	if a.IsPlayer {
 		a.updatePlayerInput()
 	} else {
-		a.updateBotInput()
+		//a.updateBotInput()
 	}
 	a.checkCollision()
 	a.updateHorSpeed(dt)
@@ -126,25 +134,26 @@ func (a *Actor) Update(dt float32) {
 	case StateIdle:
 		a.updateUpdown()
 		absSpeed := abs(a.Speed.X)
-		if absSpeed < 0.001 {
-			a.enterIdleState()
-		} else {
+		if absSpeed > RunReach {
 			a.enterRunState()
+			return
 		}
 		if a.Input.Attack {
 			a.enterAttackState()
 			return
 		}
 		if a.Input.Jump {
-			a.enterJumpState()
+			a.enterJumpStartState()
 			return
+		}
+		if !a.OnGround {
+
 		}
 	case StateRun:
 		absSpeed := abs(a.Speed.X)
 		if absSpeed < 0.001 {
 			a.enterIdleState()
-		} else {
-			a.enterRunState()
+			return
 		}
 		if a.Input.Attack {
 			a.enterAttackState()
@@ -158,28 +167,20 @@ func (a *Actor) Update(dt float32) {
 	case StateBlock:
 		a.Speed.X = clamp(a.Speed.X, -MaxAttackSpeed, MaxAttackSpeed)
 		a.updateBlock()
+	case StateJumpStart:
+		if a.AnimFinished {
+			a.enterJumpState(dt)
+		} else if (a.CanClimbRight && a.Orientation == 1) || (a.CanClimbLeft && a.Orientation == -1) {
+			a.enterClimbState()
+		}
 	case StateJump:
-		if (a.OnGround && a.Jumped) || a.AnimFinished && strings.HasSuffix(a.Anim, "jump-climb.png") {
-			a.Jumped = false
+		if a.OnGround {
 			a.enterIdleState()
-			return
-		}
-		if !a.AnimFinished && strings.HasSuffix(a.Anim, "jump-climb.png") {
-			a.Speed.Y = 0
-		}
-		if a.AnimFinished && strings.HasSuffix(a.Anim, "jump-start.png") && a.OnGround {
-			a.Jumped = true
-			a.Speed.Y += MaxJumpSpeed * 25 * dt
-		}
-		if (a.CanClimbRight && a.Orientation == 1) || (a.CanClimbLeft && a.Orientation == -1) {
-			a.CanClimbRight = false
-			a.CanClimbLeft = false
-			a.SetAnim("resources/threefour/jump-climb.png", AnimOptions{animDuration: 1.2, totalFrames: 16, once: true})
 		}
 	}
 
-	a.Pos.X += a.Speed.X
-	a.Pos.Y += a.Speed.Y
+	a.Pos.X += a.Speed.X * dt
+	a.Pos.Y += a.Speed.Y * dt
 	a.Pos.X = float32(int(a.Pos.X))
 	a.Pos.Y = float32(int(a.Pos.Y))
 }
@@ -263,7 +264,7 @@ func (a *Actor) Draw() {
 		if a.IsPlayer {
 			rl.DrawText(fmt.Sprintf("RewindIndex: %d", RewindIdx), int32(a.Pos.X), int32(a.Pos.Y), 2, rl.White)
 			rl.DrawText(fmt.Sprintf("RewindLeft: %d", RewindLeft), int32(a.Pos.X), int32(a.Pos.Y)-8, 2, rl.White)
-			rl.DrawText(fmt.Sprintf("Mouse X, Y: %d %d", MouseWorldPos.X, MouseWorldPos.Y), int32(a.Pos.X), int32(a.Pos.Y)-16, 2, rl.White)
+			rl.DrawText(fmt.Sprintf("X, Y: %d %d", int32(a.Pos.X), int32(a.Pos.Y)), int32(a.Pos.X), int32(a.Pos.Y)-16, 2, rl.White)
 			rl.DrawText(fmt.Sprintf("PrevUpdown, Updown: %d %d", a.PrevUpdown, a.Updown), int32(a.Pos.X), int32(a.Pos.Y)-24, 2, rl.White)
 			rl.DrawText(fmt.Sprintf("Frame, Finished: %d %t", a.AnimCurrentFrame, a.AnimFinished), int32(a.Pos.X), int32(a.Pos.Y)-32, 2, rl.White)
 		}
@@ -393,13 +394,15 @@ func (a *Actor) checkCollision() {
 	a.OnGround = false
 	for _, obj := range LE.objectsIndexed {
 		oColY := float32(obj.Y + int32(obj.CollisionRect.Y))
+		oColHeight := obj.CollisionRect.Height
 		oColX := float32(obj.X + int32(obj.CollisionRect.X))
+		oColWidth := obj.CollisionRect.Width
 
 		pColDownY := a.Pos.Y + a.CollisionBox.Y + a.CollisionBox.Height
 		pColCenterX := a.Pos.X + a.CollisionBox.X + a.CollisionBox.Width/2
 
-		if oColX <= pColCenterX && oColX+obj.CollisionRect.Width >= pColCenterX &&
-			pColDownY >= oColY && pColDownY <= oColY+obj.CollisionRect.Height {
+		if pColCenterX > oColX && pColCenterX < oColX+oColWidth &&
+			pColDownY+1 > oColY && pColDownY < oColY+oColHeight {
 			a.OnGround = true
 			a.Speed.Y = 0
 			a.Pos.Y = float32(int32(oColY - (a.CollisionBox.Y + a.CollisionBox.Height)))
@@ -407,24 +410,25 @@ func (a *Actor) checkCollision() {
 		}
 		pColUpY := a.Pos.Y + a.CollisionBox.Y
 		const climbOffset = 32
-		if oColX <= pColCenterX && oColX+obj.CollisionRect.Width >= pColCenterX &&
-			pColUpY >= oColY && pColUpY <= oColY+obj.CollisionRect.Height {
+		if oColX <= pColCenterX && oColX+oColWidth >= pColCenterX &&
+			pColUpY >= oColY && pColUpY <= oColY+oColHeight {
 			a.Speed.Y = 0
-			a.Pos.Y = float32(int32(oColY + obj.CollisionRect.Height))
-			continue
-		} else if oColX-climbOffset <= pColCenterX && oColX >= pColCenterX &&
-			pColUpY >= oColY && pColUpY <= oColY+obj.CollisionRect.Height && a.Orientation == 1 {
-			a.CanClimbRight = true
-			a.Pos.X = float32(int32(oColX - (a.CollisionBox.X - a.CollisionBox.Width/2)))
-			a.Pos.Y = float32(int32(oColY - (a.CollisionBox.Y + a.CollisionBox.Height)))
-			continue
-		} else if oColX+obj.CollisionRect.Width <= pColCenterX && oColX+obj.CollisionRect.Width+climbOffset >= pColCenterX &&
-			pColUpY >= oColY && pColUpY <= oColY+obj.CollisionRect.Height && a.Orientation == -1 {
-			a.CanClimbLeft = true
-			a.Pos.X = float32(int32(oColX + (a.CollisionBox.X - a.CollisionBox.Width/2)))
-			a.Pos.Y = float32(int32(oColY - (a.CollisionBox.Y + a.CollisionBox.Height)))
+			a.Pos.Y = float32(int32(oColY + oColHeight))
 			continue
 		}
+		//} else if pColCenterX+climbOffset >= oColX && oColX >= pColCenterX &&
+		//	pColUpY >= oColY && pColUpY <= oColY+oColHeight && a.Orientation == 1 {
+		//	a.CanClimbRight = true
+		//	a.Pos.X = float32(int32(oColX - (a.CollisionBox.X - a.CollisionBox.Width/2)))
+		//	a.Pos.Y = float32(int32(oColY - (a.CollisionBox.Y + a.CollisionBox.Height)))
+		//	continue
+		//} else if oColX+obj.CollisionRect.Width <= pColCenterX && oColX+obj.CollisionRect.Width+climbOffset >= pColCenterX &&
+		//	pColUpY >= oColY && pColUpY <= oColY+obj.CollisionRect.Height && a.Orientation == -1 {
+		//	a.CanClimbLeft = true
+		//	a.Pos.X = float32(int32(oColX + (a.CollisionBox.X - a.CollisionBox.Width/2)))
+		//	a.Pos.Y = float32(int32(oColY - (a.CollisionBox.Y + a.CollisionBox.Height)))
+		//	continue
+		//}
 	}
 }
 
@@ -530,6 +534,7 @@ func (a *Actor) enterBlockState() {
 func (a *Actor) enterIdleState() {
 	a.State = StateIdle
 	a.Speed.X = 0
+	a.Speed.Y = 0
 	if !strings.Contains(a.Anim, "updown") {
 		a.SetAnimFrame("resources/threefour/updown.png", a.Updown)
 	}
@@ -537,9 +542,7 @@ func (a *Actor) enterIdleState() {
 
 func (a *Actor) enterRunState() {
 	a.State = StateRun
-	if a.Anim != "resources/threefour/run.png" {
-		a.SetAnim("resources/threefour/run.png", AnimOptions{animDuration: 0.4, totalFrames: 10})
-	}
+	a.SetAnim("resources/threefour/run.png", AnimOptions{animDuration: 0.4, totalFrames: 10})
 }
 
 func (a *Actor) updateAttacked() {
@@ -597,7 +600,7 @@ func (a *Actor) updateAttack() {
 			actor.Attacker = a
 			if a.Updown == actor.Updown {
 				actor.enterBlockState()
-			} else if a.AnimCurrentFrame > 4 {
+			} else if a.AnimCurrentFrame > AttackFrame {
 				actor.enterAttackedState()
 			}
 		}
@@ -655,14 +658,26 @@ func (a *Actor) updateBlock() {
 		}
 	}
 }
-
-func (a *Actor) enterJumpState() {
-	a.Jumped = false
+func (a *Actor) enterJumpState(dt float32) {
+	a.Jumped = true
+	a.OnGround = false
+	a.Speed.Y = MaxJumpSpeed * dt
 	a.State = StateJump
+}
+
+func (a *Actor) enterJumpStartState() {
+	a.State = StateJumpStart
 	a.SetAnim("resources/threefour/jump-start.png", AnimOptions{animDuration: 0.7, totalFrames: 13, once: true, animYOffset: -48})
 }
 
 func (a *Actor) Interp(alpha float32) {
 	a.InterpolatedPos.X = a.PrevPos.X*(1-alpha) + a.Pos.X*alpha
 	a.InterpolatedPos.Y = a.PrevPos.Y*(1-alpha) + a.Pos.Y*alpha
+}
+
+func (a *Actor) enterClimbState() {
+	a.CanClimbRight = false
+	a.CanClimbLeft = false
+	a.State = StateClimb
+	a.SetAnim("resources/threefour/jump-climb.png", AnimOptions{animDuration: 1.2, totalFrames: 16, once: true})
 }

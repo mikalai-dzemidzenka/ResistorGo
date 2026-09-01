@@ -217,19 +217,6 @@ func runLevel(dt float32) {
 		rl.EndBlendMode()
 
 		rl.EndMode2D()
-
-		if Debug {
-			LE.DrawGui()
-		}
-
-		if Debug {
-			fps := strconv.Itoa(int(rl.GetFPS()))
-			rl.DrawText("fps:"+fps, 20, 20, 2, rl.White)
-			rl.DrawText(fmt.Sprintf("gameTime:%f", GameTimeSec), 20, 30, 2, rl.White)
-			rl.DrawText(fmt.Sprintf("physTime:%f", PhysicsTime), 20, 40, 2, rl.White)
-			rl.DrawText(fmt.Sprintf("camera zoom speed %f", Cam.ZoomSpeed), 20, 50, 2, rl.White)
-		}
-
 	}
 	rl.EndTextureMode()
 
@@ -252,5 +239,16 @@ func runLevel(dt float32) {
 	dst := rl.NewRectangle(0, 0, SW*WindowScale, SH*WindowScale)
 	rl.DrawTexturePro(ScreenFullTexture.Texture, src, dst, rl.Vector2{}, 0, rl.White)
 	rl.EndShaderMode()
+	if Debug {
+		LE.DrawGui()
+	}
+
+	if Debug {
+		fps := strconv.Itoa(int(rl.GetFPS()))
+		rl.DrawText("fps:"+fps, 20, 20, 2, rl.White)
+		rl.DrawText(fmt.Sprintf("gameTime:%f", GameTimeSec), 20, 30, 2, rl.White)
+		rl.DrawText(fmt.Sprintf("physTime:%f", PhysicsTime), 20, 40, 2, rl.White)
+		rl.DrawText(fmt.Sprintf("camera zoom speed %f", Cam.ZoomSpeed), 20, 50, 2, rl.White)
+	}
 	rl.EndDrawing()
 }
