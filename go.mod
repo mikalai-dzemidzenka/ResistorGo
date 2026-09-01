@@ -3,6 +3,7 @@ module resistor
 go 1.25.0
 
 require (
+	github.com/codecat/go-enet v0.0.0-20250728072647-ae229138f138
 	github.com/gen2brain/raylib-go/raygui v0.0.0-20260815042312-80156a59a482
 	github.com/gen2brain/raylib-go/raylib v0.60.0
 )
