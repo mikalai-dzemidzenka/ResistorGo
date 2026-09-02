@@ -3,6 +3,7 @@ package resistor
 import (
 	"fmt"
 	rl "github.com/gen2brain/raylib-go/raylib"
+	"math"
 	"math/rand"
 	"strings"
 )
@@ -14,7 +15,7 @@ const (
 	MaxSpeed        = 420
 	MaxAttackSpeed  = 2
 	Gravity         = 1500
-	MaxJumpSpeed    = -520
+	MaxJumpSpeed    = -Gravity * 10
 	MaxFallSpeed    = 900
 )
 
@@ -68,7 +69,6 @@ type Actor struct {
 	AnimFinished      bool
 	Attacker          *Actor
 	AttackQueued      bool
-	Jumped            bool
 	CanClimbRight     bool
 	CanClimbLeft      bool
 }
@@ -131,6 +131,11 @@ func (a *Actor) Update(dt float32) {
 	a.updateVertSpeed(dt)
 
 	switch a.State {
+	case StateClimb:
+		a.Speed = rl.Vector2{}
+		if a.AnimFinished {
+			a.enterIdleState()
+		}
 	case StateIdle:
 		a.updateUpdown()
 		absSpeed := abs(a.Speed.X)
@@ -170,11 +175,13 @@ func (a *Actor) Update(dt float32) {
 	case StateJumpStart:
 		if a.AnimFinished {
 			a.enterJumpState(dt)
-		} else if (a.CanClimbRight && a.Orientation == 1) || (a.CanClimbLeft && a.Orientation == -1) {
-			a.enterClimbState()
 		}
 	case StateJump:
-		if a.OnGround {
+		if (a.CanClimbRight && a.Orientation == 1) || (a.CanClimbLeft && a.Orientation == -1) {
+			a.exitJumpState()
+			a.enterClimbState()
+		} else if a.OnGround {
+			a.exitJumpState()
 			a.enterIdleState()
 		}
 	}
@@ -405,30 +412,30 @@ func (a *Actor) checkCollision() {
 			pColDownY+1 > oColY && pColDownY < oColY+oColHeight {
 			a.OnGround = true
 			a.Speed.Y = 0
-			a.Pos.Y = float32(int32(oColY - (a.CollisionBox.Y + a.CollisionBox.Height)))
+			a.Pos.Y = float32(int32(math.Ceil(float64(oColY)) - 48))
 			continue
 		}
 		pColUpY := a.Pos.Y + a.CollisionBox.Y
+		jump := a.Speed.Y < 0
 		const climbOffset = 32
 		if oColX <= pColCenterX && oColX+oColWidth >= pColCenterX &&
 			pColUpY >= oColY && pColUpY <= oColY+oColHeight {
 			a.Speed.Y = 0
 			a.Pos.Y = float32(int32(oColY + oColHeight))
 			continue
+		} else if pColCenterX+climbOffset >= oColX && oColX >= pColCenterX &&
+			pColUpY >= oColY && pColUpY <= oColY+oColHeight && a.Orientation == 1 && jump {
+			a.CanClimbRight = true
+			a.Pos.X = float32(int32(oColX) - 20)
+			a.Pos.Y = float32(int32(math.Ceil(float64(oColY)) - 48))
+			continue
+		} else if oColX+oColWidth <= pColCenterX && oColX+oColWidth >= pColCenterX-climbOffset &&
+			pColUpY >= oColY && pColUpY <= oColY+oColHeight && a.Orientation == -1 && jump {
+			a.CanClimbLeft = true
+			a.Pos.X = oColX + oColWidth - 24
+			a.Pos.Y = float32(int32(math.Ceil(float64(oColY)) - 48))
+			continue
 		}
-		//} else if pColCenterX+climbOffset >= oColX && oColX >= pColCenterX &&
-		//	pColUpY >= oColY && pColUpY <= oColY+oColHeight && a.Orientation == 1 {
-		//	a.CanClimbRight = true
-		//	a.Pos.X = float32(int32(oColX - (a.CollisionBox.X - a.CollisionBox.Width/2)))
-		//	a.Pos.Y = float32(int32(oColY - (a.CollisionBox.Y + a.CollisionBox.Height)))
-		//	continue
-		//} else if oColX+obj.CollisionRect.Width <= pColCenterX && oColX+obj.CollisionRect.Width+climbOffset >= pColCenterX &&
-		//	pColUpY >= oColY && pColUpY <= oColY+obj.CollisionRect.Height && a.Orientation == -1 {
-		//	a.CanClimbLeft = true
-		//	a.Pos.X = float32(int32(oColX + (a.CollisionBox.X - a.CollisionBox.Width/2)))
-		//	a.Pos.Y = float32(int32(oColY - (a.CollisionBox.Y + a.CollisionBox.Height)))
-		//	continue
-		//}
 	}
 }
 
@@ -659,7 +666,6 @@ func (a *Actor) updateBlock() {
 	}
 }
 func (a *Actor) enterJumpState(dt float32) {
-	a.Jumped = true
 	a.OnGround = false
 	a.Speed.Y = MaxJumpSpeed * dt
 	a.State = StateJump
@@ -676,8 +682,11 @@ func (a *Actor) Interp(alpha float32) {
 }
 
 func (a *Actor) enterClimbState() {
-	a.CanClimbRight = false
-	a.CanClimbLeft = false
 	a.State = StateClimb
 	a.SetAnim("resources/threefour/jump-climb.png", AnimOptions{animDuration: 1.2, totalFrames: 16, once: true})
+}
+
+func (a *Actor) exitJumpState() {
+	a.CanClimbRight = false
+	a.CanClimbLeft = false
 }
