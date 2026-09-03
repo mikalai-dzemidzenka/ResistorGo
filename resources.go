@@ -37,8 +37,10 @@ func LoadTextures() {
 	loadTex("resources/threefour/block-mid-start.png")
 	loadTex("resources/threefour/block-mid-1.png")
 	loadTex("resources/threefour/block-mid-2.png")
-	loadTex("resources/main_menu/resistor.png")
+	loadTex("resources/threefour/walk.png")
+	loadTex("resources/threefour/turnover.png")
 
+	loadTex("resources/main_menu/resistor.png")
 	loadModel("resources/main_menu/head.obj")
 	loadModel("resources/main_menu/jab1.obj")
 	loadModel("resources/main_menu/jab2.obj")

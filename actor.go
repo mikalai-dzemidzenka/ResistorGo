@@ -11,7 +11,7 @@ import (
 const (
 	DefaultAcc      = 500
 	DefaultFriction = 400
-	RunReach        = 200
+	RunReach        = 400
 	MaxSpeed        = 420
 	MaxAttackSpeed  = 2
 	Gravity         = 1500
@@ -30,6 +30,7 @@ const (
 	StateJumpStart
 	StateJump
 	StateClimb
+	StateTurnover
 )
 
 const (
@@ -118,6 +119,7 @@ func (a *Actor) Update(dt float32) {
 
 	a.updateRewind()
 
+	prevOrientation := a.Orientation
 	if IsRewinding {
 		return
 	}
@@ -142,6 +144,10 @@ func (a *Actor) Update(dt float32) {
 		if absSpeed > RunReach {
 			a.enterRunState()
 			return
+		} else if absSpeed > 0.0001 {
+			a.SetAnim("resources/threefour/walk.png", AnimOptions{animDuration: 0.7, totalFrames: 9})
+		} else {
+			a.SetAnimFrame("resources/threefour/idle.png", 0)
 		}
 		if a.Input.Attack {
 			a.enterAttackState()
@@ -152,9 +158,12 @@ func (a *Actor) Update(dt float32) {
 			return
 		}
 		if !a.OnGround {
-
+			// TODO state fall
 		}
 	case StateRun:
+		if prevOrientation != a.Orientation {
+			a.enterTurnoverState()
+		}
 		absSpeed := abs(a.Speed.X)
 		if absSpeed < 0.001 {
 			a.enterIdleState()
@@ -183,6 +192,10 @@ func (a *Actor) Update(dt float32) {
 		} else if a.OnGround {
 			a.exitJumpState()
 			a.enterIdleState()
+		}
+	case StateTurnover:
+		if a.AnimFinished {
+			a.enterRunState()
 		}
 	}
 
@@ -300,6 +313,9 @@ type AnimOptions struct {
 }
 
 func (a *Actor) SetAnim(anim string, o AnimOptions) {
+	if a.Anim == anim {
+		return
+	}
 	a.AnimPhysTimeStart = PhysicsTime
 	a.Anim = anim
 	a.AnimFinished = false
@@ -373,6 +389,7 @@ func (a *Actor) DrawAnim() {
 
 func (a *Actor) updateHorSpeed(dt float32) {
 	var movePressed bool
+	prevOrientation := a.Orientation
 	if a.Input.Right {
 		movePressed = true
 		a.Speed.X -= a.Acc * dt
@@ -382,6 +399,10 @@ func (a *Actor) updateHorSpeed(dt float32) {
 		movePressed = true
 		a.Speed.X += a.Acc * dt
 		a.Orientation = 1
+	}
+
+	if prevOrientation != a.Orientation {
+		a.Speed.X /= 2
 	}
 
 	if !movePressed {
@@ -427,13 +448,13 @@ func (a *Actor) checkCollision() {
 			pColUpY >= oColY && pColUpY <= oColY+oColHeight && a.Orientation == 1 && jump {
 			a.CanClimbRight = true
 			a.Pos.X = float32(int32(oColX) - 20)
-			a.Pos.Y = float32(int32(math.Ceil(float64(oColY)) - 48))
+			a.Pos.Y = float32(int32(math.Ceil(float64(oColY)) - 48 + 1))
 			continue
 		} else if oColX+oColWidth <= pColCenterX && oColX+oColWidth >= pColCenterX-climbOffset &&
 			pColUpY >= oColY && pColUpY <= oColY+oColHeight && a.Orientation == -1 && jump {
 			a.CanClimbLeft = true
 			a.Pos.X = oColX + oColWidth - 24
-			a.Pos.Y = float32(int32(math.Ceil(float64(oColY)) - 48))
+			a.Pos.Y = float32(int32(math.Ceil(float64(oColY)) - 48 + 1))
 			continue
 		}
 	}
@@ -562,9 +583,6 @@ func (a *Actor) updateAttacked() {
 }
 
 func (a *Actor) updateAttack() {
-	if a.State != StateAttack {
-		return
-	}
 	if a.Input.Attack {
 		a.AttackQueued = true
 	}
@@ -689,4 +707,9 @@ func (a *Actor) enterClimbState() {
 func (a *Actor) exitJumpState() {
 	a.CanClimbRight = false
 	a.CanClimbLeft = false
+}
+
+func (a *Actor) enterTurnoverState() {
+	a.State = StateTurnover
+	a.SetAnim("resources/threefour/turnover.png", AnimOptions{animDuration: 1.2, totalFrames: 14, once: true})
 }
