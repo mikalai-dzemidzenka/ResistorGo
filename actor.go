@@ -9,10 +9,10 @@ import (
 )
 
 const (
-	DefaultAcc      = 500
-	DefaultFriction = 400
-	RunReach        = 300
-	MaxSpeed        = 420
+	DefaultAcc      = 260
+	DefaultFriction = 250
+	RunReach        = 260
+	MaxSpeed        = 380
 	MaxAttackSpeed  = 2
 	Gravity         = 1500
 	MaxJumpSpeed    = -Gravity * 10
@@ -147,8 +147,6 @@ func (a *Actor) Update(dt float32) {
 			return
 		} else if absSpeed > 0.0001 {
 			a.SetAnim("resources/threefour/walk.png", AnimOptions{animDuration: 0.7, totalFrames: 9})
-		} else {
-			a.SetAnimFrame("resources/threefour/idle.png", 0)
 		}
 		if a.Input.Attack {
 			a.enterAttackState()
@@ -318,7 +316,6 @@ type AnimOptions struct {
 	totalFrames  uint8
 	animYOffset  int8
 	once         bool
-	animTop      bool
 	reset        bool
 }
 
@@ -389,12 +386,49 @@ func (a *Actor) DrawAnim() {
 	frame := int((PhysicsTime - a.AnimPhysTimeStart) / frameTimeMs)
 	frame = clamp(frame, 0, int(a.AnimTotalFrames)-1)
 	a.AnimCurrentFrame = a.AnimFrame + uint8(frame)
+
 	rl.DrawTextureRec(tex, rl.Rectangle{
 		X:      float32(a.AnimCurrentFrame) * 48,
 		Y:      0,
 		Width:  48 * float32(a.Orientation),
 		Height: 48,
 	}, a.InterpolatedPos, rl.White)
+
+	// TODO
+	if strings.HasSuffix(a.Anim, "walk.png") {
+		switch a.Updown {
+		case 0:
+			rl.DrawTextureRec(resources["resources/threefour/walk-bot.png"], rl.Rectangle{
+				X:      float32(a.AnimCurrentFrame) * 48,
+				Y:      0,
+				Width:  48 * float32(a.Orientation),
+				Height: float32(tex.Height),
+			}, rl.Vector2{
+				X: a.InterpolatedPos.X,
+				Y: a.InterpolatedPos.Y + float32(a.AnimYOffset),
+			}, rl.White)
+		case 1:
+			rl.DrawTextureRec(resources["resources/threefour/walk-mid.png"], rl.Rectangle{
+				X:      float32(a.AnimCurrentFrame) * 48,
+				Y:      0,
+				Width:  48 * float32(a.Orientation),
+				Height: float32(tex.Height),
+			}, rl.Vector2{
+				X: a.InterpolatedPos.X,
+				Y: a.InterpolatedPos.Y + float32(a.AnimYOffset),
+			}, rl.White)
+		case 2:
+			rl.DrawTextureRec(resources["resources/threefour/walk-top.png"], rl.Rectangle{
+				X:      float32(a.AnimCurrentFrame) * 48,
+				Y:      0,
+				Width:  48 * float32(a.Orientation),
+				Height: float32(tex.Height),
+			}, rl.Vector2{
+				X: a.InterpolatedPos.X,
+				Y: a.InterpolatedPos.Y + float32(a.AnimYOffset),
+			}, rl.White)
+		}
+	}
 }
 
 func (a *Actor) updateHorSpeed(dt float32) {
