@@ -11,7 +11,7 @@ import (
 const (
 	DefaultAcc      = 500
 	DefaultFriction = 400
-	RunReach        = 400
+	RunReach        = 300
 	MaxSpeed        = 420
 	MaxAttackSpeed  = 2
 	Gravity         = 1500
@@ -58,6 +58,7 @@ type Actor struct {
 	PrevUpdown        uint8
 	Updown            uint8
 	AnimPhysTimeStart float64
+	AnimTop           *string
 	Anim              string
 	AnimPaused        bool
 	AnimPausedFor     float64
@@ -195,7 +196,14 @@ func (a *Actor) Update(dt float32) {
 		}
 	case StateTurnover:
 		if a.AnimFinished {
-			a.enterRunState()
+			if abs(a.Speed.X) < 0.001 {
+				a.enterIdleState()
+			} else if a.Input.Left || a.Input.Right {
+				a.Speed.X = RunReach * float32(a.Orientation)
+				a.enterRunState()
+			} else {
+				a.enterIdleState()
+			}
 		}
 	}
 
@@ -308,12 +316,14 @@ func (a *Actor) SetAnimFrame(anim string, offset uint8) {
 type AnimOptions struct {
 	animDuration float64
 	totalFrames  uint8
-	once         bool
 	animYOffset  int8
+	once         bool
+	animTop      bool
+	reset        bool
 }
 
 func (a *Actor) SetAnim(anim string, o AnimOptions) {
-	if a.Anim == anim {
+	if a.Anim == anim && !o.reset {
 		return
 	}
 	a.AnimPhysTimeStart = PhysicsTime
@@ -390,19 +400,19 @@ func (a *Actor) DrawAnim() {
 func (a *Actor) updateHorSpeed(dt float32) {
 	var movePressed bool
 	prevOrientation := a.Orientation
-	if a.Input.Right {
+	if a.Input.Right && !(a.State == StateTurnover && prevOrientation == 1) {
 		movePressed = true
 		a.Speed.X -= a.Acc * dt
 		a.Orientation = -1
 	}
-	if a.Input.Left {
+	if a.Input.Left && !(a.State == StateTurnover && prevOrientation == -1) {
 		movePressed = true
 		a.Speed.X += a.Acc * dt
 		a.Orientation = 1
 	}
 
 	if prevOrientation != a.Orientation {
-		a.Speed.X /= 2
+		a.Speed.X /= 3
 	}
 
 	if !movePressed {
@@ -711,5 +721,5 @@ func (a *Actor) exitJumpState() {
 
 func (a *Actor) enterTurnoverState() {
 	a.State = StateTurnover
-	a.SetAnim("resources/threefour/turnover.png", AnimOptions{animDuration: 1.2, totalFrames: 14, once: true})
+	a.SetAnim("resources/threefour/turnover.png", AnimOptions{animDuration: 0.9, totalFrames: 14, once: true, reset: true})
 }
