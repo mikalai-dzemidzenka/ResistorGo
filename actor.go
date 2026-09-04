@@ -697,7 +697,7 @@ func (a *Actor) updateAttack() {
 
 		switch a.Updown {
 		case 0:
-			a.SetAnim("resources/threefour/attack-mid-2.png", AnimOptions{animDuration: 0.2, totalFrames: 6, once: true})
+			a.SetAnim("resources/threefour/attack-low-2.png", AnimOptions{animDuration: 0.2, totalFrames: 6, once: true})
 		case 1:
 			a.SetAnim("resources/threefour/attack-mid-2.png", AnimOptions{animDuration: 0.2, totalFrames: 6, once: true})
 		case 2:
