@@ -34,8 +34,8 @@ var (
 	LE                   LevelEditor
 	Pl                   *Actor
 	Actors               []*Actor
-	Stage                int = StageLevel
-	ScreenTexture        rl.RenderTexture2D
+	Stage                int = 0
+	MainMenuTexture      rl.RenderTexture2D
 	ScreenFullTexture    rl.RenderTexture2D
 	ScreenPaletteTexture rl.Texture2D
 	PaletteShader        rl.Shader
@@ -105,14 +105,15 @@ func Game() {
 
 	Actors = []*Actor{Pl, enemy}
 
-	ScreenTexture = rl.LoadRenderTexture(SW, SH)
-	rl.SetTextureFilter(ScreenTexture.Texture, rl.FilterPoint)
+	MainMenuTexture = rl.LoadRenderTexture(SW, SH)
+	rl.SetTextureFilter(MainMenuTexture.Texture, rl.FilterPoint)
 	Cam.Camera2D.Offset = rl.Vector2{SW * WindowScale * 0.9 / 2, SH * WindowScale / 2}
 
 	Sh = loadShaders()
-	light1 = newZimaLight(512, 0.5)
-	light2 = newZimaLight(512, 0.5)
-	light3 = newZimaLight(256, 1.0)
+	const intense = 0.6
+	light1 = newZimaLight(256, intense)
+	light2 = newZimaLight(256, intense)
+	light3 = newZimaLight(256, intense)
 
 	PaletteShader = rl.LoadShaderFromMemory("", fsPalette)
 
@@ -137,6 +138,7 @@ func Game() {
 		rl.NewColor(234, 240, 147, 255),
 		rl.NewColor(242, 221, 161, 255),
 		rl.NewColor(246, 245, 192, 255),
+		rl.SkyBlue,
 	}
 
 	ScreenPaletteTexture = makePaletteTexture(Palette)
@@ -185,17 +187,18 @@ func runLevel(dt float32) {
 		LE.Update(dt)
 	}
 	UpdateRewind(dt)
-	Cam.SetTarget(Pl.Pos)
+	Cam.SetTarget(rl.Vector2{Pl.Pos.X + 24, Pl.Pos.Y + 24})
 	Cam.Update(dt)
 
 	pos1 := rl.Vector2{40, 30}
 	pos2 := rl.Vector2{120, 120}
 	pos3 := rl.Vector2{-40, 30}
 	var intense1 = uint8((math.Sin(PhysicsTime) + 1.0) / 2.0 * 255)
-	var intense2 = uint8((math.Cos(PhysicsTime) + 1.0) / 2.0 * 255)
+	const intense2 = 150
+	var intense3 = uint8((math.Cos(PhysicsTime) + 1.0) / 2.0 * 255)
 	tex1 := light1.Compute(Sh, pos1, rl.NewColor(intense1, intense1, intense1, 255), LE.LightOccluders())
-	tex2 := light2.Compute(Sh, pos2, rl.NewColor(255, 225, 170, 255), LE.LightOccluders())
-	tex3 := light3.Compute(Sh, pos3, rl.NewColor(intense2, intense2, intense2, 255), LE.LightOccluders())
+	tex2 := light2.Compute(Sh, pos2, rl.NewColor(intense2, intense2, intense2, 255), LE.LightOccluders())
+	tex3 := light3.Compute(Sh, pos3, rl.NewColor(intense3, intense3, intense3, 255), LE.LightOccluders())
 	rl.BeginTextureMode(ScreenFullTexture)
 	{
 		rl.ClearBackground(rl.Black)
@@ -211,7 +214,7 @@ func runLevel(dt float32) {
 		}
 
 		rl.EndMode2D()
-		rl.DrawRectangle(0, 0, SW*WindowScale, SH*WindowScale, rl.NewColor(0, 0, 0, 127))
+		rl.DrawRectangle(0, 0, SW*WindowScale, SH*WindowScale, rl.NewColor(0, 0, 0, 50))
 		rl.BeginMode2D(Cam.Camera2D)
 
 		rl.BeginBlendMode(rl.BlendAdditive)

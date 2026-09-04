@@ -6,7 +6,7 @@ import (
 )
 
 func runMainMenu(dt float32) {
-	rl.BeginTextureMode(ScreenTexture)
+	rl.BeginTextureMode(MainMenuTexture)
 	rl.ClearBackground(rl.Color{0, 0, 0, 0})
 	rl.BeginMode3D(rl.NewCamera3D(rl.Vector3{0, -1.5, 10}, rl.Vector3{0, 0, 0}, rl.Vector3{0, 1, 0}, 120, rl.CameraPerspective))
 	var linesColor = rl.Red
@@ -31,7 +31,7 @@ func runMainMenu(dt float32) {
 	rl.BeginDrawing()
 	rl.ClearBackground(rl.Black)
 	{
-		rl.DrawTextureEx(ScreenTexture.Texture, rl.Vector2{
+		rl.DrawTextureEx(MainMenuTexture.Texture, rl.Vector2{
 			X: 0,
 			Y: 0,
 		}, 0, WindowScale, rl.Red)

@@ -127,7 +127,7 @@ func (a *Actor) Update(dt float32) {
 	if a.IsPlayer {
 		a.updatePlayerInput()
 	} else {
-		//a.updateBotInput()
+		a.updateBotInput()
 	}
 	a.checkCollision()
 	a.updateHorSpeed(dt)
@@ -436,12 +436,20 @@ func (a *Actor) updateHorSpeed(dt float32) {
 	prevOrientation := a.Orientation
 	if a.Input.Right && !(a.State == StateTurnover && prevOrientation == 1) {
 		movePressed = true
-		a.Speed.X -= a.Acc * dt
+		if abs(a.Speed.X) < 0.001 {
+			a.Speed.X -= 10 * a.Acc * dt
+		} else {
+			a.Speed.X -= a.Acc * dt
+		}
 		a.Orientation = -1
 	}
 	if a.Input.Left && !(a.State == StateTurnover && prevOrientation == -1) {
 		movePressed = true
-		a.Speed.X += a.Acc * dt
+		if abs(a.Speed.X) < 0.001 {
+			a.Speed.X += 10 * a.Acc * dt
+		} else {
+			a.Speed.X += a.Acc * dt
+		}
 		a.Orientation = 1
 	}
 
@@ -464,14 +472,15 @@ func (a *Actor) updateVertSpeed(dt float32) {
 
 func (a *Actor) checkCollision() {
 	a.OnGround = false
+	alreadyHitTop := false
+	pColDownY := a.Pos.Y + a.CollisionBox.Y + a.CollisionBox.Height
+	pColCenterX := a.Pos.X + a.CollisionBox.X + a.CollisionBox.Width/2
+	pPosX := a.Pos.X
 	for _, obj := range LE.objectsIndexed {
 		oColY := float32(obj.Y + int32(obj.CollisionRect.Y))
 		oColHeight := obj.CollisionRect.Height
 		oColX := float32(obj.X + int32(obj.CollisionRect.X))
 		oColWidth := obj.CollisionRect.Width
-
-		pColDownY := a.Pos.Y + a.CollisionBox.Y + a.CollisionBox.Height
-		pColCenterX := a.Pos.X + a.CollisionBox.X + a.CollisionBox.Width/2
 
 		if pColCenterX > oColX && pColCenterX < oColX+oColWidth &&
 			pColDownY+1 > oColY && pColDownY < oColY+oColHeight {
@@ -485,17 +494,21 @@ func (a *Actor) checkCollision() {
 		const climbOffset = 32
 		if oColX <= pColCenterX && oColX+oColWidth >= pColCenterX &&
 			pColUpY >= oColY && pColUpY <= oColY+oColHeight {
+			alreadyHitTop = true
+			a.CanClimbRight = false
+			a.CanClimbLeft = false
 			a.Speed.Y = 0
+			a.Pos.X = pPosX
 			a.Pos.Y = float32(int32(oColY + oColHeight))
 			continue
 		} else if pColCenterX+climbOffset >= oColX && oColX >= pColCenterX &&
-			pColUpY >= oColY && pColUpY <= oColY+oColHeight && a.Orientation == 1 && jump {
+			pColUpY >= oColY && pColUpY <= oColY+oColHeight && a.Orientation == 1 && jump && !alreadyHitTop {
 			a.CanClimbRight = true
 			a.Pos.X = float32(int32(oColX) - 20)
 			a.Pos.Y = float32(int32(math.Ceil(float64(oColY)) - 48 + 1))
 			continue
-		} else if oColX+oColWidth <= pColCenterX && oColX+oColWidth >= pColCenterX-climbOffset &&
-			pColUpY >= oColY && pColUpY <= oColY+oColHeight && a.Orientation == -1 && jump {
+		} else if pColCenterX >= oColX+oColWidth && oColX+oColWidth >= pColCenterX-climbOffset &&
+			pColUpY >= oColY && pColUpY <= oColY+oColHeight && a.Orientation == -1 && jump && !alreadyHitTop {
 			a.CanClimbLeft = true
 			a.Pos.X = oColX + oColWidth - 24
 			a.Pos.Y = float32(int32(math.Ceil(float64(oColY)) - 48 + 1))
@@ -578,6 +591,7 @@ func (a *Actor) updateUpdown() {
 
 func (a *Actor) enterAttackState() {
 	a.State = StateAttack
+	Cam.ZoomSpeed += 1.0
 	switch a.Updown {
 	case 0:
 		a.SetAnim("resources/threefour/attack-low.png", AnimOptions{animDuration: 0.4, totalFrames: 8, once: true})
@@ -628,6 +642,7 @@ func (a *Actor) updateAttacked() {
 
 func (a *Actor) updateAttack() {
 	if a.Input.Attack {
+		Cam.ZoomSpeed += 1.0
 		a.AttackQueued = true
 	}
 	var r1 rl.Rectangle
