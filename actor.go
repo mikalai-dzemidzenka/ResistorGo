@@ -9,10 +9,10 @@ import (
 )
 
 const (
-	DefaultAcc      = 260
+	DefaultAcc      = 270
 	DefaultFriction = 250
-	RunReach        = 260
-	MaxSpeed        = 380
+	RunReach        = 200
+	MaxSpeed        = 320
 	MaxAttackSpeed  = 2
 	Gravity         = 1500
 	MaxJumpSpeed    = -Gravity * 10
@@ -145,8 +145,10 @@ func (a *Actor) Update(dt float32) {
 		if absSpeed > RunReach {
 			a.enterRunState()
 			return
-		} else if absSpeed > 0.0001 {
+		} else if absSpeed > 0.1 {
 			a.SetAnim("resources/threefour/walk.png", AnimOptions{animDuration: 0.7, totalFrames: 9})
+		} else if !a.Input.Left && !a.Input.Right {
+			a.SetAnimFrame("resources/threefour/updown.png", a.Updown)
 		}
 		if a.Input.Attack {
 			a.enterAttackState()
@@ -681,10 +683,14 @@ func (a *Actor) updateAttack() {
 			return
 		}
 
-		if !a.AttackQueued || strings.Contains(a.Anim, "mid-2") {
+		if !a.AttackQueued {
 			switch a.Updown {
 			case 0:
-				a.SetAnim("resources/threefour/back-attack-low-1.png", AnimOptions{animDuration: 0.2, totalFrames: 4, once: true})
+				if strings.HasSuffix(a.Anim, "attack-low-2.png") {
+					a.SetAnim("resources/threefour/back-attack-low-2.png", AnimOptions{animDuration: 0.2, totalFrames: 4, once: true})
+				} else {
+					a.SetAnim("resources/threefour/back-attack-low-1.png", AnimOptions{animDuration: 0.2, totalFrames: 4, once: true})
+				}
 			case 1:
 				a.SetAnim("resources/threefour/back-attack-mid-1.png", AnimOptions{animDuration: 0.2, totalFrames: 4, once: true})
 			case 2:

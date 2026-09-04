@@ -1405,7 +1405,7 @@ func main() {
 				255,
 			),
 
-			0.8,
+			0.5,
 		)
 
 	// ========================================================
@@ -1628,23 +1628,23 @@ func main() {
 		// DEBUG LIGHT POSITIONS
 		// ====================================================
 
-		rl.DrawCircleV(
-			lightPos1,
-			5,
-			rl.Yellow,
-		)
-
-		rl.DrawCircleV(
-			lightPos2,
-			5,
-			rl.SkyBlue,
-		)
-
-		rl.DrawCircleV(
-			lightPos3,
-			5,
-			rl.Red,
-		)
+		//rl.DrawCircleV(
+		//	lightPos1,
+		//	5,
+		//	rl.Yellow,
+		//)
+		//
+		//rl.DrawCircleV(
+		//	lightPos2,
+		//	5,
+		//	rl.SkyBlue,
+		//)
+		//
+		//rl.DrawCircleV(
+		//	lightPos3,
+		//	5,
+		//	rl.Red,
+		//)
 
 		// ====================================================
 		// UI

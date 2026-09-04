@@ -110,9 +110,9 @@ func Game() {
 	Cam.Camera2D.Offset = rl.Vector2{SW * WindowScale * 0.9 / 2, SH * WindowScale / 2}
 
 	Sh = loadShaders()
-	light1 = newZimaLight(256)
-	light2 = newZimaLight(256)
-	light3 = newZimaLight(256)
+	light1 = newZimaLight(512, 0.5)
+	light2 = newZimaLight(512, 0.5)
+	light3 = newZimaLight(256, 1.0)
 
 	PaletteShader = rl.LoadShaderFromMemory("", fsPalette)
 

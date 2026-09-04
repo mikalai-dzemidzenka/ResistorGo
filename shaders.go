@@ -185,6 +185,7 @@ out vec4 finalColor;
 
 uniform sampler2D texture0;
 uniform vec4 lightColor;
+uniform float lightIntensity;
 
 
 // ============================================================
@@ -384,7 +385,7 @@ void main()
         vec4(
             lightColor.rgb *
             lit *
-            atten,
+            atten * lightIntensity,
             1.0
         );
 }
@@ -471,21 +472,23 @@ func makePaletteTexture(colors []rl.Color) rl.Texture2D {
 // ZimaLight содержит все промежуточные render-текстуры пайплайна для
 // одного источника света (переиспользуются между кадрами).
 type ZimaLight struct {
-	LA      int32
-	caster  rl.RenderTexture2D
-	dist    rl.RenderTexture2D
-	distort rl.RenderTexture2D
-	reduce  []rl.RenderTexture2D // LA/2 ... 2, высота LA
-	shadow  rl.RenderTexture2D
+	LA        int32
+	intensity float32
+	caster    rl.RenderTexture2D
+	dist      rl.RenderTexture2D
+	distort   rl.RenderTexture2D
+	reduce    []rl.RenderTexture2D // LA/2 ... 2, высота LA
+	shadow    rl.RenderTexture2D
 }
 
-func newZimaLight(LA int32) *ZimaLight {
+func newZimaLight(LA int32, intensity float32) *ZimaLight {
 	z := &ZimaLight{
-		LA:      LA,
-		caster:  rl.LoadRenderTexture(LA, LA),
-		dist:    rl.LoadRenderTexture(LA, LA),
-		distort: rl.LoadRenderTexture(LA, LA),
-		shadow:  rl.LoadRenderTexture(LA, LA),
+		LA:        LA,
+		intensity: intensity,
+		caster:    rl.LoadRenderTexture(LA, LA),
+		dist:      rl.LoadRenderTexture(LA, LA),
+		distort:   rl.LoadRenderTexture(LA, LA),
+		shadow:    rl.LoadRenderTexture(LA, LA),
 	}
 	for s := int32(LA / 2); s >= 2; s /= 2 {
 		z.reduce = append(z.reduce, rl.LoadRenderTexture(s, LA))
@@ -525,6 +528,7 @@ type Shaders struct {
 	distance, distort, reduce, shadow rl.Shader
 	locReduceSrcWidth                 int32
 	locShadowColor                    int32
+	locLightIntensity                 int32
 }
 
 func loadShaders() *Shaders {
@@ -536,6 +540,7 @@ func loadShaders() *Shaders {
 	}
 	s.locReduceSrcWidth = rl.GetShaderLocation(s.reduce, "srcWidth")
 	s.locShadowColor = rl.GetShaderLocation(s.shadow, "lightColor")
+	s.locLightIntensity = rl.GetShaderLocation(s.shadow, "lightIntensity")
 	return s
 }
 
@@ -594,6 +599,12 @@ func (z *ZimaLight) Compute(sh *Shaders, lightPos rl.Vector2, color rl.Color, oc
 		sh.locShadowColor,
 		col,
 		rl.ShaderUniformVec4,
+	)
+	rl.SetShaderValue(
+		sh.shadow,
+		sh.locLightIntensity,
+		[]float32{z.intensity},
+		rl.ShaderUniformFloat,
 	)
 
 	runPass(

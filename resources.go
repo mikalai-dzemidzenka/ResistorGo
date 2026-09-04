@@ -29,6 +29,7 @@ func LoadTextures() {
 	loadTex("resources/threefour/attack-low.png")
 	loadTex("resources/threefour/hit-top.png")
 	loadTex("resources/threefour/back-attack-low-1.png")
+	loadTex("resources/threefour/back-attack-low-2.png")
 	loadTex("resources/threefour/back-attack-mid-1.png")
 	loadTex("resources/threefour/back-attack-high-1.png")
 
