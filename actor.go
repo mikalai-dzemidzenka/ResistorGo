@@ -17,6 +17,7 @@ const (
 	Gravity         = 1500
 	MaxJumpSpeed    = -Gravity * 10
 	MaxFallSpeed    = 900
+	AttackZoomSpeed = 2.0
 )
 
 type ActorState uint8
@@ -140,13 +141,20 @@ func (a *Actor) Update(dt float32) {
 			a.enterIdleState()
 		}
 	case StateIdle:
+		prevUpdown := a.Updown
 		a.updateUpdown()
+
 		absSpeed := abs(a.Speed.X)
 		if absSpeed > RunReach {
 			a.enterRunState()
 			return
 		} else if absSpeed > 0.1 {
 			a.SetAnim("resources/threefour/walk.png", AnimOptions{animDuration: 0.7, totalFrames: 9})
+		} else if prevUpdown != a.Updown {
+			anim := fmt.Sprintf("resources/threefour/updown-%d-%d.png", prevUpdown, a.Updown)
+			a.SetAnim(anim, AnimOptions{animDuration: 0.1, totalFrames: 4, once: true})
+		} else if a.AnimFinished && strings.Contains(a.Anim, "updown-") {
+			a.SetAnimFrame("resources/threefour/updown.png", a.Updown)
 		}
 		if a.Input.Attack {
 			a.enterAttackState()
@@ -560,9 +568,7 @@ func (a *Actor) updatePlayerInput() {
 }
 
 func (a *Actor) updateUpdown() {
-	if a.State != StateIdle || !a.AnimFinished && strings.Contains(a.Anim, "updown-") {
-		return
-	}
+	prevUpdown := a.Updown
 	var updown uint8
 	if a.IsPlayer {
 		switch {
@@ -579,13 +585,8 @@ func (a *Actor) updateUpdown() {
 			updown = uint8(rand.Int() % 3)
 		}
 	}
-
-	if updown != a.Updown {
-		a.PrevUpdown = a.Updown
-		anim := fmt.Sprintf("resources/threefour/updown-%d-%d.png", a.PrevUpdown, updown)
-		a.SetAnim(anim, AnimOptions{animDuration: 0.1, totalFrames: 4, once: true})
-	} else if a.AnimFinished && strings.Contains(a.Anim, "updown-") {
-		a.SetAnimFrame("resources/threefour/updown.png", a.Updown)
+	if a.Updown != prevUpdown {
+		a.PrevUpdown = prevUpdown
 	}
 	a.Updown = updown
 }
@@ -593,7 +594,7 @@ func (a *Actor) updateUpdown() {
 func (a *Actor) enterAttackState() {
 	a.State = StateAttack
 	if a.IsPlayer {
-		Cam.ZoomSpeed += 1.0
+		Cam.ZoomSpeed += AttackZoomSpeed
 	}
 	switch a.Updown {
 	case 0:
@@ -646,7 +647,7 @@ func (a *Actor) updateAttacked() {
 func (a *Actor) updateAttack() {
 	if a.Input.Attack {
 		if a.IsPlayer {
-			Cam.ZoomSpeed += 1.0
+			Cam.ZoomSpeed += AttackZoomSpeed
 		}
 		a.AttackQueued = true
 	}
@@ -689,7 +690,7 @@ func (a *Actor) updateAttack() {
 			actor.Attacker = a
 			if a.Updown == actor.Updown {
 				actor.enterBlockState()
-			} else if a.AnimCurrentFrame > AttackFrame {
+			} else if a.AnimCurrentFrame > AttackFrame { // TODO based on animation there are different frames
 				actor.enterAttackedState()
 			}
 		}
@@ -722,6 +723,14 @@ func (a *Actor) updateAttack() {
 		}
 
 		a.AttackQueued = false
+
+		prevUpdown := a.Updown
+		a.updateUpdown()
+		if a.Updown != prevUpdown {
+			anim := fmt.Sprintf("resources/threefour/updown-atk-%d-%d.png", prevUpdown, a.Updown)
+			a.SetAnim(anim, AnimOptions{animDuration: 0.4, totalFrames: 7, once: true})
+			return
+		}
 
 		switch a.Updown {
 		case 0:
