@@ -27,7 +27,7 @@ void main()
 
     float d =
         (c.a > 0.3)
-        ? distance(fragTexCoord, vec2(0.5))
+        ? distance(fragTexCoord, vec2(0.5))  * 2.0
         : 1.0;
 
     finalColor = vec4(d, 0.0, 0.0, 1.0);

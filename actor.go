@@ -315,6 +315,7 @@ type AnimOptions struct {
 	animDuration float64
 	totalFrames  uint8
 	animYOffset  int8
+	startFrame   uint8
 	once         bool
 	reset        bool
 }
@@ -329,7 +330,7 @@ func (a *Actor) SetAnim(anim string, o AnimOptions) {
 	a.AnimDuration = o.animDuration
 	a.AnimTotalFrames = o.totalFrames
 	a.AnimOnce = o.once
-	a.AnimFrame = 0
+	a.AnimFrame = o.startFrame
 	a.AnimYOffset = o.animYOffset
 }
 
@@ -591,7 +592,9 @@ func (a *Actor) updateUpdown() {
 
 func (a *Actor) enterAttackState() {
 	a.State = StateAttack
-	Cam.ZoomSpeed += 1.0
+	if a.IsPlayer {
+		Cam.ZoomSpeed += 1.0
+	}
 	switch a.Updown {
 	case 0:
 		a.SetAnim("resources/threefour/attack-low.png", AnimOptions{animDuration: 0.4, totalFrames: 8, once: true})
@@ -642,7 +645,9 @@ func (a *Actor) updateAttacked() {
 
 func (a *Actor) updateAttack() {
 	if a.Input.Attack {
-		Cam.ZoomSpeed += 1.0
+		if a.IsPlayer {
+			Cam.ZoomSpeed += 1.0
+		}
 		a.AttackQueued = true
 	}
 	var r1 rl.Rectangle
@@ -720,11 +725,21 @@ func (a *Actor) updateAttack() {
 
 		switch a.Updown {
 		case 0:
-			a.SetAnim("resources/threefour/attack-low-2.png", AnimOptions{animDuration: 0.2, totalFrames: 6, once: true})
+			if a.Anim == "resources/threefour/attack-low.png" {
+				a.SetAnim("resources/threefour/attack-low-2.png", AnimOptions{animDuration: 0.2, totalFrames: 6, once: true})
+			} else if a.Anim == "resources/threefour/attack-low-2.png" {
+				a.SetAnim("resources/threefour/attack-low-2.png", AnimOptions{animDuration: 0.2, totalFrames: 6, once: true})
+			}
 		case 1:
 			a.SetAnim("resources/threefour/attack-mid-2.png", AnimOptions{animDuration: 0.2, totalFrames: 6, once: true})
 		case 2:
-			a.SetAnim("resources/threefour/attack-high-2.png", AnimOptions{animDuration: 0.2, totalFrames: 6, once: true})
+			if a.Anim == "resources/threefour/attack-high.png" {
+				a.SetAnim("resources/threefour/attack-high-2.png", AnimOptions{animDuration: 0.2, totalFrames: 6, once: true})
+			} else if a.Anim == "resources/threefour/attack-high-2.png" {
+				a.SetAnim("resources/threefour/attack-high-3.png", AnimOptions{animDuration: 0.2, totalFrames: 6, once: true})
+			} else if a.Anim == "resources/threefour/attack-high-3.png" {
+				a.SetAnim("resources/threefour/attack-high.png", AnimOptions{animDuration: 0.2, totalFrames: 6, once: true, startFrame: 3})
+			}
 		}
 	}
 }
