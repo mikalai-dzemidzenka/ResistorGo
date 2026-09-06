@@ -462,7 +462,7 @@ func (a *Actor) DrawAnim() {
 func (a *Actor) updateHorSpeed(dt float32) {
 	var movePressed bool
 	prevOrientation := a.Orientation
-	if a.Input.Right && !(a.State == StateTurnover && prevOrientation == 1) {
+	if a.Input.Right && !(a.State == StateTurnover && prevOrientation == 1) && a.State != StateAttack {
 		movePressed = true
 		if abs(a.Speed.X) < 0.001 {
 			a.Speed.X -= 10 * a.Acc * dt
@@ -471,7 +471,7 @@ func (a *Actor) updateHorSpeed(dt float32) {
 		}
 		a.Orientation = -1
 	}
-	if a.Input.Left && !(a.State == StateTurnover && prevOrientation == -1) {
+	if a.Input.Left && !(a.State == StateTurnover && prevOrientation == -1) && a.State != StateAttack {
 		movePressed = true
 		if abs(a.Speed.X) < 0.001 {
 			a.Speed.X += 10 * a.Acc * dt

@@ -6,22 +6,17 @@ import (
 )
 
 const (
-	CursorLen             = 10
-	CursorThick           = 3
-	CursorAttackSpeed     = 0.1
-	CursorFastAttackSpeed = 0.5
+	CursorLen         = 10
+	CursorThick       = 3
+	CursorAttackSpeed = 0.5
 )
-
-var Cur = &Cursor{
-	AtkSpeed: CursorAttackSpeed,
-	GUIZ:     2,
-}
 
 type Cursor struct {
 	Pos      rl.Vector2
 	AtkPos   rl.Vector2
 	AtkSpeed float32
 	GUIZ     int8
+	once     bool
 }
 
 func (c *Cursor) GetGUIZ() int8 {
@@ -30,9 +25,9 @@ func (c *Cursor) GetGUIZ() int8 {
 
 func (c *Cursor) Update(dt float32) {
 	if rl.IsMouseButtonDown(rl.MouseButtonRight) {
-		c.AtkSpeed = CursorFastAttackSpeed
-	} else {
 		c.AtkSpeed = CursorAttackSpeed
+	} else {
+		c.AtkSpeed = 0
 	}
 
 	c.Pos = rl.GetMousePosition()

@@ -1,6 +1,9 @@
 package resistor
 
-import rl "github.com/gen2brain/raylib-go/raylib"
+import (
+	rl "github.com/gen2brain/raylib-go/raylib"
+	"math"
+)
 
 // ============================================================
 // SHADERS
@@ -189,6 +192,8 @@ const fsShadow = `
 in vec2 fragTexCoord;
 out vec4 finalColor;
 
+uniform float lightDirection;
+uniform float coneAngle;
 uniform sampler2D texture0;
 uniform vec4 lightColor;
 uniform float lightIntensity;
@@ -289,6 +294,15 @@ void main()
     vec2 p =
         fragTexCoord - vec2(0.5);
 
+	float angle = atan(p.y, p.x);
+	
+	float diff = abs(atan(
+		sin(angle - lightDirection),
+		cos(angle - lightDirection)
+	));
+	
+	float cone = step(diff, coneAngle * 0.5);
+
 
     // ========================================================
     // КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ
@@ -345,10 +359,9 @@ void main()
     // Shadow test
     // ========================================================
 
-    float lit =
-        (dist <= shadowMapDistance)
-        ? 1.0
-        : 0.0;
+	float lit = (dist <= shadowMapDistance) ? 1.0 : 0.0;
+	
+	lit *= cone;
 
 
     // ========================================================
@@ -519,6 +532,9 @@ type ZimaLight struct {
 	reduce []rl.RenderTexture2D
 
 	shadow rl.RenderTexture2D
+
+	Direction float32 // радианы
+	ConeAngle float32 // радианы
 }
 
 // ============================================================
@@ -565,6 +581,8 @@ func newZimaLight(
 			size,
 			size,
 		),
+		Direction: 0,
+		ConeAngle: 2 * math.Pi,
 	}
 
 	// ========================================================
@@ -731,13 +749,15 @@ func runPass(
 // ============================================================
 
 type Shaders struct {
-	distance           rl.Shader
-	distort            rl.Shader
-	reduce             rl.Shader
-	shadow             rl.Shader
-	locReduceSrcWidth  int32
-	locShadowColor     int32
-	locShadowIntensity int32
+	distance                rl.Shader
+	distort                 rl.Shader
+	reduce                  rl.Shader
+	shadow                  rl.Shader
+	locReduceSrcWidth       int32
+	locShadowColor          int32
+	locShadowIntensity      int32
+	locShadowlightDirection int32
+	locConeAngle            int32
 }
 
 // ============================================================
@@ -786,6 +806,8 @@ func loadShaders() *Shaders {
 			s.shadow,
 			"lightIntensity",
 		)
+	s.locShadowlightDirection = rl.GetShaderLocation(s.shadow, "lightDirection")
+	s.locConeAngle = rl.GetShaderLocation(s.shadow, "coneAngle")
 
 	return s
 }
@@ -972,6 +994,20 @@ func (z *ZimaLight) Compute(
 			z.Intensity,
 		},
 
+		rl.ShaderUniformFloat,
+	)
+
+	rl.SetShaderValue(
+		sh.shadow,
+		sh.locShadowlightDirection,
+		[]float32{z.Direction},
+		rl.ShaderUniformFloat,
+	)
+
+	rl.SetShaderValue(
+		sh.shadow,
+		sh.locConeAngle,
+		[]float32{z.ConeAngle},
 		rl.ShaderUniformFloat,
 	)
 

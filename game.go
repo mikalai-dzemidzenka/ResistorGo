@@ -43,6 +43,7 @@ var (
 	light2               *ZimaLight
 	light3               *ZimaLight
 	Palette              []rl.Color
+	Cur                  *Cursor
 )
 
 type Vector2i struct {
@@ -98,6 +99,11 @@ func Game() {
 
 	rl.DisableCursor()
 	Cam = NewCamera(3)
+	Cur = &Cursor{
+		AtkSpeed: CursorAttackSpeed,
+		AtkPos:   rl.Vector2{SW * WindowScale / 2, SH * WindowScale / 2},
+		GUIZ:     2,
+	}
 	Pl = NewActor(rl.Vector2{}, true)
 	enemy := NewActor(rl.Vector2{X: 50}, false)
 	LE = NewLevelEditor(39, 83)
