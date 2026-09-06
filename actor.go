@@ -62,6 +62,7 @@ type Actor struct {
 	InterpolatedPos   rl.Vector2
 	MoveToPos         rl.Vector2
 	Speed             rl.Vector2
+	Energy            int32
 	Acc               float32
 	Friction          float32
 	Orientation       int8
@@ -767,7 +768,7 @@ func (a *Actor) updateAttack() {
 			} else if a.Anim == "resources/threefour/attack-high-2.png" {
 				a.SetAnim("resources/threefour/attack-high-3.png", AnimOptions{animDuration: secondAttackSpeed, totalFrames: 6, once: true})
 			} else if a.Anim == "resources/threefour/attack-high-3.png" {
-				a.SetAnim("resources/threefour/attack-high.png", AnimOptions{animDuration: secondAttackSpeed, totalFrames: 6, once: true, startFrame: 3})
+				a.SetAnim("resources/threefour/attack-high-2.png", AnimOptions{animDuration: secondAttackSpeed, totalFrames: 6, once: true, startFrame: 3})
 			}
 		}
 	}
