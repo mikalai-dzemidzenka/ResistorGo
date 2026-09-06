@@ -22,6 +22,24 @@ const (
 
 type ActorState uint8
 
+var attackFrames = map[string]uint8{
+	"resources/threefour/attack-high.png":    5,
+	"resources/threefour/attack-high-2.png":  3,
+	"resources/threefour/attack-high-3.png":  3,
+	"resources/threefour/attack-mid.png":     5,
+	"resources/threefour/attack-mid-2.png":   3,
+	"resources/threefour/attack-mid-3.png":   3,
+	"resources/threefour/attack-low.png":     5,
+	"resources/threefour/attack-low-2.png":   3,
+	"resources/threefour/attack-low-3.png":   3,
+	"resources/threefour/updown-atk-0-1.png": 4,
+	"resources/threefour/updown-atk-0-2.png": 4,
+	"resources/threefour/updown-atk-1-2.png": 4,
+	"resources/threefour/updown-atk-1-0.png": 4,
+	"resources/threefour/updown-atk-2-1.png": 4,
+	"resources/threefour/updown-atk-2-0.png": 4,
+}
+
 const (
 	StateIdle ActorState = iota
 	StateRun
@@ -573,7 +591,7 @@ func (a *Actor) updateUpdown() {
 	if a.IsPlayer {
 		curPos := rl.GetScreenToWorld2D(Cur.AtkPos, Cam.Camera2D)
 		switch {
-		case float32(curPos.Y) <= a.Pos.Y+14:
+		case float32(curPos.Y) <= a.Pos.Y+16:
 			updown = 2
 		case float32(curPos.Y) <= a.Pos.Y+24:
 			updown = 1
@@ -691,7 +709,7 @@ func (a *Actor) updateAttack() {
 			actor.Attacker = a
 			if a.Updown == actor.Updown {
 				actor.enterBlockState()
-			} else if a.AnimCurrentFrame > AttackFrame { // TODO based on animation there are different frames
+			} else if a.AnimCurrentFrame >= attackFrames[a.Anim] {
 				actor.enterAttackedState()
 			}
 		}
@@ -760,19 +778,16 @@ func (a *Actor) updateBlock() {
 		a.enterIdleState()
 		return
 	}
-	if strings.HasSuffix(a.Anim, "start.png") && a.AnimFinished && a.Attacker.AnimCurrentFrame > 4 {
-		switch a.Updown {
-		case 0:
-			a.SetAnim("resources/threefour/block-low-1.png", AnimOptions{animDuration: 0.2, totalFrames: 3, once: true})
-		case 1, 2:
-			a.SetAnim("resources/threefour/block-mid-1.png", AnimOptions{animDuration: 0.2, totalFrames: 3, once: true})
+	if a.AnimFinished && a.Attacker.AnimCurrentFrame >= attackFrames[a.Attacker.Anim] {
+		if a.Updown != a.Attacker.Updown {
+			a.enterAttackedState()
+			return
 		}
-	} else if a.AnimFinished && a.Attacker.AnimCurrentFrame > 4 {
 		switch a.Updown {
 		case 0:
-			a.SetAnim("resources/threefour/block-low-1.png", AnimOptions{animDuration: 0.2, totalFrames: 3, once: true})
+			a.SetAnim("resources/threefour/block-low-1.png", AnimOptions{animDuration: 0.2, totalFrames: 3, once: true, reset: true})
 		case 1, 2:
-			a.SetAnim("resources/threefour/block-mid-2.png", AnimOptions{animDuration: 0.2, totalFrames: 3, once: true})
+			a.SetAnim("resources/threefour/block-mid-1.png", AnimOptions{animDuration: 0.2, totalFrames: 3, once: true, reset: true})
 		}
 	}
 }
