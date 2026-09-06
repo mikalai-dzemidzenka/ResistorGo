@@ -571,10 +571,11 @@ func (a *Actor) updateUpdown() {
 	prevUpdown := a.Updown
 	var updown uint8
 	if a.IsPlayer {
+		curPos := rl.GetScreenToWorld2D(Cur.AtkPos, Cam.Camera2D)
 		switch {
-		case float32(MouseWorldPos.Y) <= a.Pos.Y+14:
+		case float32(curPos.Y) <= a.Pos.Y+14:
 			updown = 2
-		case float32(MouseWorldPos.Y) <= a.Pos.Y+32:
+		case float32(curPos.Y) <= a.Pos.Y+24:
 			updown = 1
 		default:
 			updown = 0
@@ -585,10 +586,10 @@ func (a *Actor) updateUpdown() {
 			updown = uint8(rand.Int() % 3)
 		}
 	}
+	a.Updown = updown
 	if a.Updown != prevUpdown {
 		a.PrevUpdown = prevUpdown
 	}
-	a.Updown = updown
 }
 
 func (a *Actor) enterAttackState() {

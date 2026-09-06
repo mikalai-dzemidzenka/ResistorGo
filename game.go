@@ -96,6 +96,7 @@ func Game() {
 
 	LoadTextures()
 
+	rl.DisableCursor()
 	Cam = NewCamera(3)
 	Pl = NewActor(rl.Vector2{}, true)
 	enemy := NewActor(rl.Vector2{X: 50}, false)
@@ -178,6 +179,7 @@ func runLevel(dt float32) {
 
 	alpha := float32(Accumulator / FixedTimeStep)
 
+	Cur.Update(dt)
 	for _, actor := range Actors {
 		actor.Interp(alpha)
 	}
@@ -259,6 +261,7 @@ func runLevel(dt float32) {
 	if Debug {
 		LE.DrawGui()
 	}
+	Cur.DrawGUI()
 
 	if Debug {
 		fps := strconv.Itoa(int(rl.GetFPS()))
