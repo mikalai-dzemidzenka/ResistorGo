@@ -80,8 +80,6 @@ type Actor struct {
 	AnimPhysTimeStart float64
 	AnimTop           *string
 	Anim              string
-	AnimPaused        bool
-	AnimPausedFor     float64
 	AnimDuration      float64
 	AnimYOffset       int8
 	AnimFrame         uint8
@@ -89,8 +87,10 @@ type Actor struct {
 	AnimCurrentFrame  uint8
 	AnimOnce          bool
 	AnimFinished      bool
+	AnimWhite         bool
 	Attacker          *Actor
 	AttackQueued      bool
+	AttackCount       uint8
 	CanClimbRight     bool
 	CanClimbLeft      bool
 }
@@ -203,6 +203,9 @@ func (a *Actor) Update(dt float32) {
 		a.updateAttack()
 	case StateAttacked:
 		a.Speed.X = clamp(a.Speed.X, -MaxAttackSpeed, MaxAttackSpeed)
+		const offset = 1
+		//Cam.Offset.Y += []float32{-offset, offset, offset, -offset}[int(PhysicsTime*1000)%4]
+		//Cam.Offset.X += []float32{offset, -offset, -offset, offset}[int(PhysicsTime*1000)%4]
 		a.updateAttacked()
 	case StateBlock:
 		a.Speed.X = clamp(a.Speed.X, -MaxAttackSpeed, MaxAttackSpeed)
@@ -266,21 +269,11 @@ func (a *Actor) Draw() {
 			Height: 48,
 		}, a.InterpolatedPos, rl.White)
 	} else {
-		if a.AnimPaused {
-			a.DrawFrame()
-			if a.AnimPausedFor > 0 && PhysicsTime-a.AnimPhysTimeStart > a.AnimPausedFor {
-				a.AnimPaused = false
-				a.AnimPausedFor = 0
-				a.AnimCurrentFrame++
-			}
+		if a.AnimOnce {
+			a.AnimFinished = a.DrawAnimOnce()
 		} else {
-			if a.AnimOnce {
-				a.AnimFinished = a.DrawAnimOnce()
-			} else {
-				a.DrawAnim()
-			}
+			a.DrawAnim()
 		}
-
 	}
 
 	if Debug {
@@ -465,7 +458,7 @@ func (a *Actor) updateHorSpeed(dt float32) {
 	if a.Input.Right && !(a.State == StateTurnover && prevOrientation == 1) && a.State != StateAttack {
 		movePressed = true
 		if abs(a.Speed.X) < 0.001 {
-			a.Speed.X -= 10 * a.Acc * dt
+			a.Speed.X -= 6 * a.Acc * dt
 		} else {
 			a.Speed.X -= a.Acc * dt
 		}
@@ -474,7 +467,7 @@ func (a *Actor) updateHorSpeed(dt float32) {
 	if a.Input.Left && !(a.State == StateTurnover && prevOrientation == -1) && a.State != StateAttack {
 		movePressed = true
 		if abs(a.Speed.X) < 0.001 {
-			a.Speed.X += 10 * a.Acc * dt
+			a.Speed.X += 6 * a.Acc * dt
 		} else {
 			a.Speed.X += a.Acc * dt
 		}
@@ -626,13 +619,16 @@ func (a *Actor) enterAttackState() {
 	}
 }
 
-func (a *Actor) enterAttackedState() {
+func (a *Actor) enterAttackedState(actor *Actor) {
 	a.State = StateAttacked
+	a.Attacker = actor
+	a.AnimWhite = true
 	a.SetAnim("resources/threefour/hit-top.png", AnimOptions{animDuration: 0.35, totalFrames: 4, once: true})
 }
 
-func (a *Actor) enterBlockState() {
+func (a *Actor) enterBlockState(actor *Actor) {
 	a.State = StateBlock
+	a.Attacker = actor
 	switch a.Updown {
 	case 0:
 		a.SetAnim("resources/threefour/block-low-start.png", AnimOptions{animDuration: 0.1, totalFrames: 5, once: true})
@@ -656,10 +652,9 @@ func (a *Actor) enterRunState() {
 }
 
 func (a *Actor) updateAttacked() {
-	if a.State != StateAttacked {
-		return
-	}
 	if a.AnimFinished {
+		Cam.Offset = rl.Vector2{SW * WindowScale * 0.9 / 2, SH * WindowScale / 2}
+		a.exitAttackedState()
 		a.enterIdleState()
 	}
 }
@@ -707,17 +702,17 @@ func (a *Actor) updateAttack() {
 			Height: actor.CollisionBox.Height,
 		}
 		if aabb(r1, r2) && actor.State != StateAttacked && actor.State != StateBlock {
-			actor.Attacker = a
 			if a.Updown == actor.Updown {
-				actor.enterBlockState()
-			} else if a.AnimCurrentFrame >= attackFrames[a.Anim] {
-				actor.enterAttackedState()
+				actor.enterBlockState(a)
+			} else if a.AnimCurrentFrame > attackFrames[a.Anim] {
+				actor.enterAttackedState(a)
 			}
 		}
 	}
 
 	if a.AnimFinished {
 		if strings.Contains(a.Anim, "back") {
+			a.exitAttackState()
 			a.enterIdleState()
 			return
 		}
@@ -743,6 +738,7 @@ func (a *Actor) updateAttack() {
 		}
 
 		a.AttackQueued = false
+		a.AttackCount++
 
 		prevUpdown := a.Updown
 		a.updateUpdown()
@@ -776,12 +772,15 @@ func (a *Actor) updateAttack() {
 
 func (a *Actor) updateBlock() {
 	if a.Attacker.State != StateAttack && a.AnimFinished {
+		a.exitBlockState()
 		a.enterIdleState()
 		return
 	}
 	if a.AnimFinished && a.Attacker.AnimCurrentFrame >= attackFrames[a.Attacker.Anim] {
 		if a.Updown != a.Attacker.Updown {
-			a.enterAttackedState()
+			attacker := a.Attacker
+			a.exitBlockState()
+			a.enterAttackedState(attacker)
 			return
 		}
 		switch a.Updown {
@@ -821,4 +820,16 @@ func (a *Actor) exitJumpState() {
 func (a *Actor) enterTurnoverState() {
 	a.State = StateTurnover
 	a.SetAnim("resources/threefour/turnover.png", AnimOptions{animDuration: 0.9, totalFrames: 14, once: true, reset: true})
+}
+
+func (a *Actor) exitAttackState() {
+	a.AttackCount = 0
+}
+
+func (a *Actor) exitBlockState() {
+	a.Attacker = nil
+}
+
+func (a *Actor) exitAttackedState() {
+	a.AnimWhite = false
 }

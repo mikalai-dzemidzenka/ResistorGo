@@ -25,6 +25,7 @@ var (
 	GameTimeSec          float64
 	Accumulator          float64
 	PhysicsTime          float64
+	PauseTime            float64
 	Ticks                int
 	FixedTimeStep        float64 = 1.0 / 60.0
 	MouseWorldPos        Vector2i
@@ -44,6 +45,7 @@ var (
 	light3               *ZimaLight
 	Palette              []rl.Color
 	Cur                  *Cursor
+	WhiteShader          rl.Shader
 )
 
 type Vector2i struct {
@@ -97,6 +99,8 @@ func Game() {
 
 	LoadTextures()
 
+	WhiteShader = rl.LoadShaderFromMemory("", fsWhite)
+
 	rl.DisableCursor()
 	Cam = NewCamera(3)
 	Cur = &Cursor{
@@ -109,7 +113,7 @@ func Game() {
 	LE = NewLevelEditor(39, 83)
 	LE.LoadLevel("level_1.json")
 
-	Actors = []*Actor{Pl, enemy}
+	Actors = []*Actor{enemy, Pl}
 
 	MainMenuTexture = rl.LoadRenderTexture(SW, SH)
 	rl.SetTextureFilter(MainMenuTexture.Texture, rl.FilterPoint)
@@ -145,6 +149,7 @@ func Game() {
 		rl.NewColor(242, 221, 161, 255),
 		rl.NewColor(246, 245, 192, 255),
 		rl.SkyBlue,
+		rl.White,
 	}
 
 	ScreenPaletteTexture = makePaletteTexture(Palette)
@@ -213,8 +218,16 @@ func runLevel(dt float32) {
 		slices.SortFunc(Actors, func(a, b *Actor) int {
 			return int(b.Pos.X - a.Pos.X)
 		})
+		locTime := rl.GetShaderLocation(WhiteShader, "time")
 		for _, a := range Actors {
-			a.Draw()
+			if a.AnimWhite && a.AnimCurrentFrame < 2 {
+				rl.BeginShaderMode(WhiteShader)
+				rl.SetShaderValue(WhiteShader, locTime, []float32{float32(rl.GetTime())}, rl.ShaderUniformFloat)
+				a.Draw()
+				rl.EndShaderMode()
+			} else {
+				a.Draw()
+			}
 		}
 
 		rl.EndMode2D()

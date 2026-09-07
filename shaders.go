@@ -93,6 +93,33 @@ void main()
 }
 `
 
+const fsWhite = `
+#version 330
+
+in vec2 fragTexCoord;
+in vec4 fragColor;
+
+uniform sampler2D texture0;
+uniform float time; // Передаем время из raylib (GetTime())
+
+out vec4 finalColor;
+
+void main()
+{
+    vec4 texel = texture(texture0, fragTexCoord) * fragColor;
+    
+    // sin(time) возвращает значения от -1.0 до 1.0.
+    // abs() превращает их в диапазон от 0.0 до 1.0 (плавное мигание).
+    // Умножение time * 10.0 ускоряет частоту мигания. Примените нужную вам скорость.
+    float flashIntensity = abs(sin(time * 20.0));
+    
+    // Плавно смешиваем оригинальный цвет пикселя с чисто белым (vec3(1.0))
+    vec3 mixedColor = mix(texel.rgb, vec3(1.0), flashIntensity);
+    
+    finalColor = vec4(mixedColor, texel.a);
+}
+`
+
 // ============================================================
 // REDUCTION
 // ============================================================
