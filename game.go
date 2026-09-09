@@ -152,6 +152,9 @@ func Game() {
 		rl.White,
 		rl.Red,
 		rl.Green,
+		rl.NewColor(0, 200, 48, 255),
+		rl.NewColor(10, 250, 50, 255),
+		rl.NewColor(10, 255, 60, 255),
 	}
 
 	ScreenPaletteTexture = makePaletteTexture(Palette)

@@ -14,7 +14,7 @@ const (
 	RunReach        = 200
 	MaxSpeed        = 320
 	PunchSpeed      = 50
-	MaxAttackSpeed  = 200
+	MaxAttackSpeed  = 70
 	Gravity         = 1500
 	MaxJumpSpeed    = -Gravity * 10
 	MaxFallSpeed    = 900
@@ -480,6 +480,13 @@ func (a *Actor) updateHorSpeed(dt float32) {
 		}
 		a.Orientation = 1
 	}
+	if a.State == StateIdle || a.State == StateAttack && a.AnimCurrentFrame == 0 {
+		if a.IsPlayer && float32(MouseWorldPos.X) < a.Pos.X+24 {
+			a.Orientation = -1
+		} else {
+			a.Orientation = 1
+		}
+	}
 
 	if prevOrientation != a.Orientation {
 		a.Speed.X /= 3
@@ -621,6 +628,7 @@ func (a *Actor) enterAttackState() {
 	if a.IsPlayer {
 		Cam.ZoomSpeed += AttackZoomSpeed
 	}
+	a.Speed.X = float32(a.Orientation) * MaxAttackSpeed
 	switch a.Updown {
 	case 0:
 		a.SetAnim("resources/threefour/attack-low.png", AnimOptions{animDuration: 0.3, totalFrames: 8, once: true})
@@ -757,6 +765,7 @@ func (a *Actor) updateAttack() {
 
 		a.AttackQueued = false
 		a.AttackCount++
+		a.Speed.X = float32(a.Orientation) * MaxAttackSpeed
 
 		prevUpdown := a.Updown
 		a.updateUpdown()
