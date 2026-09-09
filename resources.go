@@ -55,6 +55,8 @@ func LoadTextures() {
 	loadTex("resources/threefour/block-mid-v2-start.png")
 	loadTex("resources/threefour/block-mid-v2-1.png")
 
+	loadTex("resources/threefour/block.png")
+
 	loadTex("resources/threefour/walk.png")
 	loadTex("resources/threefour/walk-bot.png")
 	loadTex("resources/threefour/walk-mid.png")

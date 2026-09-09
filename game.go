@@ -122,8 +122,8 @@ func Game() {
 	Sh = loadShaders()
 	const intense = 1.0
 	light1 = newZimaLight(512, 256, rl.White, intense)
-	light2 = newZimaLight(512, 256, rl.White, intense)
-	light3 = newZimaLight(512, 256, rl.White, intense)
+	light2 = newZimaLight(512, 512, rl.Red, intense)
+	light3 = newZimaLight(512, 512, rl.Green, intense)
 
 	PaletteShader = rl.LoadShaderFromMemory("", fsPalette)
 
@@ -150,6 +150,8 @@ func Game() {
 		rl.NewColor(246, 245, 192, 255),
 		rl.SkyBlue,
 		rl.White,
+		rl.Red,
+		rl.Green,
 	}
 
 	ScreenPaletteTexture = makePaletteTexture(Palette)

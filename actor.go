@@ -163,13 +163,15 @@ func (a *Actor) Update(dt float32) {
 	case StateIdle:
 		prevUpdown := a.Updown
 		a.updateUpdown()
-
-		absSpeed := abs(a.Speed.X)
-		if absSpeed > RunReach {
+		if prevUpdown == 3 && a.Updown != 3 {
+			a.SetAnimFrame("resources/threefour/updown.png", a.Updown)
+		} else if a.Updown == 3 {
+			a.SetAnimFrame("resources/threefour/block.png", 0)
+		} else if absSpeed := abs(a.Speed.X); absSpeed > RunReach {
 			a.enterRunState()
 			return
 		} else if absSpeed > 0.1 {
-			a.SetAnim("resources/threefour/walk.png", AnimOptions{animDuration: 0.7, totalFrames: 9})
+			a.SetAnim("resources/threefour/walk.png", AnimOptions{animDuration: 0.6, totalFrames: 9})
 		} else if prevUpdown != a.Updown {
 			anim := fmt.Sprintf("resources/threefour/updown-%d-%d.png", prevUpdown, a.Updown)
 			a.SetAnim(anim, AnimOptions{animDuration: 0.1, totalFrames: 4, once: true})
@@ -455,11 +457,11 @@ func (a *Actor) DrawAnim() {
 func (a *Actor) updateHorSpeed(dt float32) {
 	var movePressed bool
 	prevOrientation := a.Orientation
-	canMove := a.State != StateAttack && a.State != StateBlock && a.State != StateAttacked
+	canMove := a.State != StateAttack && a.State != StateBlock && a.State != StateAttacked && a.Updown != 3
 	if a.Input.Right && !(a.State == StateTurnover && prevOrientation == 1) && canMove {
 		movePressed = true
 		if abs(a.Speed.X) < 0.001 {
-			a.Speed.X -= 6 * a.Acc * dt
+			a.Speed.X -= 12 * a.Acc * dt
 		} else {
 			a.Speed.X -= a.Acc * dt
 		}
@@ -468,7 +470,7 @@ func (a *Actor) updateHorSpeed(dt float32) {
 	if a.Input.Left && !(a.State == StateTurnover && prevOrientation == -1) && canMove {
 		movePressed = true
 		if abs(a.Speed.X) < 0.001 {
-			a.Speed.X += 6 * a.Acc * dt
+			a.Speed.X += 12 * a.Acc * dt
 		} else {
 			a.Speed.X += a.Acc * dt
 		}
@@ -586,6 +588,8 @@ func (a *Actor) updateUpdown() {
 	if a.IsPlayer {
 		curPos := rl.GetScreenToWorld2D(Cur.AtkPos, Cam.Camera2D)
 		switch {
+		case float32(curPos.Y) <= a.Pos.Y+a.CollisionBox.Y:
+			updown = 3
 		case float32(curPos.Y) <= a.Pos.Y+16:
 			updown = 2
 		case float32(curPos.Y) <= a.Pos.Y+24:
@@ -615,7 +619,7 @@ func (a *Actor) enterAttackState() {
 		a.SetAnim("resources/threefour/attack-low.png", AnimOptions{animDuration: 0.4, totalFrames: 8, once: true})
 	case 1:
 		a.SetAnim("resources/threefour/attack-mid.png", AnimOptions{animDuration: 0.4, totalFrames: 8, once: true})
-	case 2:
+	case 2, 3:
 		a.SetAnim("resources/threefour/attack-high.png", AnimOptions{animDuration: 0.4, totalFrames: 8, once: true})
 	}
 }
@@ -632,10 +636,6 @@ func (a *Actor) enterBlockState(attacker *Actor) {
 	a.State = StateBlock
 	a.Attacker = attacker
 	a.Speed.X = float32(attacker.Orientation) * PunchSpeed
-	if float32(MouseWorldPos.Y) < a.Pos.Y+a.CollisionBox.Y {
-		a.SetAnim("resources/threefour/block-all-start.png", AnimOptions{animDuration: 0.1, totalFrames: 5, once: true})
-		return
-	}
 	switch a.Updown {
 	case 0:
 		a.SetAnim("resources/threefour/block-low-start.png", AnimOptions{animDuration: 0.1, totalFrames: 5, once: true})
@@ -643,6 +643,8 @@ func (a *Actor) enterBlockState(attacker *Actor) {
 		a.SetAnim("resources/threefour/block-mid-start.png", AnimOptions{animDuration: 0.1, totalFrames: 5, once: true})
 	case 2:
 		a.SetAnim("resources/threefour/block-mid-v2-start.png", AnimOptions{animDuration: 0.1, totalFrames: 5, once: true})
+	case 3:
+		a.SetAnim("resources/threefour/block-all-start.png", AnimOptions{animDuration: 0.1, totalFrames: 5, once: true})
 	}
 }
 
@@ -711,7 +713,7 @@ func (a *Actor) updateAttack() {
 			Height: actor.CollisionBox.Height,
 		}
 		if aabb(r1, r2) && actor.State != StateAttacked && actor.State != StateBlock {
-			if a.Updown == actor.Updown || float32(MouseWorldPos.Y) < a.Pos.Y+a.CollisionBox.Y {
+			if a.Updown == actor.Updown || actor.Updown == 3 {
 				actor.enterBlockState(a)
 			} else if a.AnimCurrentFrame > attackFrames[a.Anim] {
 				actor.enterAttackedState(a)
@@ -786,7 +788,7 @@ func (a *Actor) updateBlock() {
 		return
 	}
 	if a.AnimFinished && a.Attacker.AnimCurrentFrame >= attackFrames[a.Attacker.Anim] {
-		if a.Updown != a.Attacker.Updown && float32(MouseWorldPos.Y) > a.Pos.Y+a.CollisionBox.Y {
+		if a.Updown != a.Attacker.Updown && a.Updown != 3 {
 			attacker := a.Attacker
 			a.exitBlockState()
 			a.enterAttackedState(attacker)
