@@ -19,6 +19,10 @@ const (
 	MaxJumpSpeed    = -Gravity * 10
 	MaxFallSpeed    = 900
 	AttackZoomSpeed = 2.0
+
+	BackAttackSpeed   = 0.2
+	SecondAttackSpeed = 0.2
+	BlockSpeed        = 0.2
 )
 
 type ActorState uint8
@@ -178,7 +182,7 @@ func (a *Actor) Update(dt float32) {
 		} else if a.AnimFinished && strings.Contains(a.Anim, "updown-") {
 			a.SetAnimFrame("resources/threefour/updown.png", a.Updown)
 		}
-		if a.Input.Attack {
+		if a.Input.Attack && a.Updown != 3 {
 			a.enterAttackState()
 			return
 		}
@@ -542,6 +546,9 @@ func (a *Actor) checkCollision() {
 }
 
 func (a *Actor) updateBotInput() {
+	if a.State == StateAttacked {
+		return
+	}
 	const near = 50
 	a.Input = Input{}
 	if Pl.Pos.X < a.Pos.X {
@@ -616,11 +623,11 @@ func (a *Actor) enterAttackState() {
 	}
 	switch a.Updown {
 	case 0:
-		a.SetAnim("resources/threefour/attack-low.png", AnimOptions{animDuration: 0.4, totalFrames: 8, once: true})
+		a.SetAnim("resources/threefour/attack-low.png", AnimOptions{animDuration: 0.3, totalFrames: 8, once: true})
 	case 1:
-		a.SetAnim("resources/threefour/attack-mid.png", AnimOptions{animDuration: 0.4, totalFrames: 8, once: true})
+		a.SetAnim("resources/threefour/attack-mid.png", AnimOptions{animDuration: 0.3, totalFrames: 8, once: true})
 	case 2, 3:
-		a.SetAnim("resources/threefour/attack-high.png", AnimOptions{animDuration: 0.4, totalFrames: 8, once: true})
+		a.SetAnim("resources/threefour/attack-high.png", AnimOptions{animDuration: 0.3, totalFrames: 8, once: true})
 	}
 }
 
@@ -629,7 +636,7 @@ func (a *Actor) enterAttackedState(attacker *Actor) {
 	a.Attacker = attacker
 	a.AnimWhite = true
 	a.Speed.X = float32(attacker.Orientation) * PunchSpeed
-	a.SetAnim("resources/threefour/hit-top.png", AnimOptions{animDuration: 0.35, totalFrames: 4, once: true})
+	a.SetAnim("resources/threefour/hit-top.png", AnimOptions{animDuration: 0.3, totalFrames: 4, once: true})
 }
 
 func (a *Actor) enterBlockState(attacker *Actor) {
@@ -732,17 +739,17 @@ func (a *Actor) updateAttack() {
 			switch a.Updown {
 			case 0:
 				if strings.HasSuffix(a.Anim, "attack-low-2.png") {
-					a.SetAnim("resources/threefour/back-attack-low-2.png", AnimOptions{animDuration: 0.2, totalFrames: 4, once: true})
+					a.SetAnim("resources/threefour/back-attack-low-2.png", AnimOptions{animDuration: BackAttackSpeed, totalFrames: 4, once: true})
 				} else {
-					a.SetAnim("resources/threefour/back-attack-low-1.png", AnimOptions{animDuration: 0.2, totalFrames: 4, once: true})
+					a.SetAnim("resources/threefour/back-attack-low-1.png", AnimOptions{animDuration: BackAttackSpeed, totalFrames: 4, once: true})
 				}
 			case 1:
-				a.SetAnim("resources/threefour/back-attack-mid-1.png", AnimOptions{animDuration: 0.2, totalFrames: 4, once: true})
-			case 2:
+				a.SetAnim("resources/threefour/back-attack-mid-1.png", AnimOptions{animDuration: BackAttackSpeed, totalFrames: 4, once: true})
+			case 2, 3:
 				if strings.HasSuffix(a.Anim, "attack-high-2.png") {
-					a.SetAnim("resources/threefour/back-attack-high-2.png", AnimOptions{animDuration: 0.2, totalFrames: 4, once: true})
+					a.SetAnim("resources/threefour/back-attack-high-2.png", AnimOptions{animDuration: BackAttackSpeed, totalFrames: 4, once: true})
 				} else {
-					a.SetAnim("resources/threefour/back-attack-high-1.png", AnimOptions{animDuration: 0.2, totalFrames: 4, once: true})
+					a.SetAnim("resources/threefour/back-attack-high-1.png", AnimOptions{animDuration: BackAttackSpeed, totalFrames: 4, once: true})
 				}
 			}
 			return
@@ -753,29 +760,32 @@ func (a *Actor) updateAttack() {
 
 		prevUpdown := a.Updown
 		a.updateUpdown()
+		if prevUpdown == 3 || a.Updown == 3 {
+			a.enterIdleState()
+			return
+		}
 		if a.Updown != prevUpdown {
 			anim := fmt.Sprintf("resources/threefour/updown-atk-%d-%d.png", prevUpdown, a.Updown)
 			a.SetAnim(anim, AnimOptions{animDuration: 0.4, totalFrames: 7, once: true})
 			return
 		}
 
-		const secondAttackSpeed = 0.3
 		switch a.Updown {
 		case 0:
 			if a.Anim == "resources/threefour/attack-low.png" {
-				a.SetAnim("resources/threefour/attack-low-2.png", AnimOptions{animDuration: secondAttackSpeed, totalFrames: 6, once: true})
+				a.SetAnim("resources/threefour/attack-low-2.png", AnimOptions{animDuration: SecondAttackSpeed, totalFrames: 6, once: true})
 			} else if a.Anim == "resources/threefour/attack-low-2.png" {
-				a.SetAnim("resources/threefour/attack-low-2.png", AnimOptions{animDuration: secondAttackSpeed, totalFrames: 6, once: true})
+				a.SetAnim("resources/threefour/attack-low-2.png", AnimOptions{animDuration: SecondAttackSpeed, totalFrames: 6, once: true})
 			}
 		case 1:
-			a.SetAnim("resources/threefour/attack-mid-2.png", AnimOptions{animDuration: secondAttackSpeed, totalFrames: 6, once: true})
+			a.SetAnim("resources/threefour/attack-mid-2.png", AnimOptions{animDuration: SecondAttackSpeed, totalFrames: 6, once: true})
 		case 2:
 			if a.Anim == "resources/threefour/attack-high.png" {
-				a.SetAnim("resources/threefour/attack-high-2.png", AnimOptions{animDuration: secondAttackSpeed, totalFrames: 6, once: true})
+				a.SetAnim("resources/threefour/attack-high-2.png", AnimOptions{animDuration: SecondAttackSpeed, totalFrames: 6, once: true})
 			} else if a.Anim == "resources/threefour/attack-high-2.png" {
-				a.SetAnim("resources/threefour/attack-high-3.png", AnimOptions{animDuration: secondAttackSpeed, totalFrames: 6, once: true})
+				a.SetAnim("resources/threefour/attack-high-3.png", AnimOptions{animDuration: SecondAttackSpeed, totalFrames: 6, once: true})
 			} else if a.Anim == "resources/threefour/attack-high-3.png" {
-				a.SetAnim("resources/threefour/attack-high-2.png", AnimOptions{animDuration: secondAttackSpeed, totalFrames: 6, once: true, startFrame: 3})
+				a.SetAnim("resources/threefour/attack-high-2.png", AnimOptions{animDuration: SecondAttackSpeed, totalFrames: 6, once: true, startFrame: 3})
 			}
 		}
 	}
@@ -796,15 +806,15 @@ func (a *Actor) updateBlock() {
 		}
 		switch a.Anim {
 		case "resources/threefour/block-all-start.png", "resources/threefour/block-all-1.png":
-			a.SetAnim("resources/threefour/block-all-1.png", AnimOptions{animDuration: 0.2, totalFrames: 3, once: true, reset: true})
+			a.SetAnim("resources/threefour/block-all-1.png", AnimOptions{animDuration: BlockSpeed, totalFrames: 3, once: true, reset: true})
 		case "resources/threefour/block-low-start.png", "resources/threefour/block-low-1.png":
-			a.SetAnim("resources/threefour/block-low-1.png", AnimOptions{animDuration: 0.2, totalFrames: 3, once: true, reset: true})
+			a.SetAnim("resources/threefour/block-low-1.png", AnimOptions{animDuration: BlockSpeed, totalFrames: 3, once: true, reset: true})
 		case "resources/threefour/block-mid-v2-start.png", "resources/threefour/block-mid-v2-1.png":
-			a.SetAnim("resources/threefour/block-mid-v2-1.png", AnimOptions{animDuration: 0.2, totalFrames: 3, once: true, reset: true})
+			a.SetAnim("resources/threefour/block-mid-v2-1.png", AnimOptions{animDuration: BlockSpeed, totalFrames: 3, once: true, reset: true})
 		case "resources/threefour/block-mid-start.png", "resources/threefour/block-mid-2.png":
-			a.SetAnim("resources/threefour/block-mid-1.png", AnimOptions{animDuration: 0.2, totalFrames: 3, once: true, reset: true})
+			a.SetAnim("resources/threefour/block-mid-1.png", AnimOptions{animDuration: BlockSpeed, totalFrames: 3, once: true, reset: true})
 		case "resources/threefour/block-mid-1.png":
-			a.SetAnim("resources/threefour/block-mid-2.png", AnimOptions{animDuration: 0.2, totalFrames: 3, once: true, reset: true})
+			a.SetAnim("resources/threefour/block-mid-2.png", AnimOptions{animDuration: BlockSpeed, totalFrames: 3, once: true, reset: true})
 		}
 	}
 }
