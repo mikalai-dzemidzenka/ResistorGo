@@ -13,7 +13,8 @@ const (
 	DefaultFriction = 250
 	RunReach        = 200
 	MaxSpeed        = 320
-	MaxAttackSpeed  = 2
+	PunchSpeed      = 50
+	MaxAttackSpeed  = 200
 	Gravity         = 1500
 	MaxJumpSpeed    = -Gravity * 10
 	MaxFallSpeed    = 900
@@ -208,7 +209,6 @@ func (a *Actor) Update(dt float32) {
 		//Cam.Offset.X += []float32{offset, -offset, -offset, offset}[int(PhysicsTime*1000)%4]
 		a.updateAttacked()
 	case StateBlock:
-		a.Speed.X = clamp(a.Speed.X, -MaxAttackSpeed, MaxAttackSpeed)
 		a.updateBlock()
 	case StateJumpStart:
 		if a.AnimFinished {
@@ -455,7 +455,8 @@ func (a *Actor) DrawAnim() {
 func (a *Actor) updateHorSpeed(dt float32) {
 	var movePressed bool
 	prevOrientation := a.Orientation
-	if a.Input.Right && !(a.State == StateTurnover && prevOrientation == 1) && a.State != StateAttack {
+	canMove := a.State != StateAttack && a.State != StateBlock && a.State != StateAttacked
+	if a.Input.Right && !(a.State == StateTurnover && prevOrientation == 1) && canMove {
 		movePressed = true
 		if abs(a.Speed.X) < 0.001 {
 			a.Speed.X -= 6 * a.Acc * dt
@@ -464,7 +465,7 @@ func (a *Actor) updateHorSpeed(dt float32) {
 		}
 		a.Orientation = -1
 	}
-	if a.Input.Left && !(a.State == StateTurnover && prevOrientation == -1) && a.State != StateAttack {
+	if a.Input.Left && !(a.State == StateTurnover && prevOrientation == -1) && canMove {
 		movePressed = true
 		if abs(a.Speed.X) < 0.001 {
 			a.Speed.X += 6 * a.Acc * dt
@@ -619,21 +620,29 @@ func (a *Actor) enterAttackState() {
 	}
 }
 
-func (a *Actor) enterAttackedState(actor *Actor) {
+func (a *Actor) enterAttackedState(attacker *Actor) {
 	a.State = StateAttacked
-	a.Attacker = actor
+	a.Attacker = attacker
 	a.AnimWhite = true
+	a.Speed.X = float32(attacker.Orientation) * PunchSpeed
 	a.SetAnim("resources/threefour/hit-top.png", AnimOptions{animDuration: 0.35, totalFrames: 4, once: true})
 }
 
-func (a *Actor) enterBlockState(actor *Actor) {
+func (a *Actor) enterBlockState(attacker *Actor) {
 	a.State = StateBlock
-	a.Attacker = actor
+	a.Attacker = attacker
+	a.Speed.X = float32(attacker.Orientation) * PunchSpeed
+	if float32(MouseWorldPos.Y) < a.Pos.Y+a.CollisionBox.Y {
+		a.SetAnim("resources/threefour/block-all-start.png", AnimOptions{animDuration: 0.1, totalFrames: 5, once: true})
+		return
+	}
 	switch a.Updown {
 	case 0:
 		a.SetAnim("resources/threefour/block-low-start.png", AnimOptions{animDuration: 0.1, totalFrames: 5, once: true})
-	case 1, 2:
+	case 1:
 		a.SetAnim("resources/threefour/block-mid-start.png", AnimOptions{animDuration: 0.1, totalFrames: 5, once: true})
+	case 2:
+		a.SetAnim("resources/threefour/block-mid-v2-start.png", AnimOptions{animDuration: 0.1, totalFrames: 5, once: true})
 	}
 }
 
@@ -702,7 +711,7 @@ func (a *Actor) updateAttack() {
 			Height: actor.CollisionBox.Height,
 		}
 		if aabb(r1, r2) && actor.State != StateAttacked && actor.State != StateBlock {
-			if a.Updown == actor.Updown {
+			if a.Updown == actor.Updown || float32(MouseWorldPos.Y) < a.Pos.Y+a.CollisionBox.Y {
 				actor.enterBlockState(a)
 			} else if a.AnimCurrentFrame > attackFrames[a.Anim] {
 				actor.enterAttackedState(a)
@@ -777,17 +786,23 @@ func (a *Actor) updateBlock() {
 		return
 	}
 	if a.AnimFinished && a.Attacker.AnimCurrentFrame >= attackFrames[a.Attacker.Anim] {
-		if a.Updown != a.Attacker.Updown {
+		if a.Updown != a.Attacker.Updown && float32(MouseWorldPos.Y) > a.Pos.Y+a.CollisionBox.Y {
 			attacker := a.Attacker
 			a.exitBlockState()
 			a.enterAttackedState(attacker)
 			return
 		}
-		switch a.Updown {
-		case 0:
+		switch a.Anim {
+		case "resources/threefour/block-all-start.png", "resources/threefour/block-all-1.png":
+			a.SetAnim("resources/threefour/block-all-1.png", AnimOptions{animDuration: 0.2, totalFrames: 3, once: true, reset: true})
+		case "resources/threefour/block-low-start.png", "resources/threefour/block-low-1.png":
 			a.SetAnim("resources/threefour/block-low-1.png", AnimOptions{animDuration: 0.2, totalFrames: 3, once: true, reset: true})
-		case 1, 2:
+		case "resources/threefour/block-mid-v2-start.png", "resources/threefour/block-mid-v2-1.png":
+			a.SetAnim("resources/threefour/block-mid-v2-1.png", AnimOptions{animDuration: 0.2, totalFrames: 3, once: true, reset: true})
+		case "resources/threefour/block-mid-start.png", "resources/threefour/block-mid-2.png":
 			a.SetAnim("resources/threefour/block-mid-1.png", AnimOptions{animDuration: 0.2, totalFrames: 3, once: true, reset: true})
+		case "resources/threefour/block-mid-1.png":
+			a.SetAnim("resources/threefour/block-mid-2.png", AnimOptions{animDuration: 0.2, totalFrames: 3, once: true, reset: true})
 		}
 	}
 }

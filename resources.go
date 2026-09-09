@@ -42,12 +42,19 @@ func LoadTextures() {
 	loadTex("resources/threefour/back-attack-high-1.png")
 	loadTex("resources/threefour/back-attack-high-2.png")
 
+	loadTex("resources/threefour/block-all-start.png")
+	loadTex("resources/threefour/block-all-1.png")
+
 	loadTex("resources/threefour/block-low-start.png")
 	loadTex("resources/threefour/block-low-1.png")
 
 	loadTex("resources/threefour/block-mid-start.png")
 	loadTex("resources/threefour/block-mid-1.png")
 	loadTex("resources/threefour/block-mid-2.png")
+
+	loadTex("resources/threefour/block-mid-v2-start.png")
+	loadTex("resources/threefour/block-mid-v2-1.png")
+
 	loadTex("resources/threefour/walk.png")
 	loadTex("resources/threefour/walk-bot.png")
 	loadTex("resources/threefour/walk-mid.png")
