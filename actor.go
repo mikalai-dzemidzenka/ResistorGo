@@ -14,7 +14,7 @@ const (
 	RunReach        = 200
 	MaxSpeed        = 320
 	PunchSpeed      = 50
-	MaxAttackSpeed  = 65
+	MaxAttackSpeed  = 60
 	Gravity         = 1500
 	MaxJumpSpeed    = -Gravity * 10
 	MaxFallSpeed    = 900
@@ -181,11 +181,13 @@ func (a *Actor) Update(dt float32) {
 				reverse = false
 			}
 			reset := a.AnimReverse != reverse
-			a.SetAnim("resources/threefour/walk.png", AnimOptions{reset: reset, animDuration: 0.6, totalFrames: 9, reverse: reverse})
+			a.SetAnim("resources/threefour/walk.png", AnimOptions{reset: reset, animDuration: 0.6, totalFrames: 9, reverse: reverse, startFrame: 9})
 		} else if prevUpdown != a.Updown {
 			anim := fmt.Sprintf("resources/threefour/updown-%d-%d.png", prevUpdown, a.Updown)
 			a.SetAnim(anim, AnimOptions{animDuration: 0.1, totalFrames: 4, once: true})
 		} else if a.AnimFinished && strings.Contains(a.Anim, "updown-") {
+			a.SetAnimFrame("resources/threefour/updown.png", a.Updown)
+		} else if absSpeed < 0.1 && a.Anim == "resources/threefour/walk.png" {
 			a.SetAnimFrame("resources/threefour/updown.png", a.Updown)
 		}
 		if a.Input.Attack && a.Updown != 3 {
