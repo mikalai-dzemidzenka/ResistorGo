@@ -122,8 +122,8 @@ func Game() {
 	Sh = loadShaders()
 	const intense = 1.0
 	light1 = newZimaLight(512, 256, rl.White, intense)
-	light2 = newZimaLight(512, 512, rl.Red, intense)
-	light3 = newZimaLight(512, 512, rl.Green, intense)
+	light2 = newZimaLight(512, 128, rl.White, intense)
+	light3 = newZimaLight(512, 128, rl.White, intense)
 
 	PaletteShader = rl.LoadShaderFromMemory("", fsPalette)
 
@@ -281,7 +281,7 @@ func runLevel(dt float32) {
 	rl.SetShaderValue(PaletteShader, locResolution, []float32{SW * WindowScale, SH * WindowScale}, rl.ShaderUniformVec2)
 	rl.SetShaderValue(PaletteShader, locPixelSize, []float32{Cam.Zoom}, rl.ShaderUniformFloat)
 	rl.SetShaderValue(PaletteShader, locPaletteSize, []float32{float32(len(Palette))}, rl.ShaderUniformFloat)
-	rl.SetShaderValue(PaletteShader, locDither, []float32{1}, rl.ShaderUniformFloat)
+	rl.SetShaderValue(PaletteShader, locDither, []float32{0}, rl.ShaderUniformFloat)
 
 	src := rl.NewRectangle(0, 0, SW*WindowScale, -SH*WindowScale) // флип render-текстуры
 	dst := rl.NewRectangle(0, 0, SW*WindowScale, SH*WindowScale)

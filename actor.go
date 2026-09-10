@@ -14,7 +14,7 @@ const (
 	RunReach        = 200
 	MaxSpeed        = 320
 	PunchSpeed      = 50
-	MaxAttackSpeed  = 70
+	MaxAttackSpeed  = 65
 	Gravity         = 1500
 	MaxJumpSpeed    = -Gravity * 10
 	MaxFallSpeed    = 900
