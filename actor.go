@@ -91,6 +91,7 @@ type Actor struct {
 	AnimTotalFrames   uint8
 	AnimCurrentFrame  uint8
 	AnimOnce          bool
+	AnimReverse       bool
 	AnimFinished      bool
 	AnimWhite         bool
 	Attacker          *Actor
@@ -175,7 +176,12 @@ func (a *Actor) Update(dt float32) {
 			a.enterRunState()
 			return
 		} else if absSpeed > 0.1 {
-			a.SetAnim("resources/threefour/walk.png", AnimOptions{animDuration: 0.6, totalFrames: 9})
+			reverse := true
+			if a.Speed.X > 0 && !a.MouseOnLeft() || a.Speed.X < 0 && a.MouseOnLeft() {
+				reverse = false
+			}
+			reset := a.AnimReverse != reverse
+			a.SetAnim("resources/threefour/walk.png", AnimOptions{reset: reset, animDuration: 0.6, totalFrames: 9, reverse: reverse})
 		} else if prevUpdown != a.Updown {
 			anim := fmt.Sprintf("resources/threefour/updown-%d-%d.png", prevUpdown, a.Updown)
 			a.SetAnim(anim, AnimOptions{animDuration: 0.1, totalFrames: 4, once: true})
@@ -211,8 +217,8 @@ func (a *Actor) Update(dt float32) {
 	case StateAttacked:
 		a.Speed.X = clamp(a.Speed.X, -MaxAttackSpeed, MaxAttackSpeed)
 		const offset = 1
-		//Cam.Offset.Y += []float32{-offset, offset, offset, -offset}[int(PhysicsTime*1000)%4]
-		//Cam.Offset.X += []float32{offset, -offset, -offset, offset}[int(PhysicsTime*1000)%4]
+		Cam.Offset.Y += []float32{-offset, offset, -offset, offset}[int(GameTimeSec*1000)%4]
+		Cam.Offset.X += []float32{offset, -offset, offset, -offset}[int(GameTimeSec*1000)%4]
 		a.updateAttacked()
 	case StateBlock:
 		a.updateBlock()
@@ -344,6 +350,7 @@ type AnimOptions struct {
 	startFrame   uint8
 	once         bool
 	reset        bool
+	reverse      bool
 }
 
 func (a *Actor) SetAnim(anim string, o AnimOptions) {
@@ -356,6 +363,7 @@ func (a *Actor) SetAnim(anim string, o AnimOptions) {
 	a.AnimDuration = o.animDuration
 	a.AnimTotalFrames = o.totalFrames
 	a.AnimOnce = o.once
+	a.AnimReverse = o.reverse
 	a.AnimFrame = o.startFrame
 	a.AnimYOffset = o.animYOffset
 }
@@ -412,7 +420,11 @@ func (a *Actor) DrawAnim() {
 	}
 	frame := int((PhysicsTime - a.AnimPhysTimeStart) / frameTimeMs)
 	frame = clamp(frame, 0, int(a.AnimTotalFrames)-1)
-	a.AnimCurrentFrame = a.AnimFrame + uint8(frame)
+	if a.AnimReverse {
+		a.AnimCurrentFrame = a.AnimFrame - uint8(frame)
+	} else {
+		a.AnimCurrentFrame = a.AnimFrame + uint8(frame)
+	}
 
 	rl.DrawTextureRec(tex, rl.Rectangle{
 		X:      float32(a.AnimCurrentFrame) * 48,
@@ -481,10 +493,12 @@ func (a *Actor) updateHorSpeed(dt float32) {
 		a.Orientation = 1
 	}
 	if a.State == StateIdle || a.State == StateAttack && a.AnimCurrentFrame == 0 {
-		if a.IsPlayer && float32(MouseWorldPos.X) < a.Pos.X+24 {
-			a.Orientation = -1
-		} else {
-			a.Orientation = 1
+		if a.IsPlayer {
+			if a.MouseOnLeft() {
+				a.Orientation = -1
+			} else {
+				a.Orientation = 1
+			}
 		}
 	}
 
@@ -643,6 +657,7 @@ func (a *Actor) enterAttackedState(attacker *Actor) {
 	a.State = StateAttacked
 	a.Attacker = attacker
 	a.AnimWhite = true
+	PauseTime = 0.1
 	a.Speed.X = float32(attacker.Orientation) * PunchSpeed
 	a.SetAnim("resources/threefour/hit-top.png", AnimOptions{animDuration: 0.3, totalFrames: 4, once: true})
 }
@@ -868,4 +883,11 @@ func (a *Actor) exitBlockState() {
 
 func (a *Actor) exitAttackedState() {
 	a.AnimWhite = false
+}
+
+func (a *Actor) MouseOnLeft() bool {
+	if !a.IsPlayer {
+		return false
+	}
+	return float32(MouseWorldPos.X) < a.Pos.X+24
 }

@@ -186,10 +186,15 @@ func runLevel(dt float32) {
 	Accumulator += float64(dt)
 
 	for Accumulator > FixedTimeStep {
-		PhysicsTime += FixedTimeStep
-		for _, actor := range Actors {
-			actor.Update(float32(FixedTimeStep))
+		if PauseTime > 0 {
+			PauseTime -= FixedTimeStep
+		} else {
+			PhysicsTime += FixedTimeStep
+			for _, actor := range Actors {
+				actor.Update(float32(FixedTimeStep))
+			}
 		}
+
 		Accumulator -= FixedTimeStep
 	}
 
