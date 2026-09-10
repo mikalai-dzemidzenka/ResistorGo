@@ -9,13 +9,17 @@ import (
 var ZeroVec2 = rl.Vector2{}
 
 func moveTo0(v float32, step float32) float32 {
+	return moveTo(v, step, 0)
+}
+
+func moveTo(v float32, step float32, final float32) float32 {
 	switch {
-	case v > 0:
-		return clamp(v-step, 0, v)
-	case v < 0:
-		return clamp(v+step, v, 0)
+	case v > final:
+		return clamp(v-step, final, v)
+	case v < final:
+		return clamp(v+step, v, final)
 	default:
-		return 0
+		return final
 	}
 }
 

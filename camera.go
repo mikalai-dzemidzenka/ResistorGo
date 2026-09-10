@@ -9,6 +9,7 @@ const (
 
 type Camera struct {
 	rl.Camera2D
+	Target    rl.Vector2
 	ZoomSpeed float32
 }
 
@@ -27,6 +28,9 @@ func (c *Camera) Update(dt float32) {
 	c.Zoom += c.ZoomSpeed * dt
 
 	c.ZoomSpeed = moveTo0(c.ZoomSpeed, 0.025*dt)
+
+	c.Camera2D.Target.X = moveTo(c.Camera2D.Target.X, 1000*dt, c.Target.X)
+	c.Camera2D.Target.Y = moveTo(c.Camera2D.Target.Y, 1000*dt, c.Target.Y)
 
 	c.Zoom = clamp(c.Zoom, MinZoom, MaxZoom)
 	c.ZoomSpeed = clamp(c.ZoomSpeed, -2, 2)

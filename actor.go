@@ -14,7 +14,7 @@ const (
 	RunReach        = 200
 	MaxSpeed        = 320
 	PunchSpeed      = 50
-	MaxAttackSpeed  = 60
+	AttackDash      = 4
 	Gravity         = 1500
 	MaxJumpSpeed    = -Gravity * 10
 	MaxFallSpeed    = 900
@@ -214,13 +214,14 @@ func (a *Actor) Update(dt float32) {
 			a.enterAttackState()
 		}
 	case StateAttack:
-		a.Speed.X = clamp(a.Speed.X, -MaxAttackSpeed, MaxAttackSpeed)
+		a.Speed.X = clamp(a.Speed.X, -AttackDash, AttackDash)
 		a.updateAttack()
 	case StateAttacked:
-		a.Speed.X = clamp(a.Speed.X, -MaxAttackSpeed, MaxAttackSpeed)
-		const offset = 1
-		Cam.Offset.Y += []float32{-offset, offset, -offset, offset}[int(GameTimeSec*1000)%4]
-		Cam.Offset.X += []float32{offset, -offset, offset, -offset}[int(GameTimeSec*1000)%4]
+		a.Speed.X = clamp(a.Speed.X, -AttackDash, AttackDash)
+		const offset = 2
+		Cam.Offset = rl.Vector2{SW * WindowScale * 0.9 / 2, SH * WindowScale / 2}
+		Cam.Offset.Y += []float32{-offset, offset, -offset, offset, -offset, offset, -offset, offset}[int(GameTimeSec*1000)%8]
+		Cam.Offset.X += []float32{offset, -offset, offset, -offset, offset, -offset, offset, -offset}[int(GameTimeSec*1000)%8]
 		a.updateAttacked()
 	case StateBlock:
 		a.updateBlock()
@@ -644,7 +645,7 @@ func (a *Actor) enterAttackState() {
 	if a.IsPlayer {
 		Cam.ZoomSpeed += AttackZoomSpeed
 	}
-	a.Speed.X = float32(a.Orientation) * MaxAttackSpeed
+	a.Pos.X += float32(a.Orientation) * AttackDash
 	switch a.Updown {
 	case 0:
 		a.SetAnim("resources/threefour/attack-low.png", AnimOptions{animDuration: 0.3, totalFrames: 8, once: true})
@@ -782,7 +783,7 @@ func (a *Actor) updateAttack() {
 
 		a.AttackQueued = false
 		a.AttackCount++
-		a.Speed.X = float32(a.Orientation) * MaxAttackSpeed
+		a.Speed.X = float32(a.Orientation) * AttackDash
 
 		prevUpdown := a.Updown
 		a.updateUpdown()
