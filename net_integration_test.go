@@ -122,7 +122,7 @@ func TestNetIntegration(t *testing.T) {
 		t.Error("second server bound the same port")
 	}
 
-	if err := startClient(fmt.Sprintf("127.0.0.1:%d", cfg.Port)); err != nil {
+	if err := startClient(fmt.Sprintf("127.0.0.1:%d", cfg.Port), false); err != nil {
 		t.Fatal(err)
 	}
 	c := Cli
@@ -197,7 +197,7 @@ func TestNetSimulatedLag(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := startClient(fmt.Sprintf("127.0.0.1:%d", cfg.Port)); err != nil {
+	if err := startClient(fmt.Sprintf("127.0.0.1:%d", cfg.Port), false); err != nil {
 		t.Fatal(err)
 	}
 	c := Cli
@@ -236,7 +236,7 @@ func TestClientConnectTimeout(t *testing.T) {
 	enet.Initialize()
 	defer enet.Deinitialize()
 	LE = NewLevelEditor(39, 83)
-	if err := startClient("127.0.0.1:27192"); err != nil { // nothing listens there
+	if err := startClient("127.0.0.1:27192", false); err != nil { // nothing listens there
 		t.Fatal(err)
 	}
 	connectingFrom = menuJoin

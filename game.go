@@ -165,6 +165,7 @@ func startOffline() {
 func enterLevel() {
 	Stage = StageLevel
 	Accumulator = 0
+	Spec = SpecCam{Follow: true, Pos: Cam.Camera2D.Target}
 	rl.DisableCursor()
 }
 
@@ -260,7 +261,10 @@ func runLevel(dt float32) {
 		return
 	}
 
-	latchInput()
+	spectating := Cli != nil && Cli.Spectator
+	if !spectating {
+		latchInput()
+	}
 	if NetMode == NetOffline {
 		stepOffline(dt)
 	} else {
@@ -296,6 +300,8 @@ func runLevel(dt float32) {
 	}
 	if local != nil {
 		Cam.SetTarget(rl.Vector2{X: local.Pos.X + 24, Y: local.Pos.Y + 24})
+	} else if spectating {
+		updateSpectatorCam(dt, w)
 	}
 	Cam.Update(dt)
 
@@ -384,7 +390,11 @@ func runLevel(dt float32) {
 	if Debug && NetMode == NetOffline {
 		LE.DrawGui()
 	}
-	Cur.DrawGUI()
+	if spectating {
+		drawSpectatorHUD()
+	} else {
+		Cur.DrawGUI()
+	}
 
 	if Debug {
 		fps := strconv.Itoa(int(rl.GetFPS()))

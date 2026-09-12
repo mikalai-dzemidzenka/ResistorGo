@@ -20,6 +20,7 @@ const (
 	CmdRedundancy  = 3   // newest + 2 previous in every packet
 	SmoothMaxPx    = 8
 	SmoothTau      = 0.035 // s; ~95 % of a correction is gone after 100 ms
+	KeepaliveEvery = time.Second
 )
 
 type Client struct {
@@ -43,6 +44,8 @@ type Client struct {
 	Sim         NetSim
 	snapTimes   []time.Time
 	closed      bool
+	Spectator   bool // joined without a fighter
+	lastKeep    time.Time
 }
 
 var Cli *Client
@@ -79,7 +82,7 @@ func parseAddr(s string) (string, uint16, error) {
 	return "", 0, fmt.Errorf("no IPv4 address for %s", host)
 }
 
-func startClient(addr string) error {
+func startClient(addr string, spectator bool) error {
 	ip, port, err := parseAddr(addr)
 	if err != nil {
 		return err
@@ -95,12 +98,13 @@ func startClient(addr string) error {
 	}
 	now := time.Now()
 	Cli = &Client{
-		Host:     h,
-		Peer:     peer,
-		Addr:     fmt.Sprintf("%s:%d", ip, port),
-		Start:    now,
-		LastRecv: now,
-		W:        NewWorld(false),
+		Host:      h,
+		Peer:      peer,
+		Addr:      fmt.Sprintf("%s:%d", ip, port),
+		Start:     now,
+		LastRecv:  now,
+		W:         NewWorld(false),
+		Spectator: spectator,
 	}
 	Cli.Interp.Delay = interpDelayTicks()
 	CL = Cli.W
@@ -114,7 +118,7 @@ func startListen(cfg ServerConfig) error {
 	if err != nil {
 		return err
 	}
-	if err := startClient(fmt.Sprintf("127.0.0.1:%d", cfg.Port)); err != nil {
+	if err := startClient(fmt.Sprintf("127.0.0.1:%d", cfg.Port), false); err != nil {
 		s.Close()
 		return err
 	}
@@ -128,9 +132,15 @@ func (c *Client) send(ch uint8, data []byte) {
 	c.Sim.send(time.Now(), c.Peer, ch, data)
 }
 
+// ready reports whether the client is in the match: a fighter once its own
+// fighter arrived, a spectator once the first snapshot arrived.
+func (c *Client) ready() bool {
+	return c.W.Local != nil || (c.Spectator && c.HasSnap)
+}
+
 func (c *Client) fail(reason string) {
 	screen := menuMain
-	if c.W.Local == nil {
+	if !c.ready() {
 		screen = connectingFrom
 	}
 	leaveMatch(reason, screen)
@@ -149,7 +159,7 @@ func (c *Client) Frame(dt float32) {
 	if c.closed {
 		return
 	}
-	if c.W.Local == nil {
+	if !c.ready() {
 		if now.Sub(c.Start) > ConnectTimeout {
 			c.fail("connection timed out")
 			return
@@ -157,6 +167,10 @@ func (c *Client) Frame(dt float32) {
 	} else if now.Sub(c.LastRecv) > LostTimeout {
 		c.fail("connection lost")
 		return
+	}
+	if c.Spectator && c.Welcomed && now.Sub(c.lastKeep) >= KeepaliveEvery {
+		c.lastKeep = now
+		c.send(ChanUnreliable, encodeKeepalive())
 	}
 
 	c.Interp.Advance(float64(dt))
@@ -180,7 +194,11 @@ func (c *Client) poll(now time.Time) {
 		case enet.EventNone:
 			return
 		case enet.EventConnect:
-			c.send(ChanReliable, encodeHello(Hello{Proto: ProtocolVersion, LevelHash: LE.Hash()}))
+			role := RoleFighter
+			if c.Spectator {
+				role = RoleSpectator
+			}
+			c.send(ChanReliable, encodeHello(Hello{Proto: ProtocolVersion, LevelHash: LE.Hash(), Role: role}))
 		case enet.EventDisconnect:
 			if c.Welcomed {
 				c.fail("connection lost")
@@ -234,6 +252,9 @@ func (c *Client) onSnapshot(s Snapshot) {
 	c.snapTimes = append(c.snapTimes, now)
 	c.LastAck = s.Ack
 	c.Interp.Add(s)
+	if c.Spectator && Stage != StageLevel {
+		enterLevel()
+	}
 	for _, r := range s.Actors {
 		if r.ID == c.ActorID {
 			c.reconcile(r, s.Ack)

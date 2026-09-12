@@ -14,19 +14,22 @@ import (
 const (
 	CmdBurst      = 8  // token bucket size: commands a player may run in one tick after a stall
 	MaxQueuedCmds = 16 // commands buffered per player; more are dropped
-	PeerTimeout   = 10 * time.Second
 )
 
+// PeerTimeout drops a peer the server has not heard from (a var so tests can shorten it).
+var PeerTimeout = 10 * time.Second
+
 type ServerConfig struct {
-	Port       uint16
-	MaxPlayers int // human players
-	Bots       int
-	LagComp    bool
-	MaxUnlag   uint32 // ticks
+	Port          uint16
+	MaxPlayers    int // human players
+	MaxSpectators int
+	Bots          int
+	LagComp       bool
+	MaxUnlag      uint32 // ticks
 }
 
 func DefaultServerConfig() ServerConfig {
-	return ServerConfig{Port: DefaultPort, MaxPlayers: 8, LagComp: true, MaxUnlag: DefaultMaxUnlag}
+	return ServerConfig{Port: DefaultPort, MaxPlayers: 8, MaxSpectators: 4, LagComp: true, MaxUnlag: DefaultMaxUnlag}
 }
 
 // cmdQueue orders a player's commands and rate-limits their execution.
@@ -62,7 +65,9 @@ func (cq *cmdQueue) drain(run func(Input)) {
 type netPlayer struct {
 	ID       uint16
 	Peer     enet.Peer
-	Actor    *Actor // nil until the handshake is accepted
+	Role     uint8
+	Accepted bool   // handshake accepted
+	Actor    *Actor // the fighter; nil for spectators and before acceptance
 	Cmds     cmdQueue
 	LastRecv time.Time
 	lastLog  time.Time
@@ -83,7 +88,8 @@ type Server struct {
 var Srv *Server
 
 func NewServer(cfg ServerConfig) (*Server, error) {
-	host, err := enet.NewHost(enet.NewListenAddress(cfg.Port), uint64(cfg.MaxPlayers+4), ChannelCount, 0, 0)
+	// spare peers let the server answer extra clients with a rejection
+	host, err := enet.NewHost(enet.NewListenAddress(cfg.Port), uint64(cfg.MaxPlayers+cfg.MaxSpectators+4), ChannelCount, 0, 0)
 	if err != nil {
 		return nil, fmt.Errorf("cannot bind UDP port %d", cfg.Port)
 	}
@@ -97,7 +103,7 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 		hash:  LE.Hash(),
 	}
 	s.fillBots()
-	s.logf("listening on UDP port %d (max players %d, bots %d, lagcomp %t)", cfg.Port, cfg.MaxPlayers, cfg.Bots, cfg.LagComp)
+	s.logf("listening on UDP port %d (max players %d, max spectators %d, bots %d, lagcomp %t)", cfg.Port, cfg.MaxPlayers, cfg.MaxSpectators, cfg.Bots, cfg.LagComp)
 	return s, nil
 }
 
@@ -105,15 +111,18 @@ func (s *Server) logf(format string, args ...any) {
 	fmt.Printf("[server] "+format+"\n", args...)
 }
 
-func (s *Server) humans() int {
+func (s *Server) count(role uint8) int {
 	n := 0
 	for _, p := range s.Peers {
-		if p.Actor != nil {
+		if p.Accepted && p.Role == role {
 			n++
 		}
 	}
 	return n
 }
+
+func (s *Server) humans() int     { return s.count(RoleFighter) }
+func (s *Server) spectators() int { return s.count(RoleSpectator) }
 
 func sendBytes(peer enet.Peer, ch uint8, data []byte) {
 	var flags enet.PacketFlags
@@ -158,7 +167,7 @@ func (s *Server) handle(p *netPlayer, data []byte) {
 	switch data[0] {
 	case MsgHello:
 		h, err := decodeHello(data)
-		if err != nil || p.Actor != nil {
+		if err != nil || p.Accepted {
 			return
 		}
 		var reason uint8
@@ -167,19 +176,27 @@ func (s *Server) handle(p *netPlayer, data []byte) {
 			reason = RejectVersion
 		case h.LevelHash != s.hash:
 			reason = RejectLevel
-		case s.humans() >= s.Cfg.MaxPlayers:
+		case h.Role == RoleFighter && s.humans() >= s.Cfg.MaxPlayers:
 			reason = RejectFull
+		case h.Role == RoleSpectator && s.spectators() >= s.Cfg.MaxSpectators:
+			reason = RejectSpectatorsFull
 		}
 		if reason != 0 {
-			s.logf("reject %s: %s", p.Peer.GetAddress(), rejectText(reason))
+			s.logf("reject %s %s: %s", roleName(h.Role), p.Peer.GetAddress(), rejectText(reason))
 			sendBytes(p.Peer, ChanReliable, encodeReject(reason))
 			p.Peer.DisconnectLater(0)
 			return
 		}
-		s.accept(p)
+		if h.Role == RoleSpectator {
+			s.acceptSpectator(p)
+		} else {
+			s.accept(p)
+		}
+	case MsgKeepalive:
+		// nothing to do: any packet refreshes LastRecv
 	case MsgCmds:
 		if p.Actor == nil {
-			return
+			return // spectators (and unaccepted peers) cannot drive a fighter
 		}
 		cmds, err := decodeCmds(data)
 		if err != nil {
@@ -197,9 +214,21 @@ func (s *Server) accept(p *netPlayer) {
 	s.makeRoom()
 	s.nextPlayerID++
 	p.ID = s.nextPlayerID
+	p.Role = RoleFighter
+	p.Accepted = true
 	p.Actor = s.W.Spawn(s.spawnPos(), true)
 	s.logf("connect player %d (actor %d) from %s", p.ID, p.Actor.ID, p.Peer.GetAddress())
 	sendBytes(p.Peer, ChanReliable, encodeWelcome(Welcome{PlayerID: p.ID, ActorID: p.Actor.ID, Tick: s.W.Tick}))
+}
+
+// acceptSpectator admits a watcher: no fighter, no slot, bots untouched. ActorID 0 means no fighter.
+func (s *Server) acceptSpectator(p *netPlayer) {
+	s.nextPlayerID++
+	p.ID = s.nextPlayerID
+	p.Role = RoleSpectator
+	p.Accepted = true
+	s.logf("connect spectator %d from %s", p.ID, p.Peer.GetAddress())
+	sendBytes(p.Peer, ChanReliable, encodeWelcome(Welcome{PlayerID: p.ID, Tick: s.W.Tick}))
 }
 
 func (s *Server) drop(peerID uint16, why string) {
@@ -208,10 +237,13 @@ func (s *Server) drop(peerID uint16, why string) {
 		return
 	}
 	delete(s.Peers, peerID)
-	if p.Actor != nil {
+	switch {
+	case p.Actor != nil:
 		s.logf("disconnect player %d: %s", p.ID, why)
 		s.W.Remove(p.Actor)
 		s.fillBots()
+	case p.Accepted:
+		s.logf("disconnect spectator %d: %s", p.ID, why)
 	}
 }
 
@@ -270,7 +302,7 @@ func (s *Server) Step() {
 	}
 	s.W.History.Record(s.W)
 	if s.W.Tick%SnapshotEvery == 0 {
-		s.sendSnapshots(players)
+		s.sendSnapshots()
 	}
 }
 
@@ -298,12 +330,16 @@ func (s *Server) runCmd(p *netPlayer, in Input) {
 	restore(saves)
 }
 
-func (s *Server) sendSnapshots(players []*netPlayer) {
+// sendSnapshots sends the world to every accepted peer; spectators' Ack stays 0.
+func (s *Server) sendSnapshots() {
 	recs := make([]ActorRec, 0, len(s.W.Actors))
 	for _, a := range s.W.Actors {
 		recs = append(recs, recOf(a))
 	}
-	for _, p := range players {
+	for _, p := range s.Peers {
+		if !p.Accepted {
+			continue
+		}
 		data := encodeSnapshot(Snapshot{Tick: s.W.Tick, Ack: p.Cmds.last, Actors: recs})
 		sendBytes(p.Peer, ChanUnreliable, data)
 	}

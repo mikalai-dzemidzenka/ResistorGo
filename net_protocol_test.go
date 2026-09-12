@@ -19,7 +19,7 @@ func sampleRec(id uint16) ActorRec {
 }
 
 func TestProtocolRoundTrip(t *testing.T) {
-	h := Hello{Proto: ProtocolVersion, LevelHash: 0xdeadbeefcafef00d}
+	h := Hello{Proto: ProtocolVersion, LevelHash: 0xdeadbeefcafef00d, Role: RoleSpectator}
 	if got, err := decodeHello(encodeHello(h)); err != nil || got != h {
 		t.Errorf("hello: %+v %v", got, err)
 	}
@@ -52,7 +52,8 @@ func TestProtocolRejectsMalformed(t *testing.T) {
 		data   []byte
 		decode func([]byte) error
 	}{
-		{"hello", encodeHello(Hello{Proto: 1, LevelHash: 2}), func(b []byte) error { _, err := decodeHello(b); return err }},
+		// the role byte is optional (version-1 layout), so truncate below the 11-byte core
+		{"hello", encodeHello(Hello{Proto: 1, LevelHash: 2})[:11], func(b []byte) error { _, err := decodeHello(b); return err }},
 		{"welcome", encodeWelcome(Welcome{1, 2, 3}), func(b []byte) error { _, err := decodeWelcome(b); return err }},
 		{"reject", encodeReject(RejectFull), func(b []byte) error { _, err := decodeReject(b); return err }},
 		{"bye", encodeBye(ByeQuit), func(b []byte) error { _, err := decodeBye(b); return err }},
@@ -78,6 +79,23 @@ func TestProtocolRejectsMalformed(t *testing.T) {
 	}
 	if _, err := decodeCmds([]byte{MsgCmds, 0}); err == nil {
 		t.Error("empty cmds accepted")
+	}
+}
+
+func TestHelloVersions(t *testing.T) {
+	v1 := encodeHello(Hello{Proto: 1, LevelHash: 5})[:11] // a version-1 client has no role byte
+	h, err := decodeHello(v1)
+	if err != nil || h.Proto != 1 || h.LevelHash != 5 || h.Role != RoleFighter {
+		t.Errorf("version-1 hello: %+v %v", h, err)
+	}
+	if _, err := decodeHello(encodeHello(Hello{Proto: ProtocolVersion, Role: 7})); err == nil {
+		t.Error("unknown role accepted")
+	}
+	if got := rejectText(RejectSpectatorsFull); got != "spectators full" {
+		t.Errorf("reject text %q", got)
+	}
+	if b := encodeKeepalive(); len(b) != 1 || b[0] != MsgKeepalive {
+		t.Errorf("keepalive %v", b)
 	}
 }
 

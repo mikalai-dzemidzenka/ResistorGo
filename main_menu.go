@@ -16,16 +16,18 @@ const (
 )
 
 var (
-	menuScreen     int
-	menuError      string
-	hostPort       = strconv.Itoa(DefaultPort)
-	hostPortEdit   bool
-	hostMaxPlayers int32 = 8
-	hostMaxEdit    bool
-	hostBots       int32 = 1
-	hostBotsEdit   bool
-	joinAddr       = "127.0.0.1"
-	joinAddrEdit   bool
+	menuScreen      int
+	menuError       string
+	hostPort        = strconv.Itoa(DefaultPort)
+	hostPortEdit    bool
+	hostMaxPlayers  int32 = 8
+	hostMaxEdit     bool
+	hostBots        int32 = 1
+	hostBotsEdit    bool
+	hostMaxSpec     int32 = 4
+	hostMaxSpecEdit bool
+	joinAddr        = "127.0.0.1"
+	joinAddrEdit    bool
 )
 
 var mainMenuInit bool
@@ -125,10 +127,14 @@ func drawMenuUI() {
 		if rlg.Spinner(row(2), "", &hostBots, 0, 15, hostBotsEdit) {
 			hostBotsEdit = !hostBotsEdit
 		}
-		if rlg.Button(row(3), "Start") {
+		label(3, "Max spectators")
+		if rlg.Spinner(row(3), "", &hostMaxSpec, 0, 8, hostMaxSpecEdit) {
+			hostMaxSpecEdit = !hostMaxSpecEdit
+		}
+		if rlg.Button(row(4), "Start") {
 			hostGame()
 		}
-		if rlg.Button(row(4), "Back") {
+		if rlg.Button(row(5), "Back") {
 			menuError = ""
 			menuScreen = menuMain
 		}
@@ -137,16 +143,22 @@ func drawMenuUI() {
 		if rlg.TextBox(row(0), &joinAddr, 64, joinAddrEdit) {
 			joinAddrEdit = !joinAddrEdit
 		}
-		if rlg.Button(row(1), "Connect") {
+		join := func(spectator bool) {
 			menuError = ""
-			if err := startClient(joinAddr); err != nil {
+			if err := startClient(joinAddr, spectator); err != nil {
 				menuError = err.Error()
 			} else {
 				connectingFrom = menuJoin
 				menuScreen = menuConnecting
 			}
 		}
-		if rlg.Button(row(2), "Back") {
+		if rlg.Button(row(1), "Connect") {
+			join(false)
+		}
+		if rlg.Button(row(2), "Join as spectator") {
+			join(true)
+		}
+		if rlg.Button(row(3), "Back") {
 			menuError = ""
 			menuScreen = menuMain
 		}
@@ -161,8 +173,8 @@ func drawMenuUI() {
 		}
 	}
 	if menuError != "" {
-		r := row(5)
-		rl.DrawText(menuError, int32(r.X), int32(r.Y), 20, rl.Red)
+		// above the rows: the host screen uses all six
+		rl.DrawText(menuError, int32(x), int32(y-34), 20, rl.Red)
 	}
 }
 
@@ -177,6 +189,7 @@ func hostGame() {
 	cfg.Port = uint16(port)
 	cfg.MaxPlayers = int(hostMaxPlayers)
 	cfg.Bots = int(min(hostBots, hostMaxPlayers-1))
+	cfg.MaxSpectators = int(hostMaxSpec)
 	if err := startListen(cfg); err != nil {
 		menuError = err.Error()
 		return
