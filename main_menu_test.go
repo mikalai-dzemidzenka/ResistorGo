@@ -7,7 +7,7 @@ func TestMenuLayout(t *testing.T) {
 	if winW%menuPixel != 0 || winH%menuPixel != 0 {
 		t.Errorf("menuPixel %d does not divide the %dx%d window evenly", menuPixel, winW, winH)
 	}
-	for i := range 6 { // the host screen uses six rows
+	for i := range 6 { // the host screen uses six rows, the most of any screen
 		r := menuRow(i)
 		if r.Y+r.Height > winH-16 {
 			t.Errorf("row %d ends at %v, want <= %v", i, r.Y+r.Height, winH-16)

@@ -60,3 +60,7 @@ func sub(a, b rl.Vector2) rl.Vector2 {
 		Y: a.Y - b.Y,
 	}
 }
+
+func roundf(v float32) float32 {
+	return float32(math.Round(float64(v)))
+}

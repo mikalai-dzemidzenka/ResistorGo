@@ -319,6 +319,14 @@ func (a *Actor) updateRewind() {
 }
 func (a *Actor) UpdatePhysics() {}
 
+// drawPos is the sprite's position rounded to whole world pixels. Interpolation
+// and the client's error correction leave sub-pixel positions, which the
+// integer camera zoom turns into texel rows of uneven width - a sprite drawn at
+// x.5 shimmers as it moves.
+func (a *Actor) drawPos() rl.Vector2 {
+	return rl.Vector2{X: roundf(a.InterpolatedPos.X), Y: roundf(a.InterpolatedPos.Y)}
+}
+
 func (a *Actor) Draw() {
 	if IsRewinding {
 		data := a.RewindData[RewindIdx%RewindFrames]
@@ -327,7 +335,7 @@ func (a *Actor) Draw() {
 			Y:      0,
 			Width:  48 * float32(a.Orientation),
 			Height: 48,
-		}, a.InterpolatedPos, rl.White)
+		}, a.drawPos(), rl.White)
 	} else {
 		if a.AnimOnce {
 			a.DrawAnimOnce()
@@ -432,8 +440,8 @@ func (a *Actor) DrawFrame() {
 		Width:  48 * float32(a.Orientation),
 		Height: float32(tex.Height),
 	}, rl.Vector2{
-		X: a.InterpolatedPos.X,
-		Y: a.InterpolatedPos.Y + float32(a.AnimYOffset),
+		X: a.drawPos().X,
+		Y: a.drawPos().Y + float32(a.AnimYOffset),
 	}, rl.White)
 }
 
@@ -449,8 +457,8 @@ func (a *Actor) DrawAnimOnce() {
 		Width:  48 * float32(a.Orientation),
 		Height: float32(tex.Height),
 	}, rl.Vector2{
-		X: a.InterpolatedPos.X,
-		Y: a.InterpolatedPos.Y + float32(a.AnimYOffset),
+		X: a.drawPos().X,
+		Y: a.drawPos().Y + float32(a.AnimYOffset),
 	}, rl.White)
 }
 
@@ -465,7 +473,7 @@ func (a *Actor) DrawAnim() {
 		Y:      0,
 		Width:  48 * float32(a.Orientation),
 		Height: 48,
-	}, a.InterpolatedPos, rl.White)
+	}, a.drawPos(), rl.White)
 
 	// TODO
 	if strings.HasSuffix(a.Anim, "walk.png") {
@@ -477,8 +485,8 @@ func (a *Actor) DrawAnim() {
 				Width:  48 * float32(a.Orientation),
 				Height: float32(tex.Height),
 			}, rl.Vector2{
-				X: a.InterpolatedPos.X,
-				Y: a.InterpolatedPos.Y + float32(a.AnimYOffset),
+				X: a.drawPos().X,
+				Y: a.drawPos().Y + float32(a.AnimYOffset),
 			}, rl.White)
 		case 1:
 			rl.DrawTextureRec(resources["resources/threefour/walk-mid.png"], rl.Rectangle{
@@ -487,8 +495,8 @@ func (a *Actor) DrawAnim() {
 				Width:  48 * float32(a.Orientation),
 				Height: float32(tex.Height),
 			}, rl.Vector2{
-				X: a.InterpolatedPos.X,
-				Y: a.InterpolatedPos.Y + float32(a.AnimYOffset),
+				X: a.drawPos().X,
+				Y: a.drawPos().Y + float32(a.AnimYOffset),
 			}, rl.White)
 		case 2:
 			rl.DrawTextureRec(resources["resources/threefour/walk-top.png"], rl.Rectangle{
@@ -497,8 +505,8 @@ func (a *Actor) DrawAnim() {
 				Width:  48 * float32(a.Orientation),
 				Height: float32(tex.Height),
 			}, rl.Vector2{
-				X: a.InterpolatedPos.X,
-				Y: a.InterpolatedPos.Y + float32(a.AnimYOffset),
+				X: a.drawPos().X,
+				Y: a.drawPos().Y + float32(a.AnimYOffset),
 			}, rl.White)
 		}
 	}
@@ -553,12 +561,32 @@ func (a *Actor) updateVertSpeed(dt float32) {
 	a.Speed.Y = clamp(a.Speed.Y, MaxJumpSpeed, MaxFallSpeed)
 }
 
+// headBlocked reports whether an object currently contains the actor's head.
+// The climb checks in checkCollision need this up front: objectsIndexed is
+// sorted by descending X, so a neighbouring tile of a ceiling row is visited
+// before the tile the head is actually inside of.
+func (a *Actor) headBlocked(pColCenterX float32) bool {
+	pColUpY := a.Pos.Y + a.CollisionBox.Y
+	for _, obj := range LE.objectsIndexed {
+		if obj.CollisionRect == nil {
+			continue
+		}
+		oColY := float32(obj.Y + int32(obj.CollisionRect.Y))
+		oColX := float32(obj.X + int32(obj.CollisionRect.X))
+		if oColX <= pColCenterX && oColX+obj.CollisionRect.Width >= pColCenterX &&
+			pColUpY >= oColY && pColUpY <= oColY+obj.CollisionRect.Height {
+			return true
+		}
+	}
+	return false
+}
+
 func (a *Actor) checkCollision() {
 	a.OnGround = false
-	alreadyHitTop := false
 	pColDownY := a.Pos.Y + a.CollisionBox.Y + a.CollisionBox.Height
 	pColCenterX := a.Pos.X + a.CollisionBox.X + a.CollisionBox.Width/2
 	pPosX := a.Pos.X
+	hitTop := a.headBlocked(pColCenterX)
 	for _, obj := range LE.objectsIndexed {
 		oColY := float32(obj.Y + int32(obj.CollisionRect.Y))
 		oColHeight := obj.CollisionRect.Height
@@ -577,7 +605,7 @@ func (a *Actor) checkCollision() {
 		const climbOffset = 32
 		if oColX <= pColCenterX && oColX+oColWidth >= pColCenterX &&
 			pColUpY >= oColY && pColUpY <= oColY+oColHeight {
-			alreadyHitTop = true
+			hitTop = true
 			a.CanClimbRight = false
 			a.CanClimbLeft = false
 			a.Speed.Y = 0
@@ -585,13 +613,13 @@ func (a *Actor) checkCollision() {
 			a.Pos.Y = float32(int32(oColY + oColHeight))
 			continue
 		} else if pColCenterX+climbOffset >= oColX && oColX >= pColCenterX &&
-			pColUpY >= oColY && pColUpY <= oColY+oColHeight && a.Orientation == 1 && jump && !alreadyHitTop {
+			pColUpY >= oColY && pColUpY <= oColY+oColHeight && a.Orientation == 1 && jump && !hitTop {
 			a.CanClimbRight = true
 			a.Pos.X = float32(int32(oColX) - 20)
 			a.Pos.Y = float32(int32(math.Ceil(float64(oColY)) - 48 + 1))
 			continue
 		} else if pColCenterX >= oColX+oColWidth && oColX+oColWidth >= pColCenterX-climbOffset &&
-			pColUpY >= oColY && pColUpY <= oColY+oColHeight && a.Orientation == -1 && jump && !alreadyHitTop {
+			pColUpY >= oColY && pColUpY <= oColY+oColHeight && a.Orientation == -1 && jump && !hitTop {
 			a.CanClimbLeft = true
 			a.Pos.X = oColX + oColWidth - 24
 			a.Pos.Y = float32(int32(math.Ceil(float64(oColY)) - 48 + 1))
@@ -674,7 +702,7 @@ func sampleInput(a *Actor) Input {
 	}
 	pressedAttack, pressedJump = false, false
 
-	curPos := rl.GetScreenToWorld2D(Cur.AtkPos, Cam.Camera2D)
+	curPos := rl.GetScreenToWorld2D(Cur.AtkPos, Cam.View())
 	switch {
 	case float32(curPos.Y) <= a.Pos.Y+a.CollisionBox.Y:
 		in.Updown = 3

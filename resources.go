@@ -1,6 +1,10 @@
 package resistor
 
-import rl "github.com/gen2brain/raylib-go/raylib"
+import (
+	"path"
+
+	rl "github.com/gen2brain/raylib-go/raylib"
+)
 
 var (
 	resources = make(map[string]rl.Texture2D)
@@ -141,10 +145,15 @@ func LoadLevelObjects() []LevelObject {
 	}
 }
 
-func loadTex(path string) {
-	resources[path] = rl.LoadTexture(path)
+// loadTex decodes an embedded image straight into a GPU texture, so nothing is
+// read from disk at runtime.
+func loadTex(name string) {
+	data := asset(name)
+	img := rl.LoadImageFromMemory(path.Ext(name), data, int32(len(data)))
+	resources[name] = rl.LoadTextureFromImage(img)
+	rl.UnloadImage(img)
 }
 
-func loadModel(path string) {
-	models[path] = rl.LoadModel(path)
+func loadModel(name string) {
+	models[name] = loadOBJ(name, asset(name))
 }

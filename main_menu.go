@@ -12,6 +12,7 @@ const (
 	menuMain = iota
 	menuHost
 	menuJoin
+	menuOptions
 	menuConnecting
 )
 
@@ -28,6 +29,7 @@ var (
 	hostMaxSpecEdit bool
 	joinAddr        = "127.0.0.1"
 	joinAddrEdit    bool
+	winSizeEdit     bool
 )
 
 var mainMenuInit bool
@@ -65,7 +67,7 @@ func runMainMenu(dt float32) {
 	martelo()
 	rl.EndMode3D()
 	rl.EndTextureMode()
-	rl.BeginDrawing()
+	rl.BeginTextureMode(VirtualScreen)
 	rl.ClearBackground(rl.Black)
 	{
 		rl.DrawTextureEx(MainMenuTexture.Texture, rl.Vector2{
@@ -86,7 +88,7 @@ func runMainMenu(dt float32) {
 		rl.DrawTextureEx(tex, rl.Vector2{float32(x), menuLogoBottom - float32(tex.Height)*s}, 0, s, col)
 	}
 	drawMenuUI()
-	rl.EndDrawing()
+	rl.EndTextureMode()
 }
 
 // menuPixel is the on-screen size of one scene pixel. The scene renders into a
@@ -146,7 +148,11 @@ func drawMenuUI() {
 			menuError = ""
 			menuScreen = menuJoin
 		}
-		if rlg.Button(row(3), "Quit") {
+		if rlg.Button(row(3), "Options") {
+			menuError = ""
+			menuScreen = menuOptions
+		}
+		if rlg.Button(row(4), "Quit") {
 			quit = true
 		}
 	case menuHost:
@@ -196,6 +202,37 @@ func drawMenuUI() {
 		if rlg.Button(row(3), "Back") {
 			menuError = ""
 			menuScreen = menuMain
+		}
+	case menuOptions:
+		label(0, "Fullscreen")
+		fullscreen := Cfg.Fullscreen
+		fsText := "Off"
+		if fullscreen {
+			fsText = "On"
+		}
+		if rlg.Toggle(row(0), fsText, &fullscreen); fullscreen != Cfg.Fullscreen {
+			Cfg.Fullscreen = fullscreen
+			ApplySettings()
+		}
+		label(1, "Window size")
+		label(2, "Music volume")
+		vol := float32(Cfg.MusicVolume)
+		if rlg.Slider(row(2), "", strconv.Itoa(Cfg.MusicVolume), &vol, 0, 100); int(vol) != Cfg.MusicVolume {
+			Cfg.MusicVolume = int(vol)
+			applyMusicVolume()
+		}
+		if rlg.Button(row(3), "Back") {
+			SaveSettings()
+			menuScreen = menuMain
+		}
+		// drawn last so its open list covers the rows below it
+		size := int32(Cfg.WindowSize)
+		if rlg.DropdownBox(row(1), windowSizesLabel(), &size, winSizeEdit) {
+			winSizeEdit = !winSizeEdit
+		}
+		if int(size) != Cfg.WindowSize {
+			Cfg.WindowSize = int(size)
+			ApplySettings()
 		}
 	case menuConnecting:
 		text := "Connecting..."

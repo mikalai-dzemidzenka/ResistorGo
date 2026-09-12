@@ -216,7 +216,12 @@ func (le *LevelEditor) DrawGrid() {
 }
 
 func (le *LevelEditor) LoadLevel(path string) {
+	// Disk wins so the in-game editor's saves take effect on the next run; the
+	// embedded copy is what a shipped binary, which has no resources beside it, uses.
 	b, err := os.ReadFile(path)
+	if err != nil {
+		b, err = assetFS.ReadFile(path)
+	}
 	if err != nil {
 		rl.TraceLog(rl.LogError, "failed to load level: read file: %s", err.Error())
 		return

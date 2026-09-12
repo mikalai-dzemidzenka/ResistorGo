@@ -107,13 +107,19 @@ func v2f(v Vector2i) rl.Vector2 {
 }
 
 func Game() {
-	rl.InitWindow(SW*WindowScale, SH*WindowScale, "Resistor")
+	LoadSettings()
+	rl.InitWindow(VW, VH, "Resistor")
 	defer rl.CloseWindow()
 	rl.SetExitKey(0)
 
 	loadStyle()
 
 	rl.SetTargetFPS(60)
+
+	initPresent()
+	initAudio()
+	defer closeAudio()
+	ApplySettings()
 
 	LoadTextures()
 
@@ -134,13 +140,15 @@ func Game() {
 
 		GameTimeSec += float64(dt)
 		MousePos = rl.GetMousePosition()
-		MouseWorldPos = v2i(rl.GetScreenToWorld2D(MousePos, Cam.Camera2D))
+		MouseWorldPos = v2i(rl.GetScreenToWorld2D(MousePos, Cam.View()))
+		updateAudio(dt)
 		switch Stage {
 		case StageMainMenu:
 			runMainMenu(dt)
 		case StageLevel:
 			runLevel(dt)
 		}
+		present()
 	}
 	leaveMatch("", menuMain)
 	if LE.dirty {
@@ -149,7 +157,7 @@ func Game() {
 }
 
 func loadStyle() {
-	rlg.LoadStyle("resources/style_dark.rgs")
+	rlg.LoadStyleFromMemory(asset("resources/style_dark.rgs"))
 	rlg.SetStyle(rlg.DEFAULT, rlg.TEXT_SIZE, 20)
 }
 
@@ -314,7 +322,7 @@ func runLevel(dt float32) {
 	rl.BeginTextureMode(ScreenFullTexture)
 	{
 		rl.ClearBackground(rl.Black)
-		rl.BeginMode2D(Cam.Camera2D)
+		rl.BeginMode2D(Cam.View())
 
 		LE.Draw() // TODO sort objects with actors
 
@@ -342,7 +350,7 @@ func runLevel(dt float32) {
 
 		rl.EndMode2D()
 		rl.DrawRectangle(0, 0, SW*WindowScale, SH*WindowScale, rl.NewColor(0, 0, 0, 50))
-		rl.BeginMode2D(Cam.Camera2D)
+		rl.BeginMode2D(Cam.View())
 
 		rl.BeginBlendMode(rl.BlendAdditive)
 		addLight(
@@ -368,7 +376,7 @@ func runLevel(dt float32) {
 	}
 	rl.EndTextureMode()
 
-	rl.BeginDrawing()
+	rl.BeginTextureMode(VirtualScreen)
 	rl.ClearBackground(rl.Black)
 
 	locTexture1 := rl.GetShaderLocation(PaletteShader, "texture1")
@@ -379,7 +387,7 @@ func runLevel(dt float32) {
 	rl.BeginShaderMode(PaletteShader)
 	rl.SetShaderValueTexture(PaletteShader, locTexture1, ScreenPaletteTexture)
 	rl.SetShaderValue(PaletteShader, locResolution, []float32{SW * WindowScale, SH * WindowScale}, rl.ShaderUniformVec2)
-	rl.SetShaderValue(PaletteShader, locPixelSize, []float32{Cam.Zoom}, rl.ShaderUniformFloat)
+	rl.SetShaderValue(PaletteShader, locPixelSize, []float32{Cam.PixelSize()}, rl.ShaderUniformFloat)
 	rl.SetShaderValue(PaletteShader, locPaletteSize, []float32{float32(len(Palette))}, rl.ShaderUniformFloat)
 	rl.SetShaderValue(PaletteShader, locDither, []float32{0}, rl.ShaderUniformFloat)
 
@@ -404,7 +412,7 @@ func runLevel(dt float32) {
 		rl.DrawText(fmt.Sprintf("camera zoom speed %f", Cam.ZoomSpeed), 20, 50, 2, rl.White)
 		drawNetDebug()
 	}
-	rl.EndDrawing()
+	rl.EndTextureMode()
 }
 
 func drawNetDebug() {
