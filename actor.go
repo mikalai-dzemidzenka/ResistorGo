@@ -171,12 +171,7 @@ func (a *Actor) Update(dt float32) {
 		return
 	}
 
-	a.updateRewind()
-
 	prevOrientation := a.Orientation
-	if IsRewinding {
-		return
-	}
 	a.Ticks++
 	defer a.advanceAnim()
 
@@ -301,21 +296,27 @@ func animFrame(once, reverse bool, start, total uint8, duration, elapsed float64
 	return start + frame, false
 }
 
-func (a *Actor) updateRewind() {
-	if IsRewinding {
-		data := a.RewindData[RewindIdx%RewindFrames]
-		a.Pos = data.Pos
-		a.Speed = data.Speed
-		a.Orientation = data.Orientation
-	} else {
-		a.RewindData[RewindIdx%RewindFrames] = ActorRewindFrame{
-			Pos:         a.Pos,
-			Speed:       a.Speed,
-			Orientation: a.Orientation,
-			Anim:        a.Anim,
-			AnimFrame:   a.AnimCurrentFrame,
-		}
+// recordRewind writes the actor's state into the frame the recording is open
+// on. Called once per live fixed step, before the step runs.
+func (a *Actor) recordRewind() {
+	a.RewindData[rewindSlot(rewindHead)] = ActorRewindFrame{
+		Pos:         a.Pos,
+		Speed:       a.Speed,
+		Orientation: a.Orientation,
+		Anim:        a.Anim,
+		AnimFrame:   a.AnimCurrentFrame,
 	}
+}
+
+// restoreRewind puts the actor back onto the frame the playhead is on. The
+// previous position goes with it: nothing is in motion on a recorded frame, so
+// there is nothing to interpolate from.
+func (a *Actor) restoreRewind() {
+	data := a.RewindData[rewindSlot(rewindCursor)]
+	a.Pos = data.Pos
+	a.PrevPos = data.Pos
+	a.Speed = data.Speed
+	a.Orientation = data.Orientation
 }
 func (a *Actor) UpdatePhysics() {}
 
@@ -328,8 +329,8 @@ func (a *Actor) drawPos() rl.Vector2 {
 }
 
 func (a *Actor) Draw() {
-	if IsRewinding {
-		data := a.RewindData[RewindIdx%RewindFrames]
+	if TimeShowsHistory() {
+		data := a.RewindData[rewindSlot(rewindCursor)]
 		rl.DrawTextureRec(resources[data.Anim], rl.Rectangle{
 			X:      float32(data.AnimFrame) * 48,
 			Y:      0,
@@ -371,8 +372,8 @@ func (a *Actor) Draw() {
 			Height: a.AttackBoxLow.Height,
 		}, 1, rl.Red)
 		if a.IsPlayer {
-			rl.DrawText(fmt.Sprintf("RewindIndex: %d", RewindIdx), int32(a.Pos.X), int32(a.Pos.Y), 2, rl.White)
-			rl.DrawText(fmt.Sprintf("RewindLeft: %d", RewindLeft), int32(a.Pos.X), int32(a.Pos.Y)-8, 2, rl.White)
+			rl.DrawText(fmt.Sprintf("Time: %s", timeModeName()), int32(a.Pos.X), int32(a.Pos.Y), 2, rl.White)
+			rl.DrawText(fmt.Sprintf("Frame: %d of %d", rewindCursor-rewindOldest()+1, rewindCount), int32(a.Pos.X), int32(a.Pos.Y)-8, 2, rl.White)
 			rl.DrawText(fmt.Sprintf("X, Y: %d %d", int32(a.Pos.X), int32(a.Pos.Y)), int32(a.Pos.X), int32(a.Pos.Y)-16, 2, rl.White)
 			rl.DrawText(fmt.Sprintf("PrevUpdown, Updown: %d %d", a.PrevUpdown, a.Updown), int32(a.Pos.X), int32(a.Pos.Y)-24, 2, rl.White)
 			rl.DrawText(fmt.Sprintf("Frame, Finished: %d %t", a.AnimCurrentFrame, a.AnimFinished), int32(a.Pos.X), int32(a.Pos.Y)-32, 2, rl.White)

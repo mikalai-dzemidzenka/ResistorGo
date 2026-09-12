@@ -189,7 +189,7 @@ func leaveMatch(reason string, screen int) {
 	}
 	CL, SV = nil, nil
 	NetMode = NetOffline
-	IsRewinding = false
+	ResetTime()
 	Stage = StageMainMenu
 	menuScreen = screen
 	menuError = reason
@@ -213,7 +213,9 @@ func stepOffline(dt float32) {
 	for Accumulator > FixedTimeStep {
 		PhysicsTime += FixedTimeStep
 		CL.Tick++
+		rewindRecord()
 		for _, actor := range CL.Actors {
+			actor.recordRewind()
 			if actor.IsPlayer {
 				actor.Input = sampleInput(actor)
 			} else {
@@ -274,7 +276,16 @@ func runLevel(dt float32) {
 		latchInput()
 	}
 	if NetMode == NetOffline {
-		stepOffline(dt)
+		// Time manipulation is single player only, and holds the simulation
+		// while it is on: no step, and no dt banked up for one either.
+		if UpdateTime(rl.IsKeyPressed(rl.KeyR), rl.GetMouseDelta().X, dt) {
+			for _, actor := range CL.Actors {
+				actor.restoreRewind()
+			}
+		}
+		if TimeMode == TimeOff {
+			stepOffline(dt)
+		}
 	} else {
 		netFrame(dt)
 		if Stage != StageLevel || CL == nil {
@@ -297,11 +308,8 @@ func runLevel(dt float32) {
 	}
 	presentEffects(w)
 
-	if NetMode == NetOffline {
-		if Debug {
-			LE.Update(dt)
-		}
-		UpdateRewind(dt)
+	if NetMode == NetOffline && Debug {
+		LE.Update(dt)
 	}
 	if Debug && Cli != nil {
 		Cli.Sim.controls()
