@@ -1,6 +1,7 @@
 package resistor
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/codecat/go-enet"
 	rlg "github.com/gen2brain/raylib-go/raygui"
@@ -62,16 +63,23 @@ func (v Vector2i) String() string {
 }
 
 func (v Vector2i) MarshalJSON() ([]byte, error) {
-	return []byte(v.String()), nil
+	return json.Marshal(v.String())
 }
 
 func (v *Vector2i) UnmarshalJSON(b []byte) error {
-	tokens := strings.Split(string(b), ",")
+	var s string
+	if err := json.Unmarshal(b, &s); err != nil {
+		return err
+	}
+	tokens := strings.Split(s, ",")
 	if len(tokens) != 2 {
 		return fmt.Errorf("malformed input: %s", b)
 	}
-	x, _ := strconv.Atoi(tokens[0])
-	y, _ := strconv.Atoi(tokens[0])
+	x, errX := strconv.Atoi(tokens[0])
+	y, errY := strconv.Atoi(tokens[1])
+	if errX != nil || errY != nil {
+		return fmt.Errorf("malformed input: %s", b)
+	}
 	v.X = int32(x)
 	v.Y = int32(y)
 	return nil
