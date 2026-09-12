@@ -1,13 +1,39 @@
 package resistor
 
 import (
+	rlg "github.com/gen2brain/raylib-go/raygui"
 	rl "github.com/gen2brain/raylib-go/raylib"
 	"math"
+	"strconv"
+	"strings"
+)
+
+const (
+	menuMain = iota
+	menuHost
+	menuJoin
+	menuConnecting
+)
+
+var (
+	menuScreen     int
+	menuError      string
+	hostPort       = strconv.Itoa(DefaultPort)
+	hostPortEdit   bool
+	hostMaxPlayers int32 = 8
+	hostMaxEdit    bool
+	hostBots       int32 = 1
+	hostBotsEdit   bool
+	joinAddr       = "127.0.0.1"
+	joinAddrEdit   bool
 )
 
 var mainMenuInit bool
 
 func runMainMenu(dt float32) {
+	if Srv != nil || Cli != nil {
+		netFrame(dt) // connecting; switches to the level once the first snapshot arrives
+	}
 	if !mainMenuInit {
 		mainMenuInit = true
 		MainMenuTexture = rl.LoadRenderTexture(SW, SH)
@@ -53,7 +79,110 @@ func runMainMenu(dt float32) {
 		}
 		rl.DrawTextureEx(tex, rl.Vector2{((SW / 2) - float32(tex.Width)/2) * WindowScale, ((SH / 2) - float32(tex.Height)) * WindowScale}, 0, WindowScale, col)
 	}
+	drawMenuUI()
 	rl.EndDrawing()
+}
+
+func drawMenuUI() {
+	const w, h, gap = 300, 44, 10
+	x := float32(SW*WindowScale/2 - w/2)
+	y := float32(SH*WindowScale/2 + 60)
+	row := func(i int) rl.Rectangle { return rl.Rectangle{X: x, Y: y + float32(i)*(h+gap), Width: w, Height: h} }
+	label := func(i int, text string) {
+		r := row(i)
+		r.X -= 170
+		r.Width = 160
+		rlg.Label(r, text)
+	}
+
+	switch menuScreen {
+	case menuMain:
+		if rlg.Button(row(0), "Single Player") {
+			menuError = ""
+			startOffline()
+		}
+		if rlg.Button(row(1), "Host Game") {
+			menuError = ""
+			menuScreen = menuHost
+		}
+		if rlg.Button(row(2), "Join Game") {
+			menuError = ""
+			menuScreen = menuJoin
+		}
+		if rlg.Button(row(3), "Quit") {
+			quit = true
+		}
+	case menuHost:
+		label(0, "Port")
+		if rlg.TextBox(row(0), &hostPort, 6, hostPortEdit) {
+			hostPortEdit = !hostPortEdit
+		}
+		label(1, "Max players")
+		if rlg.Spinner(row(1), "", &hostMaxPlayers, 2, 16, hostMaxEdit) {
+			hostMaxEdit = !hostMaxEdit
+		}
+		label(2, "Bots")
+		if rlg.Spinner(row(2), "", &hostBots, 0, 15, hostBotsEdit) {
+			hostBotsEdit = !hostBotsEdit
+		}
+		if rlg.Button(row(3), "Start") {
+			hostGame()
+		}
+		if rlg.Button(row(4), "Back") {
+			menuError = ""
+			menuScreen = menuMain
+		}
+	case menuJoin:
+		label(0, "Address")
+		if rlg.TextBox(row(0), &joinAddr, 64, joinAddrEdit) {
+			joinAddrEdit = !joinAddrEdit
+		}
+		if rlg.Button(row(1), "Connect") {
+			menuError = ""
+			if err := startClient(joinAddr); err != nil {
+				menuError = err.Error()
+			} else {
+				connectingFrom = menuJoin
+				menuScreen = menuConnecting
+			}
+		}
+		if rlg.Button(row(2), "Back") {
+			menuError = ""
+			menuScreen = menuMain
+		}
+	case menuConnecting:
+		text := "Connecting..."
+		if Cli != nil {
+			text = "Connecting to " + Cli.Addr + "..."
+		}
+		rlg.Label(row(0), text)
+		if rlg.Button(row(1), "Cancel") {
+			leaveMatch("", connectingFrom)
+		}
+	}
+	if menuError != "" {
+		r := row(5)
+		rl.DrawText(menuError, int32(r.X), int32(r.Y), 20, rl.Red)
+	}
+}
+
+func hostGame() {
+	menuError = ""
+	port, err := strconv.Atoi(strings.TrimSpace(hostPort))
+	if err != nil || port < 1 || port > 65535 {
+		menuError = "invalid port"
+		return
+	}
+	cfg := DefaultServerConfig()
+	cfg.Port = uint16(port)
+	cfg.MaxPlayers = int(hostMaxPlayers)
+	cfg.Bots = int(min(hostBots, hostMaxPlayers-1))
+	if err := startListen(cfg); err != nil {
+		menuError = err.Error()
+		return
+	}
+	connectingFrom = menuHost
+	menuScreen = menuConnecting
 }
 
 func head() {

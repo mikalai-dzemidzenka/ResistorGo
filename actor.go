@@ -2,7 +2,6 @@ package resistor
 
 import (
 	"fmt"
-	"github.com/codecat/go-enet"
 	rl "github.com/gen2brain/raylib-go/raylib"
 	"math"
 	"math/rand"
@@ -24,9 +23,9 @@ const (
 	BackAttackSpeed   = 0.2
 	SecondAttackSpeed = 0.2
 	BlockSpeed        = 0.2
-)
 
-var inputSequence uint32 = 0
+	HitStopTicks = 6
+)
 
 type ActorState uint8
 
@@ -64,60 +63,70 @@ const (
 	AttackFrame = 4
 )
 
-type ActorNet struct {
-	ID     uint16
-	Server struct {
-		PeerID uint16
-		Peer   enet.Peer
-	}
-}
+// presentation events, consumed (and cleared) by the renderer
+const (
+	EvAttackStart uint8 = 1 << iota
+	EvHit
+	EvBlocked
+)
 
 type Actor struct {
-	Net               *ActorNet
-	Pos               rl.Vector2
-	PrevPos           rl.Vector2
-	InterpolatedPos   rl.Vector2
-	MoveToPos         rl.Vector2
-	Speed             rl.Vector2
-	Energy            int32
-	Acc               float32
-	Friction          float32
-	Orientation       int8
-	State             ActorState
-	RewindData        [RewindFrames]ActorRewindFrame
-	CollisionBox      rl.Rectangle
-	AttackBoxHigh     rl.Rectangle
-	AttackBoxMid      rl.Rectangle
-	AttackBoxLow      rl.Rectangle
-	OnGround          bool
-	IsPlayer          bool
-	Input             Input
-	PrevUpdown        uint8
-	Updown            uint8
-	AnimPhysTimeStart float64
-	AnimTop           *string
-	Anim              string
-	AnimDuration      float64
-	AnimYOffset       int8
-	AnimFrame         uint8
-	AnimTotalFrames   uint8
-	AnimCurrentFrame  uint8
-	AnimOnce          bool
-	AnimReverse       bool
-	AnimFinished      bool
-	AnimWhite         bool
-	Attacker          *Actor
-	AttackQueued      bool
-	AttackCount       uint8
-	CanClimbRight     bool
-	CanClimbLeft      bool
+	ID               uint16
+	W                *World
+	Remote           bool // driven by snapshot interpolation, not simulated
+	Pos              rl.Vector2
+	PrevPos          rl.Vector2
+	InterpolatedPos  rl.Vector2
+	MoveToPos        rl.Vector2
+	Speed            rl.Vector2
+	Energy           int32
+	Acc              float32
+	Friction         float32
+	Orientation      int8
+	State            ActorState
+	RewindData       [RewindFrames]ActorRewindFrame
+	CollisionBox     rl.Rectangle
+	AttackBoxHigh    rl.Rectangle
+	AttackBoxMid     rl.Rectangle
+	AttackBoxLow     rl.Rectangle
+	OnGround         bool
+	IsPlayer         bool
+	Input            Input
+	PrevUpdown       uint8
+	Updown           uint8
+	Ticks            uint32
+	FreezeTicks      uint8
+	Events           uint8
+	AnimStartTick    uint32
+	AnimTop          *string
+	Anim             string
+	AnimDuration     float64
+	AnimYOffset      int8
+	AnimFrame        uint8
+	AnimTotalFrames  uint8
+	AnimCurrentFrame uint8
+	AnimOnce         bool
+	AnimReverse      bool
+	AnimFinished     bool
+	AnimWhite        bool
+	Attacker         *Actor
+	AttackQueued     bool
+	AttackCount      uint8
+	CanClimbRight    bool
+	CanClimbLeft     bool
 }
+
+// Input is one simulation tick of player intent; it is also the network command.
 type Input struct {
-	Sequence uint32
+	Seq      uint32
 	Left     bool
 	Right    bool
 	Attack   bool
 	Jump     bool
+	FaceLeft bool
+	Updown   uint8
+	ViewTick uint32
+	ViewFrac uint8
 }
 
 func NewActor(pos rl.Vector2, isPlayer bool) *Actor {
@@ -154,8 +163,13 @@ func NewActor(pos rl.Vector2, isPlayer bool) *Actor {
 	}
 }
 
+// Update advances the actor by one fixed tick using a.Input.
 func (a *Actor) Update(dt float32) {
 	a.PrevPos = a.Pos
+	if a.FreezeTicks > 0 {
+		a.FreezeTicks--
+		return
+	}
 
 	a.updateRewind()
 
@@ -163,13 +177,9 @@ func (a *Actor) Update(dt float32) {
 	if IsRewinding {
 		return
 	}
-	if a.IsPlayer {
-		a.updatePlayerInput()
-	} else if Multiplayer {
-		a.updateMultiplayerInput()
-	} else {
-		a.updateBotInput()
-	}
+	a.Ticks++
+	defer a.advanceAnim()
+
 	a.checkCollision()
 	a.updateHorSpeed(dt)
 	a.updateVertSpeed(dt)
@@ -233,10 +243,6 @@ func (a *Actor) Update(dt float32) {
 		a.updateAttack()
 	case StateAttacked:
 		a.Speed.X = clamp(a.Speed.X, -AttackDash, AttackDash)
-		const offset = 2
-		Cam.Offset = rl.Vector2{SW * WindowScale * 0.9 / 2, SH * WindowScale / 2}
-		Cam.Offset.Y += []float32{-offset, offset, -offset, offset, -offset, offset, -offset, offset}[int(GameTimeSec*1000)%8]
-		Cam.Offset.X += []float32{offset, -offset, offset, -offset, offset, -offset, offset, -offset}[int(GameTimeSec*1000)%8]
 		a.updateAttacked()
 	case StateBlock:
 		a.updateBlock()
@@ -271,6 +277,30 @@ func (a *Actor) Update(dt float32) {
 	a.Pos.Y = float32(int(a.Pos.Y))
 }
 
+// advanceAnim derives the current animation frame from the actor's own tick counter.
+func (a *Actor) advanceAnim() {
+	elapsed := float64(a.Ticks-a.AnimStartTick) * FixedTimeStep
+	a.AnimCurrentFrame, a.AnimFinished = animFrame(a.AnimOnce, a.AnimReverse, a.AnimFrame, a.AnimTotalFrames, a.AnimDuration, elapsed)
+}
+
+func animFrame(once, reverse bool, start, total uint8, duration, elapsed float64) (uint8, bool) {
+	if total == 0 || duration <= 0 {
+		return start, once
+	}
+	frameTime := duration / float64(total)
+	if once {
+		frame := int(elapsed / frameTime)
+		finished := frame >= int(total)
+		return uint8(clamp(frame, 0, int(total)-1)), finished
+	}
+	elapsed = math.Mod(max(elapsed, 0), duration)
+	frame := uint8(clamp(int(elapsed/frameTime), 0, int(total)-1))
+	if reverse {
+		return start - frame, false
+	}
+	return start + frame, false
+}
+
 func (a *Actor) updateRewind() {
 	if IsRewinding {
 		data := a.RewindData[RewindIdx%RewindFrames]
@@ -300,7 +330,7 @@ func (a *Actor) Draw() {
 		}, a.InterpolatedPos, rl.White)
 	} else {
 		if a.AnimOnce {
-			a.AnimFinished = a.DrawAnimOnce()
+			a.DrawAnimOnce()
 		} else {
 			a.DrawAnim()
 		}
@@ -313,12 +343,7 @@ func (a *Actor) Draw() {
 			Width:  48,
 			Height: 48,
 		}, 1, rl.Blue)
-		rl.DrawRectangleLinesEx(rl.Rectangle{
-			X:      a.Pos.X + a.CollisionBox.X,
-			Y:      a.Pos.Y + a.CollisionBox.Y,
-			Width:  a.CollisionBox.Width,
-			Height: a.CollisionBox.Height,
-		}, 1, rl.SkyBlue)
+		rl.DrawRectangleLinesEx(a.collisionRect(), 1, rl.SkyBlue)
 		rl.DrawRectangleLinesEx(rl.Rectangle{
 			X:      a.Pos.X + a.AttackBoxHigh.X + 12*float32(a.Orientation+1),
 			Y:      a.Pos.Y + a.AttackBoxHigh.Y,
@@ -351,8 +376,17 @@ func (a *Actor) Draw() {
 
 }
 
+func (a *Actor) collisionRect() rl.Rectangle {
+	return rl.Rectangle{
+		X:      a.Pos.X + a.CollisionBox.X,
+		Y:      a.Pos.Y + a.CollisionBox.Y,
+		Width:  a.CollisionBox.Width,
+		Height: a.CollisionBox.Height,
+	}
+}
+
 func (a *Actor) SetAnimFrame(anim string, offset uint8) {
-	a.AnimPhysTimeStart = PhysicsTime
+	a.AnimStartTick = a.Ticks
 	a.Anim = anim
 	a.AnimDuration = 1
 	a.AnimTotalFrames = 1
@@ -375,7 +409,7 @@ func (a *Actor) SetAnim(anim string, o AnimOptions) {
 	if a.Anim == anim && !o.reset {
 		return
 	}
-	a.AnimPhysTimeStart = PhysicsTime
+	a.AnimStartTick = a.Ticks
 	a.Anim = anim
 	a.AnimFinished = false
 	a.AnimDuration = o.animDuration
@@ -402,19 +436,13 @@ func (a *Actor) DrawFrame() {
 		Y: a.InterpolatedPos.Y + float32(a.AnimYOffset),
 	}, rl.White)
 }
-func (a *Actor) DrawAnimOnce() bool {
+
+func (a *Actor) DrawAnimOnce() {
 	tex, ok := resources[a.Anim]
 	if !ok {
 		panic(a.Anim)
 	}
 
-	frameTimeMs := a.AnimDuration / float64(a.AnimTotalFrames)
-	diff := PhysicsTime - a.AnimPhysTimeStart
-	frame := int(diff / frameTimeMs)
-	finished := frame >= int(a.AnimTotalFrames)
-	frame = clamp(frame, 0, int(a.AnimTotalFrames)-1)
-
-	a.AnimCurrentFrame = uint8(frame)
 	rl.DrawTextureRec(tex, rl.Rectangle{
 		X:      float32(a.AnimCurrentFrame) * 48,
 		Y:      0,
@@ -424,24 +452,12 @@ func (a *Actor) DrawAnimOnce() bool {
 		X: a.InterpolatedPos.X,
 		Y: a.InterpolatedPos.Y + float32(a.AnimYOffset),
 	}, rl.White)
-	return finished
 }
 
 func (a *Actor) DrawAnim() {
 	tex, ok := resources[a.Anim]
 	if !ok {
 		panic(a.Anim)
-	}
-	frameTimeMs := a.AnimDuration / float64(a.AnimTotalFrames)
-	if PhysicsTime-a.AnimPhysTimeStart > a.AnimDuration {
-		a.AnimPhysTimeStart += a.AnimDuration
-	}
-	frame := int((PhysicsTime - a.AnimPhysTimeStart) / frameTimeMs)
-	frame = clamp(frame, 0, int(a.AnimTotalFrames)-1)
-	if a.AnimReverse {
-		a.AnimCurrentFrame = a.AnimFrame - uint8(frame)
-	} else {
-		a.AnimCurrentFrame = a.AnimFrame + uint8(frame)
 	}
 
 	rl.DrawTextureRec(tex, rl.Rectangle{
@@ -584,73 +600,98 @@ func (a *Actor) checkCollision() {
 	}
 }
 
-func (a *Actor) updateBotInput() {
+// nearest returns the closest other actor in the same world.
+func (a *Actor) nearest() *Actor {
+	var best *Actor
+	bestD := float32(math.MaxFloat32)
+	for _, b := range a.W.Actors {
+		if b == a {
+			continue
+		}
+		if d := abs(b.Pos.X-a.Pos.X) + abs(b.Pos.Y-a.Pos.Y); d < bestD {
+			best, bestD = b, d
+		}
+	}
+	return best
+}
+
+// botInput produces the bot's command for this tick (authoritative worlds only).
+func botInput(a *Actor) Input {
 	if a.State == StateAttacked {
-		return
+		return a.Input
 	}
 	const near = 50
-	a.Input = Input{}
-	if Pl.Pos.X < a.Pos.X {
-		if a.Pos.X-Pl.Pos.X > near {
-			a.Input.Right = true
+	in := Input{Updown: a.Updown}
+	if rand.Int()%61 == 0 {
+		in.Updown = uint8(rand.Int() % 3)
+	}
+	t := a.nearest()
+	if t == nil {
+		return in
+	}
+	if t.Pos.X < a.Pos.X {
+		if a.Pos.X-t.Pos.X > near {
+			in.Right = true
 		} else {
 			if rand.Int()%61 == 3 {
-				a.Input.Attack = true
+				in.Attack = true
 			}
 		}
 		a.Orientation = -1
 	}
-	if Pl.Pos.X > a.Pos.X {
-		if Pl.Pos.X-a.Pos.X > near {
-			a.Input.Left = true
+	if t.Pos.X > a.Pos.X {
+		if t.Pos.X-a.Pos.X > near {
+			in.Left = true
 		} else {
 			if rand.Int()%61 == 3 {
-				a.Input.Attack = true
+				in.Attack = true
 			}
 		}
 		a.Orientation = 1
 	}
+	return in
 }
 
-func (a *Actor) updatePlayerInput() {
-	inputSequence++
-	a.Input = Input{Sequence: inputSequence}
-	if rl.IsKeyDown(rl.KeyA) {
-		a.Input.Right = true
-	}
-	if rl.IsKeyDown(rl.KeyD) {
-		a.Input.Left = true
-	}
+// edge-triggered buttons are latched per rendered frame and consumed by the next tick
+var pressedAttack, pressedJump bool
+
+func latchInput() {
 	if rl.IsMouseButtonPressed(rl.MouseButtonLeft) {
-		a.Input.Attack = true
+		pressedAttack = true
 	}
 	if rl.IsKeyPressed(rl.KeyW) {
-		a.Input.Jump = true
+		pressedJump = true
 	}
+}
+
+// sampleInput reads the local player's devices into a command for actor a.
+func sampleInput(a *Actor) Input {
+	in := Input{
+		Right:  rl.IsKeyDown(rl.KeyA),
+		Left:   rl.IsKeyDown(rl.KeyD),
+		Attack: pressedAttack,
+		Jump:   pressedJump,
+	}
+	pressedAttack, pressedJump = false, false
+
+	curPos := rl.GetScreenToWorld2D(Cur.AtkPos, Cam.Camera2D)
+	switch {
+	case float32(curPos.Y) <= a.Pos.Y+a.CollisionBox.Y:
+		in.Updown = 3
+	case float32(curPos.Y) <= a.Pos.Y+16:
+		in.Updown = 2
+	case float32(curPos.Y) <= a.Pos.Y+24:
+		in.Updown = 1
+	default:
+		in.Updown = 0
+	}
+	in.FaceLeft = float32(MouseWorldPos.X) < a.Pos.X+24
+	return in
 }
 
 func (a *Actor) updateUpdown() {
 	prevUpdown := a.Updown
-	var updown uint8
-	if a.IsPlayer {
-		curPos := rl.GetScreenToWorld2D(Cur.AtkPos, Cam.Camera2D)
-		switch {
-		case float32(curPos.Y) <= a.Pos.Y+a.CollisionBox.Y:
-			updown = 3
-		case float32(curPos.Y) <= a.Pos.Y+16:
-			updown = 2
-		case float32(curPos.Y) <= a.Pos.Y+24:
-			updown = 1
-		default:
-			updown = 0
-		}
-	} else {
-		updown = a.Updown
-		if rand.Int()%61 == 0 {
-			updown = uint8(rand.Int() % 3)
-		}
-	}
-	a.Updown = updown
+	a.Updown = a.Input.Updown
 	if a.Updown != prevUpdown {
 		a.PrevUpdown = prevUpdown
 	}
@@ -658,9 +699,7 @@ func (a *Actor) updateUpdown() {
 
 func (a *Actor) enterAttackState() {
 	a.State = StateAttack
-	if a.IsPlayer {
-		Cam.ZoomSpeed += AttackZoomSpeed
-	}
+	a.Events |= EvAttackStart
 	a.Pos.X += float32(a.Orientation) * AttackDash
 	switch a.Updown {
 	case 0:
@@ -676,7 +715,9 @@ func (a *Actor) enterAttackedState(attacker *Actor) {
 	a.State = StateAttacked
 	a.Attacker = attacker
 	a.AnimWhite = true
-	PauseTime = 0.1
+	a.Events |= EvHit
+	a.FreezeTicks = HitStopTicks
+	attacker.FreezeTicks = HitStopTicks
 	a.Speed.X = float32(attacker.Orientation) * PunchSpeed
 	a.SetAnim("resources/threefour/hit-top.png", AnimOptions{animDuration: 0.3, totalFrames: 4, once: true})
 }
@@ -684,6 +725,7 @@ func (a *Actor) enterAttackedState(attacker *Actor) {
 func (a *Actor) enterBlockState(attacker *Actor) {
 	a.State = StateBlock
 	a.Attacker = attacker
+	a.Events |= EvBlocked
 	a.Speed.X = float32(attacker.Orientation) * PunchSpeed
 	switch a.Updown {
 	case 0:
@@ -713,7 +755,6 @@ func (a *Actor) enterRunState() {
 
 func (a *Actor) updateAttacked() {
 	if a.AnimFinished {
-		Cam.Offset = rl.Vector2{SW * WindowScale * 0.9 / 2, SH * WindowScale / 2}
 		a.exitAttackedState()
 		a.enterIdleState()
 	}
@@ -721,9 +762,7 @@ func (a *Actor) updateAttacked() {
 
 func (a *Actor) updateAttack() {
 	if a.Input.Attack {
-		if a.IsPlayer {
-			Cam.ZoomSpeed += AttackZoomSpeed
-		}
+		a.Events |= EvAttackStart
 		a.AttackQueued = true
 	}
 	var r1 rl.Rectangle
@@ -751,21 +790,19 @@ func (a *Actor) updateAttack() {
 		}
 	}
 
-	for _, actor := range Actors {
-		if a == actor {
-			continue
-		}
-		r2 := rl.Rectangle{
-			X:      actor.Pos.X + actor.CollisionBox.X,
-			Y:      actor.Pos.Y + actor.CollisionBox.Y,
-			Width:  actor.CollisionBox.Width,
-			Height: actor.CollisionBox.Height,
-		}
-		if aabb(r1, r2) && actor.State != StateAttacked && actor.State != StateBlock {
-			if a.Updown == actor.Updown || actor.Updown == 3 {
-				actor.enterBlockState(a)
-			} else if a.AnimCurrentFrame > attackFrames[a.Anim] {
-				actor.enterAttackedState(a)
+	// only the authoritative world decides hits and blocks
+	if a.W.Authority {
+		for _, actor := range a.W.Actors {
+			if a == actor {
+				continue
+			}
+			r2 := actor.collisionRect()
+			if aabb(r1, r2) && actor.State != StateAttacked && actor.State != StateBlock {
+				if a.Updown == actor.Updown || actor.Updown == 3 {
+					actor.enterBlockState(a)
+				} else if a.AnimCurrentFrame > attackFrames[a.Anim] {
+					actor.enterAttackedState(a)
+				}
 			}
 		}
 	}
@@ -835,13 +872,18 @@ func (a *Actor) updateAttack() {
 }
 
 func (a *Actor) updateBlock() {
+	if a.Attacker == nil {
+		a.exitBlockState()
+		a.enterIdleState()
+		return
+	}
 	if a.Attacker.State != StateAttack && a.AnimFinished {
 		a.exitBlockState()
 		a.enterIdleState()
 		return
 	}
 	if a.AnimFinished && a.Attacker.AnimCurrentFrame >= attackFrames[a.Attacker.Anim] {
-		if a.Updown != a.Attacker.Updown && a.Updown != 3 {
+		if a.W.Authority && a.Updown != a.Attacker.Updown && a.Updown != 3 {
 			attacker := a.Attacker
 			a.exitBlockState()
 			a.enterAttackedState(attacker)
@@ -905,12 +947,5 @@ func (a *Actor) exitAttackedState() {
 }
 
 func (a *Actor) MouseOnLeft() bool {
-	if !a.IsPlayer {
-		return false
-	}
-	return float32(MouseWorldPos.X) < a.Pos.X+24
-}
-
-func (a *Actor) updateMultiplayerInput() {
-
+	return a.Input.FaceLeft
 }
