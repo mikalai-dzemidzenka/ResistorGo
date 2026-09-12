@@ -1,0 +1,89 @@
+schema: spec-driven
+
+# Project context (optional)
+# This is shown to AI when creating artifacts.
+context: |
+  Project: "Resistor" — a 2D pixel-art side-scrolling fighting/platformer game.
+  Melee combat with three attack/guard heights (low/mid/high, plus "block all"),
+  attack chains, blocking, hit-stun, jumping and ledge climbing.
+
+  Tech stack:
+  - Go 1.27, module `resistor` (single flat package `resistor` at repo root)
+  - raylib-go (github.com/gen2brain/raylib-go/raylib v0.60) for window, input,
+    rendering, shaders, audio; raygui for editor UI (style: resources/style_dark.rgs)
+  - go-enet (github.com/codecat/go-enet) for networking (multiplayer is WIP;
+    `Actor.updateMultiplayerInput` is a stub)
+  - GLSL 330 fragment shaders embedded as Go string constants in shaders.go
+
+  Layout:
+  - cmd/main.go — entry point, just calls resistor.Game()
+  - game.go — window init, main loop, stage switch (main menu / level), render pipeline
+  - actor.go — Actor struct, state machine (Idle/Run/Attack/Attacked/Block/
+    JumpStart/Jump/Climb/Turnover), input, physics, tile collision, animation, combat
+  - camera.go — Camera wrapping rl.Camera2D with smoothed follow and zoom velocity
+  - rewind.go — time rewind (hold R) via a 256-frame per-actor ring buffer
+  - level_editor.go — in-game tile editor (debug mode) + JSON level load/save
+  - resources.go — texture/model registry keyed by file path; placeable level objects
+  - shaders.go — 2D shadow-casting lights (Catalin Zima technique: distance →
+    distort → reduction → shadow passes), palette-quantization post-process, hit-flash
+  - palette.go — the fixed color palette the final frame is quantized to
+  - main_menu.go — 3D wireframe animated main menu
+  - math.go — small generic helpers (clamp, moveTo, lerp, aabb)
+  - cursor.go — custom cursor; a lagging "attack cursor" drives guard/attack height
+  - examples/ — standalone throwaway prototypes (each its own main package); not game code
+  - refs/ — reference images/docs only; resources/ — game assets (PNG sprite
+    sheets, OBJ models, MP3 music)
+  - level_1.json — level data, written back on exit by the editor
+
+  Core conventions and constraints:
+  - Virtual resolution SW x SH = 160x90, window scaled by WindowScale (8).
+    Pixel-perfect rendering: point filtering, integer positions (actor Pos is
+    truncated to int each physics step).
+  - Fixed-timestep simulation at 60 Hz (accumulator in runLevel); rendering
+    interpolates actor positions with `alpha`. Gameplay logic belongs in the fixed
+    step (Actor.Update), not in per-frame code. PauseTime freezes physics (hit-stop).
+    Animation timing uses PhysicsTime, not wall-clock time.
+  - Global state lives in package-level vars in game.go (Cam, LE, Pl, Actors,
+    Debug, Stage, ...). Follow that pattern rather than introducing DI.
+  - Sprites are horizontal strips of 48x48 frames; orientation is flipped by a
+    negative source-rect width. Animations are referenced by their asset path
+    string (e.g. "resources/threefour/attack-high.png") and must be registered in
+    LoadTextures() before use — a missing texture panics on draw.
+  - Actor state changes go through enterXState()/exitXState() methods; per-state
+    logic lives in the switch in Actor.Update.
+  - Updown (0=low, 1=mid, 2=high, 3=block all) is the stance/attack height.
+  - Rendering: scene → full-screen render texture → palette shader to screen.
+    Raylib render textures are Y-flipped (negative source height) when drawn.
+  - Asset paths are relative to the working directory: run from the repo root
+    (`go run ./cmd`).
+  - Debug mode (toggle with ` key, on by default) shows collision/attack boxes,
+    stats and enables the level editor (Tab = object picker, LMB place, RMB delete).
+  - Controls: A/D move, W jump, LMB attack, mouse height chooses stance, wheel zoom.
+
+  Code style:
+  - Standard gofmt Go. Short, plain names. Minimal comments; existing comments
+    (mostly in shaders) are often in Russian — either language is fine.
+  - No automated tests currently exist; verify changes by running the game.
+  - Commit messages are short and lowercase (e.g. "smooth camera", "fixes").
+
+# Per-artifact rules (optional)
+# Add custom rules for specific artifacts.
+# Example:
+#   rules:
+#     proposal:
+#       - Keep proposals under 500 words
+#       - Always include a "Non-goals" section
+#     tasks:
+#       - Break tasks into chunks of max 2 hours
+
+# Per-operation guidance (optional)
+# Add advisory guidance for how apply and archive work should be conducted.
+# This is separate from artifact rules above.
+# Example:
+#   operations:
+#     apply:
+#       guidance:
+#         - Keep test summaries concise
+#     archive:
+#       guidance:
+#         - Summarize the archive outcome before finishing
