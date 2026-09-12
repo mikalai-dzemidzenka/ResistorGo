@@ -7,61 +7,86 @@ var (
 	models    = make(map[string]rl.Model)
 )
 
+// animTable lists every actor animation. The index is the animation's network id,
+// so the order must be identical on client and server (append only).
+var animTable = []string{
+	"resources/threefour/run.png",
+	"resources/threefour/idle.png",
+	"resources/threefour/jump-start.png",
+	"resources/threefour/jump-climb.png",
+	"resources/threefour/updown.png",
+	"resources/threefour/updown-0-1.png",
+	"resources/threefour/updown-0-2.png",
+	"resources/threefour/updown-1-0.png",
+	"resources/threefour/updown-1-2.png",
+	"resources/threefour/updown-2-0.png",
+	"resources/threefour/updown-2-1.png",
+	"resources/threefour/updown-atk-2-1.png",
+	"resources/threefour/updown-atk-2-0.png",
+	"resources/threefour/updown-atk-1-2.png",
+	"resources/threefour/updown-atk-1-0.png",
+	"resources/threefour/updown-atk-0-1.png",
+	"resources/threefour/updown-atk-0-2.png",
+	"resources/threefour/attack-high.png",
+	"resources/threefour/attack-mid.png",
+	"resources/threefour/attack-mid-2.png",
+	"resources/threefour/attack-low-2.png",
+	"resources/threefour/attack-high-2.png",
+	"resources/threefour/attack-high-3.png",
+	"resources/threefour/attack-low.png",
+	"resources/threefour/hit-top.png",
+	"resources/threefour/back-attack-low-1.png",
+	"resources/threefour/back-attack-low-2.png",
+	"resources/threefour/back-attack-mid-1.png",
+	"resources/threefour/back-attack-high-1.png",
+	"resources/threefour/back-attack-high-2.png",
+	"resources/threefour/block-all-start.png",
+	"resources/threefour/block-all-1.png",
+	"resources/threefour/block-low-start.png",
+	"resources/threefour/block-low-1.png",
+	"resources/threefour/block-mid-start.png",
+	"resources/threefour/block-mid-1.png",
+	"resources/threefour/block-mid-2.png",
+	"resources/threefour/block-mid-v2-start.png",
+	"resources/threefour/block-mid-v2-1.png",
+	"resources/threefour/block.png",
+	"resources/threefour/walk.png",
+	"resources/threefour/walk-bot.png",
+	"resources/threefour/walk-mid.png",
+	"resources/threefour/walk-top.png",
+	"resources/threefour/turnover.png",
+}
+
+var animIDs = func() map[string]uint8 {
+	m := make(map[string]uint8, len(animTable))
+	for i, p := range animTable {
+		m[p] = uint8(i)
+	}
+	return m
+}()
+
+func animID(path string) uint8 {
+	id, ok := animIDs[path]
+	if !ok {
+		panic("animation not in animTable: " + path)
+	}
+	return id
+}
+
+func animPath(id uint8) string {
+	if int(id) < len(animTable) {
+		return animTable[id]
+	}
+	return animTable[animID("resources/threefour/updown.png")]
+}
+
 func LoadTextures() {
 	loadTex("resources/blocks/e1m1_wall1.png")
 	loadTex("resources/blocks/e1m1_platform1.png")
 	loadTex("resources/blocks/e1m1_door1.png")
-	loadTex("resources/threefour/run.png")
-	loadTex("resources/threefour/idle.png")
-	loadTex("resources/threefour/jump-start.png")
-	loadTex("resources/threefour/jump-climb.png")
-	loadTex("resources/threefour/updown.png")
-	loadTex("resources/threefour/updown-0-1.png")
-	loadTex("resources/threefour/updown-0-2.png")
-	loadTex("resources/threefour/updown-1-0.png")
-	loadTex("resources/threefour/updown-1-2.png")
-	loadTex("resources/threefour/updown-2-0.png")
-	loadTex("resources/threefour/updown-2-1.png")
-	loadTex("resources/threefour/updown-atk-2-1.png")
-	loadTex("resources/threefour/updown-atk-2-0.png")
-	loadTex("resources/threefour/updown-atk-1-2.png")
-	loadTex("resources/threefour/updown-atk-1-0.png")
-	loadTex("resources/threefour/updown-atk-0-1.png")
-	loadTex("resources/threefour/updown-atk-0-2.png")
-	loadTex("resources/threefour/attack-high.png")
-	loadTex("resources/threefour/attack-mid.png")
-	loadTex("resources/threefour/attack-mid-2.png")
-	loadTex("resources/threefour/attack-low-2.png")
-	loadTex("resources/threefour/attack-high-2.png")
-	loadTex("resources/threefour/attack-high-3.png")
-	loadTex("resources/threefour/attack-low.png")
-	loadTex("resources/threefour/hit-top.png")
-	loadTex("resources/threefour/back-attack-low-1.png")
-	loadTex("resources/threefour/back-attack-low-2.png")
-	loadTex("resources/threefour/back-attack-mid-1.png")
-	loadTex("resources/threefour/back-attack-high-1.png")
-	loadTex("resources/threefour/back-attack-high-2.png")
-
-	loadTex("resources/threefour/block-all-start.png")
-	loadTex("resources/threefour/block-all-1.png")
-
-	loadTex("resources/threefour/block-low-start.png")
-	loadTex("resources/threefour/block-low-1.png")
-
-	loadTex("resources/threefour/block-mid-start.png")
-	loadTex("resources/threefour/block-mid-1.png")
-	loadTex("resources/threefour/block-mid-2.png")
-
-	loadTex("resources/threefour/block-mid-v2-start.png")
-	loadTex("resources/threefour/block-mid-v2-1.png")
-
-	loadTex("resources/threefour/block.png")
-
-	loadTex("resources/threefour/walk.png")
-	loadTex("resources/threefour/walk-bot.png")
-	loadTex("resources/threefour/walk-mid.png")
-	loadTex("resources/threefour/walk-top.png")
-	loadTex("resources/threefour/turnover.png")
+	for _, p := range animTable {
+		loadTex(p)
+	}
 
 	loadTex("resources/main_menu/resistor.png")
 	loadModel("resources/main_menu/head.obj")

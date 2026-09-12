@@ -1,0 +1,381 @@
+package resistor
+
+import (
+	"cmp"
+	"fmt"
+	"github.com/codecat/go-enet"
+	rl "github.com/gen2brain/raylib-go/raylib"
+	"os"
+	"os/signal"
+	"slices"
+	"time"
+)
+
+const (
+	CmdBurst      = 8  // token bucket size: commands a player may run in one tick after a stall
+	MaxQueuedCmds = 16 // commands buffered per player; more are dropped
+	PeerTimeout   = 10 * time.Second
+)
+
+type ServerConfig struct {
+	Port       uint16
+	MaxPlayers int // human players
+	Bots       int
+	LagComp    bool
+	MaxUnlag   uint32 // ticks
+}
+
+func DefaultServerConfig() ServerConfig {
+	return ServerConfig{Port: DefaultPort, MaxPlayers: 8, LagComp: true, MaxUnlag: DefaultMaxUnlag}
+}
+
+// cmdQueue orders a player's commands and rate-limits their execution.
+type cmdQueue struct {
+	q      []Input
+	last   uint32 // last executed sequence
+	tokens int
+}
+
+func (cq *cmdQueue) push(in Input) {
+	if in.Seq <= cq.last {
+		return
+	}
+	i, found := slices.BinarySearchFunc(cq.q, in.Seq, func(q Input, s uint32) int { return cmp.Compare(q.Seq, s) })
+	if found || len(cq.q) >= MaxQueuedCmds {
+		return
+	}
+	cq.q = slices.Insert(cq.q, i, in)
+}
+
+// drain runs the commands this tick allows: one token per tick, up to CmdBurst saved.
+func (cq *cmdQueue) drain(run func(Input)) {
+	cq.tokens = min(cq.tokens+1, CmdBurst)
+	for cq.tokens > 0 && len(cq.q) > 0 {
+		in := cq.q[0]
+		cq.q = cq.q[1:]
+		cq.tokens--
+		cq.last = in.Seq
+		run(in)
+	}
+}
+
+type netPlayer struct {
+	ID       uint16
+	Peer     enet.Peer
+	Actor    *Actor // nil until the handshake is accepted
+	Cmds     cmdQueue
+	LastRecv time.Time
+	lastLog  time.Time
+}
+
+type Server struct {
+	Cfg          ServerConfig
+	Host         enet.Host
+	W            *World
+	Peers        map[uint16]*netPlayer // by ENet incoming peer id
+	Bots         []*Actor
+	LastRewound  []rl.Rectangle
+	accum        float64
+	hash         uint64
+	nextPlayerID uint16
+}
+
+var Srv *Server
+
+func NewServer(cfg ServerConfig) (*Server, error) {
+	host, err := enet.NewHost(enet.NewListenAddress(cfg.Port), uint64(cfg.MaxPlayers+4), ChannelCount, 0, 0)
+	if err != nil {
+		return nil, fmt.Errorf("cannot bind UDP port %d", cfg.Port)
+	}
+	w := NewWorld(true)
+	w.History = NewLagHistory()
+	s := &Server{
+		Cfg:   cfg,
+		Host:  host,
+		W:     w,
+		Peers: make(map[uint16]*netPlayer),
+		hash:  LE.Hash(),
+	}
+	s.fillBots()
+	s.logf("listening on UDP port %d (max players %d, bots %d, lagcomp %t)", cfg.Port, cfg.MaxPlayers, cfg.Bots, cfg.LagComp)
+	return s, nil
+}
+
+func (s *Server) logf(format string, args ...any) {
+	fmt.Printf("[server] "+format+"\n", args...)
+}
+
+func (s *Server) humans() int {
+	n := 0
+	for _, p := range s.Peers {
+		if p.Actor != nil {
+			n++
+		}
+	}
+	return n
+}
+
+func sendBytes(peer enet.Peer, ch uint8, data []byte) {
+	var flags enet.PacketFlags
+	if ch == ChanReliable {
+		flags = enet.PacketFlagReliable
+	}
+	_ = peer.SendBytes(data, ch, flags)
+}
+
+// Poll drains ENet events. It must run on the main goroutine.
+func (s *Server) Poll() {
+	now := time.Now()
+	for {
+		ev := s.Host.Service(0)
+		switch ev.GetType() {
+		case enet.EventNone:
+			for id, p := range s.Peers {
+				if now.Sub(p.LastRecv) > PeerTimeout {
+					p.Peer.DisconnectNow(0)
+					s.drop(id, "timed out")
+				}
+			}
+			return
+		case enet.EventConnect:
+			peer := ev.GetPeer()
+			s.Peers[peer.GetIncomingPeerId()] = &netPlayer{Peer: peer, LastRecv: now}
+		case enet.EventDisconnect:
+			s.drop(ev.GetPeer().GetIncomingPeerId(), "disconnected")
+		case enet.EventReceive:
+			pkt := ev.GetPacket()
+			data := pkt.GetData() // copies out of the C buffer
+			pkt.Destroy()
+			if p := s.Peers[ev.GetPeer().GetIncomingPeerId()]; p != nil && len(data) > 0 {
+				p.LastRecv = now
+				s.handle(p, data)
+			}
+		}
+	}
+}
+
+func (s *Server) handle(p *netPlayer, data []byte) {
+	switch data[0] {
+	case MsgHello:
+		h, err := decodeHello(data)
+		if err != nil || p.Actor != nil {
+			return
+		}
+		var reason uint8
+		switch {
+		case h.Proto != ProtocolVersion:
+			reason = RejectVersion
+		case h.LevelHash != s.hash:
+			reason = RejectLevel
+		case s.humans() >= s.Cfg.MaxPlayers:
+			reason = RejectFull
+		}
+		if reason != 0 {
+			s.logf("reject %s: %s", p.Peer.GetAddress(), rejectText(reason))
+			sendBytes(p.Peer, ChanReliable, encodeReject(reason))
+			p.Peer.DisconnectLater(0)
+			return
+		}
+		s.accept(p)
+	case MsgCmds:
+		if p.Actor == nil {
+			return
+		}
+		cmds, err := decodeCmds(data)
+		if err != nil {
+			return
+		}
+		for _, c := range cmds {
+			p.Cmds.push(c)
+		}
+	case MsgBye:
+		p.Peer.DisconnectLater(0)
+	}
+}
+
+func (s *Server) accept(p *netPlayer) {
+	s.makeRoom()
+	s.nextPlayerID++
+	p.ID = s.nextPlayerID
+	p.Actor = s.W.Spawn(s.spawnPos(), true)
+	s.logf("connect player %d (actor %d) from %s", p.ID, p.Actor.ID, p.Peer.GetAddress())
+	sendBytes(p.Peer, ChanReliable, encodeWelcome(Welcome{PlayerID: p.ID, ActorID: p.Actor.ID, Tick: s.W.Tick}))
+}
+
+func (s *Server) drop(peerID uint16, why string) {
+	p := s.Peers[peerID]
+	if p == nil {
+		return
+	}
+	delete(s.Peers, peerID)
+	if p.Actor != nil {
+		s.logf("disconnect player %d: %s", p.ID, why)
+		s.W.Remove(p.Actor)
+		s.fillBots()
+	}
+}
+
+// makeRoom removes a bot when a joining human would exceed the slot count.
+func (s *Server) makeRoom() {
+	if s.humans()+len(s.Bots) >= s.Cfg.MaxPlayers && len(s.Bots) > 0 {
+		b := s.Bots[len(s.Bots)-1]
+		s.Bots = s.Bots[:len(s.Bots)-1]
+		s.W.Remove(b)
+	}
+}
+
+func (s *Server) fillBots() {
+	for len(s.Bots) < s.Cfg.Bots && s.humans()+len(s.Bots) < s.Cfg.MaxPlayers {
+		s.Bots = append(s.Bots, s.W.Spawn(s.spawnPos(), false))
+	}
+}
+
+var spawnXs = []float32{0, 50, -50, 100, -100, 150, -150, 200, -200, -250, -300, -350, -400, -450, -500}
+
+// spawnPos picks the first spawn column not overlapped by another actor's collision box.
+func (s *Server) spawnPos() rl.Vector2 {
+	for _, x := range spawnXs {
+		lo, hi := x+14, x+28
+		free := true
+		for _, a := range s.W.Actors {
+			r := a.collisionRect()
+			if r.X < hi && r.X+r.Width > lo {
+				free = false
+				break
+			}
+		}
+		if free {
+			return rl.Vector2{X: x}
+		}
+	}
+	return rl.Vector2{}
+}
+
+// Step advances the server by one tick.
+func (s *Server) Step() {
+	s.W.Tick++
+	players := make([]*netPlayer, 0, len(s.Peers))
+	for _, p := range s.Peers {
+		if p.Actor != nil {
+			players = append(players, p)
+		}
+	}
+	slices.SortFunc(players, func(a, b *netPlayer) int { return cmp.Compare(a.ID, b.ID) })
+	for _, p := range players {
+		p.Cmds.drain(func(in Input) { s.runCmd(p, in) })
+	}
+	for _, b := range s.Bots {
+		b.Input = botInput(b)
+		b.Update(float32(FixedTimeStep))
+	}
+	s.W.History.Record(s.W)
+	if s.W.Tick%SnapshotEvery == 0 {
+		s.sendSnapshots(players)
+	}
+}
+
+// runCmd advances p's fighter by one command, with lag-compensated hit tests while attacking.
+func (s *Server) runCmd(p *netPlayer, in Input) {
+	a := p.Actor
+	a.Input = in
+	if Debug && time.Since(p.lastLog) > 5*time.Second {
+		p.lastLog = time.Now()
+		s.logf("player %d view tick %d, server tick %d (%d behind)", p.ID, in.ViewTick, s.W.Tick, int64(s.W.Tick)-int64(in.ViewTick))
+	}
+	if !s.Cfg.LagComp || a.State != StateAttack {
+		a.Update(float32(FixedTimeStep))
+		return
+	}
+	t := clampViewTime(float64(in.ViewTick)+float64(in.ViewFrac)/256, s.W.Tick, s.Cfg.MaxUnlag)
+	saves := s.W.History.rewindOthers(s.W, a, t)
+	if Debug {
+		s.LastRewound = s.LastRewound[:0]
+		for _, sv := range saves {
+			s.LastRewound = append(s.LastRewound, sv.a.collisionRect())
+		}
+	}
+	a.Update(float32(FixedTimeStep))
+	restore(saves)
+}
+
+func (s *Server) sendSnapshots(players []*netPlayer) {
+	recs := make([]ActorRec, 0, len(s.W.Actors))
+	for _, a := range s.W.Actors {
+		recs = append(recs, recOf(a))
+	}
+	for _, p := range players {
+		data := encodeSnapshot(Snapshot{Tick: s.W.Tick, Ack: p.Cmds.last, Actors: recs})
+		sendBytes(p.Peer, ChanUnreliable, data)
+	}
+}
+
+// Frame runs the server from a render loop (listen server).
+func (s *Server) Frame(dt float32) {
+	s.Poll()
+	s.accum += float64(dt)
+	for s.accum > FixedTimeStep {
+		s.Step()
+		s.accum -= FixedTimeStep
+	}
+}
+
+// Close tells every client the server is going away and shuts the host down.
+func (s *Server) Close() {
+	for _, p := range s.Peers {
+		sendBytes(p.Peer, ChanReliable, encodeBye(ByeServerClosed))
+		p.Peer.DisconnectLater(0)
+	}
+	serviceFor(s.Host, 200*time.Millisecond, len(s.Peers))
+	s.Host.Destroy()
+	s.logf("closed")
+}
+
+// serviceFor flushes a host until `peers` disconnects are seen or d elapses.
+func serviceFor(h enet.Host, d time.Duration, peers int) {
+	end := time.Now().Add(d)
+	for peers > 0 && time.Now().Before(end) {
+		ev := h.Service(10)
+		switch ev.GetType() {
+		case enet.EventReceive:
+			ev.GetPacket().Destroy()
+		case enet.EventDisconnect:
+			peers--
+		}
+	}
+}
+
+// Dedicated runs a headless server until the process is interrupted.
+func Dedicated(cfg ServerConfig) {
+	enet.Initialize()
+	defer enet.Deinitialize()
+
+	NetMode = NetDedicated
+	LE = NewLevelEditor(39, 83)
+	LE.LoadLevel("level_1.json")
+
+	s, err := NewServer(cfg)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	Srv = s
+	SV = s.W
+
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, os.Interrupt)
+	tick := time.Duration(FixedTimeStep * float64(time.Second))
+	next := time.Now()
+	for {
+		select {
+		case <-sig:
+			s.Close()
+			return
+		default:
+		}
+		s.Poll()
+		for now := time.Now(); !now.Before(next); next = next.Add(tick) {
+			s.Step()
+		}
+		time.Sleep(min(time.Until(next), 2*time.Millisecond))
+	}
+}

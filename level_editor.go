@@ -53,6 +53,7 @@ type LevelEditor struct {
 	gridH                  int32
 	objects                map[int]LevelLayer // layer - pos - object
 	objectsIndexed         []LevelObject
+	dirty                  bool // edited since load; saved on exit only if set
 }
 type LevelObject struct {
 	Resource      string        `json:"resource,omitempty"`
@@ -108,6 +109,7 @@ func (le *LevelEditor) Update(dt float32) {
 		if le.objects[le.layer] != nil {
 			delete(le.objects[le.layer], pos)
 		}
+		le.dirty = true
 
 		le.buildIndex()
 	} else if rl.IsMouseButtonPressed(rl.MouseButtonLeft) && !le.isObjectsViewerEnabled {
@@ -133,6 +135,7 @@ func (le *LevelEditor) Update(dt float32) {
 				Height: le.obj.LightRect.Height,
 			},
 		}
+		le.dirty = true
 		le.buildIndex()
 	}
 }
@@ -227,12 +230,23 @@ func (le *LevelEditor) LoadLevel(path string) {
 	le.buildIndex()
 }
 
-func (le *LevelEditor) SaveLevel(path string) {
+// marshal returns the canonical JSON of the level (map keys are sorted by encoding/json).
+func (le *LevelEditor) marshal() ([]byte, error) {
 	m := make(map[int]any)
 	for lNum, layer := range le.objects {
 		m[lNum] = layer
 	}
-	b, err := json.Marshal(m)
+	return json.Marshal(m)
+}
+
+// Hash fingerprints the loaded level so client and server can check they match.
+func (le *LevelEditor) Hash() uint64 {
+	b, _ := le.marshal()
+	return levelHash(b)
+}
+
+func (le *LevelEditor) SaveLevel(path string) {
+	b, err := le.marshal()
 	if err != nil {
 		rl.TraceLog(rl.LogError, "failed to save level: marshal level: %s", err.Error())
 		return

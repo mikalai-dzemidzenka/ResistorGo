@@ -22,20 +22,25 @@ const (
 	StageLevel
 )
 
+const (
+	NetOffline = iota
+	NetListen
+	NetClient
+	NetDedicated
+)
+
 var (
 	Debug                = true
 	GameTimeSec          float64
 	Accumulator          float64
 	PhysicsTime          float64
-	PauseTime            float64
 	FixedTimeStep        float64 = 1.0 / 60.0
 	MouseWorldPos        Vector2i
 	MousePos             rl.Vector2
-	Cam                  Camera      = NewCamera(3, rl.Vector2{SW * WindowScale * 0.9 / 2, SH * WindowScale / 2})
+	CamOffset                        = rl.Vector2{X: SW * WindowScale * 0.9 / 2, Y: SH * WindowScale / 2}
+	Cam                  Camera      = NewCamera(3, CamOffset)
 	LE                   LevelEditor = NewLevelEditor(39, 83)
-	Pl                   *Actor
-	Actors               []*Actor
-	Stage                int = 1
+	Stage                int         = StageMainMenu
 	MainMenuTexture      rl.RenderTexture2D
 	ScreenFullTexture    rl.RenderTexture2D
 	ScreenPaletteTexture rl.Texture2D
@@ -50,7 +55,9 @@ var (
 		GUIZ:     2,
 	}
 	WhiteShader rl.Shader
-	Multiplayer bool = true
+	NetMode     = NetOffline
+	quit        bool
+	drawList    []*Actor
 )
 
 type Vector2i struct {
@@ -99,29 +106,24 @@ func v2f(v Vector2i) rl.Vector2 {
 	}
 }
 
-var Host enet.Host
-
-var Peer enet.Peer
-
 func Game() {
 	rl.InitWindow(SW*WindowScale, SH*WindowScale, "Resistor")
 	defer rl.CloseWindow()
+	rl.SetExitKey(0)
 
-	rlg.LoadStyle("resources/style_dark.rgs")
+	loadStyle()
 
 	rl.SetTargetFPS(60)
 
 	LoadTextures()
 
-	enemy := NewActor(rl.Vector2{X: 50}, false)
+	enet.Initialize()
+	defer enet.Deinitialize()
+
 	LE = NewLevelEditor(39, 83)
 	LE.LoadLevel("level_1.json")
-	Pl = NewActor(rl.Vector2{}, true)
-	Actors = []*Actor{enemy, Pl}
 
-	rl.DisableCursor()
-
-	for !rl.WindowShouldClose() {
+	for !rl.WindowShouldClose() && !quit {
 		if rl.IsKeyPressed(rl.KeyGrave) {
 			Debug = !Debug
 		}
@@ -140,7 +142,99 @@ func Game() {
 			runLevel(dt)
 		}
 	}
-	LE.SaveLevel("level_1.json")
+	leaveMatch("", menuMain)
+	if LE.dirty {
+		LE.SaveLevel("level_1.json")
+	}
+}
+
+func loadStyle() {
+	rlg.LoadStyle("resources/style_dark.rgs")
+	rlg.SetStyle(rlg.DEFAULT, rlg.TEXT_SIZE, 20)
+}
+
+// startOffline starts single player: one authoritative world, the local fighter and a bot.
+func startOffline() {
+	NetMode = NetOffline
+	CL = NewWorld(true)
+	CL.Spawn(rl.Vector2{X: 50}, false)
+	CL.Local = CL.Spawn(rl.Vector2{}, true)
+	enterLevel()
+}
+
+func enterLevel() {
+	Stage = StageLevel
+	Accumulator = 0
+	rl.DisableCursor()
+}
+
+// leaveMatch tears down any network session and returns to the menu.
+func leaveMatch(reason string, screen int) {
+	if Cli != nil {
+		Cli.Close()
+		Cli = nil
+	}
+	if Srv != nil {
+		Srv.Close()
+		Srv = nil
+	}
+	CL, SV = nil, nil
+	NetMode = NetOffline
+	IsRewinding = false
+	Stage = StageMainMenu
+	menuScreen = screen
+	menuError = reason
+	if rl.IsWindowReady() {
+		rl.EnableCursor()
+		loadStyle()
+	}
+}
+
+func netFrame(dt float32) {
+	if Srv != nil {
+		Srv.Frame(dt)
+	}
+	if Cli != nil {
+		Cli.Frame(dt)
+	}
+}
+
+func stepOffline(dt float32) {
+	Accumulator += float64(dt)
+	for Accumulator > FixedTimeStep {
+		PhysicsTime += FixedTimeStep
+		CL.Tick++
+		for _, actor := range CL.Actors {
+			if actor.IsPlayer {
+				actor.Input = sampleInput(actor)
+			} else {
+				actor.Input = botInput(actor)
+			}
+			actor.Update(float32(FixedTimeStep))
+		}
+		Accumulator -= FixedTimeStep
+	}
+}
+
+// presentEffects turns simulation events and states into local-only camera effects.
+func presentEffects(w *World) {
+	local := w.Local
+	shake := false
+	for _, a := range w.Actors {
+		if a == local && a.Events&EvAttackStart != 0 {
+			Cam.ZoomSpeed += AttackZoomSpeed
+		}
+		a.Events = 0
+		if a.State == StateAttacked && local != nil && (a == local || a.Attacker == local) {
+			shake = true
+		}
+	}
+	Cam.Offset = CamOffset
+	if shake {
+		const offset = 2
+		Cam.Offset.Y += []float32{-offset, offset, -offset, offset, -offset, offset, -offset, offset}[int(GameTimeSec*1000)%8]
+		Cam.Offset.X += []float32{offset, -offset, offset, -offset, offset, -offset, offset, -offset}[int(GameTimeSec*1000)%8]
+	}
 }
 
 var levelInit bool
@@ -161,33 +255,48 @@ func runLevel(dt float32) {
 		ScreenPaletteTexture = makePaletteTexture(Palette)
 		ScreenFullTexture = rl.LoadRenderTexture(SW*WindowScale, SH*WindowScale)
 	}
-	Accumulator += float64(dt)
-
-	for Accumulator > FixedTimeStep {
-		if PauseTime > 0 {
-			PauseTime -= FixedTimeStep
-		} else {
-			PhysicsTime += FixedTimeStep
-			for _, actor := range Actors {
-				actor.Update(float32(FixedTimeStep))
-			}
-		}
-
-		Accumulator -= FixedTimeStep
+	if rl.IsKeyPressed(rl.KeyEscape) {
+		leaveMatch("", menuMain)
+		return
 	}
+
+	latchInput()
+	if NetMode == NetOffline {
+		stepOffline(dt)
+	} else {
+		netFrame(dt)
+		if Stage != StageLevel || CL == nil {
+			return
+		}
+	}
+	w := CL
+	local := w.Local
 
 	alpha := float32(Accumulator / FixedTimeStep)
 
 	Cur.Update(dt)
-	for _, actor := range Actors {
-		actor.Interp(alpha)
+	for _, actor := range w.Actors {
+		if !actor.Remote {
+			actor.Interp(alpha)
+		}
 	}
+	if Cli != nil && local != nil {
+		Cli.smoothCorrection(dt, local)
+	}
+	presentEffects(w)
 
-	if Debug {
-		LE.Update(dt)
+	if NetMode == NetOffline {
+		if Debug {
+			LE.Update(dt)
+		}
+		UpdateRewind(dt)
 	}
-	UpdateRewind(dt)
-	Cam.SetTarget(rl.Vector2{Pl.Pos.X + 24, Pl.Pos.Y + 24})
+	if Debug && Cli != nil {
+		Cli.Sim.controls()
+	}
+	if local != nil {
+		Cam.SetTarget(rl.Vector2{X: local.Pos.X + 24, Y: local.Pos.Y + 24})
+	}
 	Cam.Update(dt)
 
 	pos1 := rl.Vector2{40, 30}
@@ -203,11 +312,13 @@ func runLevel(dt float32) {
 
 		LE.Draw() // TODO sort objects with actors
 
-		slices.SortFunc(Actors, func(a, b *Actor) int {
+		// sort a copy: the simulation order of w.Actors must stay stable
+		drawList = append(drawList[:0], w.Actors...)
+		slices.SortFunc(drawList, func(a, b *Actor) int {
 			return int(b.Pos.X - a.Pos.X)
 		})
 		locTime := rl.GetShaderLocation(WhiteShader, "time")
-		for _, a := range Actors {
+		for _, a := range drawList {
 			if a.AnimWhite && a.AnimCurrentFrame < 2 {
 				rl.BeginShaderMode(WhiteShader)
 				rl.SetShaderValue(WhiteShader, locTime, []float32{float32(rl.GetTime())}, rl.ShaderUniformFloat)
@@ -215,6 +326,11 @@ func runLevel(dt float32) {
 				rl.EndShaderMode()
 			} else {
 				a.Draw()
+			}
+		}
+		if Debug && Srv != nil {
+			for _, r := range Srv.LastRewound {
+				rl.DrawRectangleLinesEx(r, 1, rl.Orange)
 			}
 		}
 
@@ -265,7 +381,7 @@ func runLevel(dt float32) {
 	dst := rl.NewRectangle(0, 0, SW*WindowScale, SH*WindowScale)
 	rl.DrawTexturePro(ScreenFullTexture.Texture, src, dst, rl.Vector2{}, 0, rl.White)
 	rl.EndShaderMode()
-	if Debug {
+	if Debug && NetMode == NetOffline {
 		LE.DrawGui()
 	}
 	Cur.DrawGUI()
@@ -276,6 +392,29 @@ func runLevel(dt float32) {
 		rl.DrawText(fmt.Sprintf("gameTime:%f", GameTimeSec), 20, 30, 2, rl.White)
 		rl.DrawText(fmt.Sprintf("physTime:%f", PhysicsTime), 20, 40, 2, rl.White)
 		rl.DrawText(fmt.Sprintf("camera zoom speed %f", Cam.ZoomSpeed), 20, 50, 2, rl.White)
+		drawNetDebug()
 	}
 	rl.EndDrawing()
+}
+
+func drawNetDebug() {
+	y := int32(60)
+	line := func(s string) {
+		rl.DrawText(s, 20, y, 2, rl.White)
+		y += 10
+	}
+	if c := Cli; c != nil {
+		rtt := 0
+		if c.Welcomed {
+			rtt = int(c.Peer.GetRoundTripTime())
+		}
+		line(fmt.Sprintf("rtt: %d ms (enet %d + sim %d)  loss sim: %d%%  [F5/F6 lag, F7/F8 loss]",
+			rtt+c.Sim.LatencyMs, rtt, c.Sim.LatencyMs, c.Sim.LossPct))
+		line(fmt.Sprintf("interp: %.0f ms  snapshots/s: %d  corrections: %d",
+			c.Interp.Delay*FixedTimeStep*1000, c.snapRate(), c.Corrections))
+		line(fmt.Sprintf("render tick: %.1f  newest snapshot: %d  cmd seq: %d  unacked cmds: %d", c.Interp.RenderTick(), c.LastSnap, c.Seq, c.Seq-c.LastAck))
+	}
+	if s := Srv; s != nil {
+		line(fmt.Sprintf("server tick: %d  humans: %d  bots: %d  lagcomp: %t", s.W.Tick, s.humans(), len(s.Bots), s.Cfg.LagComp))
+	}
 }
