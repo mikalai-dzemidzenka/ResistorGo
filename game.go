@@ -213,6 +213,7 @@ func stepOffline(dt float32) {
 	for Accumulator > FixedTimeStep {
 		PhysicsTime += FixedTimeStep
 		CL.Tick++
+		CL.updateRespawns()
 		rewindRecord()
 		for _, actor := range CL.Actors {
 			actor.recordRewind()

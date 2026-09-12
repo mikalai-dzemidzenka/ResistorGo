@@ -25,6 +25,24 @@ const (
 	BlockSpeed        = 0.2
 
 	HitStopTicks = 6
+
+	// Structure is the fighter's only health model, counted in hit-units.
+	// A hit costs 1, block-all costs less than a hit, a block at the attacker's
+	// height pays back, and time pays back once the pressure stops.
+	MaxStructure       = 12
+	HitStructure       = 1
+	BlockAllStructure  = 0.4
+	BlockStructure     = 0.5
+	StructureRegen     = 2  // per second, once calm
+	StructureCalmTicks = 90 // 1.5s without a loss before it refills
+
+	StunEveryHits   = 3
+	StunKnockback   = 150
+	FlinchHoldTicks = 12
+
+	DeathFlickerTicks = 36 // ~0.6s of flickering after the fall animation
+	DeathFlickerSpan  = 4  // ticks per visible or hidden span
+	RespawnTicks      = 120
 )
 
 type ActorState uint8
@@ -57,6 +75,7 @@ const (
 	StateJump
 	StateClimb
 	StateTurnover
+	StateDeath
 )
 
 const (
@@ -114,6 +133,14 @@ type Actor struct {
 	AttackCount      uint8
 	CanClimbRight    bool
 	CanClimbLeft     bool
+	Structure        float32
+	HitCount         uint8  // landed hits since the last stun or recovery
+	CalmTicks        uint16 // ticks since structure was last lost
+	FlinchTicks      uint8  // holds the hit animation without taking control
+	SwingHit         bool   // this fighter's current swing has already landed
+	Dying            bool   // dead and waiting to be taken out of the world
+	DeathTicks       uint16 // ticks since the death animation finished
+	Owner            uint16 // network player this fighter belongs to; 0 for bots
 }
 
 // Input is one simulation tick of player intent; it is also the network command.
@@ -136,6 +163,7 @@ func NewActor(pos rl.Vector2, isPlayer bool) *Actor {
 		Acc:         DefaultAcc,
 		Friction:    DefaultFriction,
 		State:       StateIdle,
+		Structure:   MaxStructure,
 		Orientation: 1,
 		OnGround:    false,
 		CollisionBox: rl.Rectangle{
@@ -175,6 +203,18 @@ func (a *Actor) Update(dt float32) {
 	a.Ticks++
 	defer a.advanceAnim()
 
+	if a.State == StateDeath {
+		a.updateDeath()
+		return
+	}
+	a.regenStructure()
+	if a.FlinchTicks > 0 {
+		a.FlinchTicks--
+		if a.FlinchTicks == 0 {
+			a.AnimWhite = false
+		}
+	}
+
 	a.checkCollision()
 	a.updateHorSpeed(dt)
 	a.updateVertSpeed(dt)
@@ -188,7 +228,9 @@ func (a *Actor) Update(dt float32) {
 	case StateIdle:
 		prevUpdown := a.Updown
 		a.updateUpdown()
-		if prevUpdown == 3 && a.Updown != 3 {
+		if a.FlinchTicks > 0 {
+			// held: the hit animation plays out, but the fighter still acts
+		} else if prevUpdown == 3 && a.Updown != 3 {
 			a.SetAnimFrame("resources/threefour/updown.png", a.Updown)
 		} else if a.Updown == 3 {
 			a.SetAnimFrame("resources/threefour/block.png", 0)
@@ -329,6 +371,9 @@ func (a *Actor) drawPos() rl.Vector2 {
 }
 
 func (a *Actor) Draw() {
+	if a.deathHidden() {
+		return
+	}
 	if TimeShowsHistory() {
 		data := a.RewindData[rewindSlot(rewindCursor)]
 		rl.DrawTextureRec(resources[data.Anim], rl.Rectangle{
@@ -381,6 +426,7 @@ func (a *Actor) Draw() {
 		px := a.Pos.X + a.CollisionBox.X + a.CollisionBox.Width/2
 		rl.DrawPixel(int32(px), int32(a.Pos.Y+a.CollisionBox.Y+a.CollisionBox.Height), rl.Red)
 		rl.DrawText(fmt.Sprintf("State: %d", a.State), int32(a.Pos.X), int32(a.Pos.Y+a.CollisionBox.Y+a.CollisionBox.Height), 2, rl.White)
+		rl.DrawText(fmt.Sprintf("Struct: %.1f hits: %d", a.Structure, a.HitCount), int32(a.Pos.X), int32(a.Pos.Y+a.CollisionBox.Y+a.CollisionBox.Height)+8, 2, rl.White)
 	}
 
 }
@@ -728,6 +774,8 @@ func (a *Actor) updateUpdown() {
 
 func (a *Actor) enterAttackState() {
 	a.State = StateAttack
+	a.FlinchTicks = 0
+	a.SwingHit = false
 	a.Events |= EvAttackStart
 	a.Pos.X += float32(a.Orientation) * AttackDash
 	switch a.Updown {
@@ -740,19 +788,133 @@ func (a *Actor) enterAttackState() {
 	}
 }
 
-func (a *Actor) enterAttackedState(attacker *Actor) {
-	a.State = StateAttacked
+// spendStructure takes cost off the pool and reports whether that emptied it.
+func (a *Actor) spendStructure(cost float32) bool {
+	a.CalmTicks = 0
+	a.Structure -= cost
+	if a.Structure <= 0 {
+		a.Structure = 0
+		return true
+	}
+	return false
+}
+
+// restoreStructure puts structure back, never past the cap.
+func (a *Actor) restoreStructure(amount float32) {
+	a.Structure = min(a.Structure+amount, MaxStructure)
+}
+
+// regenStructure refills the pool once the fighter has been left alone long
+// enough. The hit count goes with it: a run of hits is over once its target has
+// had time to recover from it.
+func (a *Actor) regenStructure() {
+	if a.W != nil && !a.W.Authority {
+		return // a predicted world displays structure, it does not grant it
+	}
+	if a.CalmTicks < StructureCalmTicks {
+		a.CalmTicks++
+		if a.CalmTicks == StructureCalmTicks {
+			a.HitCount = 0
+		}
+		return
+	}
+	a.restoreStructure(StructureRegen * float32(FixedTimeStep))
+}
+
+// takeHit resolves an attack that landed. Every hit costs structure and
+// flinches, every third one stuns instead, and the one that empties the pool
+// kills. It is one of the two places structure is spent.
+func (a *Actor) takeHit(attacker *Actor) {
+	attacker.SwingHit = true
+	if a.spendStructure(HitStructure) {
+		a.enterDeathState(attacker)
+		return
+	}
+	a.HitCount++
+	if a.HitCount >= StunEveryHits {
+		a.HitCount = 0
+		a.enterAttackedState(attacker)
+		return
+	}
+	a.enterFlinchState(attacker)
+}
+
+// confirmBlock resolves an attack that was guarded. A block at the attacker's
+// height feeds the pool; block-all stops anything but pays for it, less than a
+// hit would have cost.
+func (a *Actor) confirmBlock(attacker *Actor) {
+	attacker.SwingHit = true
+	if a.Updown == 3 {
+		if a.spendStructure(BlockAllStructure) {
+			a.enterDeathState(attacker)
+		}
+		return
+	}
+	a.restoreStructure(BlockStructure)
+}
+
+// hitFeedback is what every landed hit does, stunning or not.
+func (a *Actor) hitFeedback(attacker *Actor, knockback float32) {
 	a.Attacker = attacker
 	a.AnimWhite = true
 	a.Events |= EvHit
 	a.FreezeTicks = HitStopTicks
 	attacker.FreezeTicks = HitStopTicks
-	a.Speed.X = float32(attacker.Orientation) * PunchSpeed
+	a.Speed.X = float32(attacker.Orientation) * knockback
 	a.SetAnim("resources/threefour/hit-top.png", AnimOptions{animDuration: 0.3, totalFrames: 4, once: true})
+}
+
+// enterFlinchState is a hit that did not stun: the fighter keeps control and
+// only its animation is held for a moment.
+func (a *Actor) enterFlinchState(attacker *Actor) {
+	a.hitFeedback(attacker, PunchSpeed)
+	a.FlinchTicks = FlinchHoldTicks
+}
+
+// enterAttackedState is the stun every third hit lands: a lockout until the
+// animation finishes, and a longer throw back than a flinch.
+func (a *Actor) enterAttackedState(attacker *Actor) {
+	a.State = StateAttacked
+	a.FlinchTicks = 0
+	a.hitFeedback(attacker, StunKnockback)
+}
+
+// enterDeathState is where a broken structure goes. The fighter stops acting
+// and stops being part of the fight; the world removes it once it has fallen.
+func (a *Actor) enterDeathState(attacker *Actor) {
+	a.State = StateDeath
+	a.Attacker = attacker
+	a.Events |= EvHit
+	a.HitCount, a.FlinchTicks, a.DeathTicks = 0, 0, 0
+	a.AnimWhite = false
+	a.Speed = rl.Vector2{}
+	a.AttackQueued = false
+	if attacker != nil {
+		attacker.FreezeTicks = HitStopTicks
+	}
+	a.SetAnim("resources/threefour/death_fall.png", AnimOptions{animDuration: 0.6, totalFrames: 9, once: true})
+}
+
+// updateDeath plays the fall out, then counts the flicker off before the
+// authority takes the body out of the world. A client waits to be told.
+func (a *Actor) updateDeath() {
+	if !a.AnimFinished {
+		return
+	}
+	a.DeathTicks++
+	if a.DeathTicks >= DeathFlickerTicks && a.W != nil && a.W.Authority {
+		a.W.Kill(a)
+	}
+}
+
+// deathHidden reports whether the flicker is in an off span this tick.
+func (a *Actor) deathHidden() bool {
+	return a.State == StateDeath && a.AnimFinished && (a.DeathTicks/DeathFlickerSpan)%2 == 1
 }
 
 func (a *Actor) enterBlockState(attacker *Actor) {
 	a.State = StateBlock
+	a.FlinchTicks = 0
 	a.Attacker = attacker
 	a.Events |= EvBlocked
 	a.Speed.X = float32(attacker.Orientation) * PunchSpeed
@@ -819,19 +981,35 @@ func (a *Actor) updateAttack() {
 		}
 	}
 
-	// only the authoritative world decides hits and blocks
-	if a.W.Authority {
+	// only the authoritative world decides hits and blocks, and one swing
+	// lands on a given fighter at most once
+	if a.W.Authority && !a.SwingHit {
 		for _, actor := range a.W.Actors {
-			if a == actor {
+			if a == actor || actor.State == StateDeath || actor.State == StateAttacked {
 				continue
 			}
 			r2 := actor.collisionRect()
-			if aabb(r1, r2) && actor.State != StateAttacked && actor.State != StateBlock {
-				if a.Updown == actor.Updown || actor.Updown == 3 {
-					actor.enterBlockState(a)
-				} else if a.AnimCurrentFrame > attackFrames[a.Anim] {
-					actor.enterAttackedState(a)
+			if !aabb(r1, r2) {
+				continue
+			}
+			guarding := a.Updown == actor.Updown || actor.Updown == 3
+			hitFrame := a.AnimCurrentFrame > attackFrames[a.Anim]
+			switch {
+			case actor.State == StateBlock:
+				// already guarding: the outcome is settled at the hit frame
+				if !hitFrame {
+					continue
 				}
+				if guarding {
+					actor.confirmBlock(a)
+				} else {
+					actor.exitBlockState()
+					actor.takeHit(a)
+				}
+			case guarding:
+				actor.enterBlockState(a) // provisional until the hit frame
+			case hitFrame:
+				actor.takeHit(a)
 			}
 		}
 	}
@@ -864,6 +1042,7 @@ func (a *Actor) updateAttack() {
 		}
 
 		a.AttackQueued = false
+		a.SwingHit = false
 		a.AttackCount++
 		a.Speed.X = float32(a.Orientation) * AttackDash
 
@@ -912,11 +1091,14 @@ func (a *Actor) updateBlock() {
 		return
 	}
 	if a.AnimFinished && a.Attacker.AnimCurrentFrame >= attackFrames[a.Attacker.Anim] {
-		if a.W.Authority && a.Updown != a.Attacker.Updown && a.Updown != 3 {
-			attacker := a.Attacker
-			a.exitBlockState()
-			a.enterAttackedState(attacker)
-			return
+		if a.W.Authority && !a.Attacker.SwingHit {
+			if a.Updown != a.Attacker.Updown && a.Updown != 3 {
+				attacker := a.Attacker
+				a.exitBlockState()
+				a.takeHit(attacker)
+				return
+			}
+			a.confirmBlock(a.Attacker)
 		}
 		switch a.Anim {
 		case "resources/threefour/block-all-start.png", "resources/threefour/block-all-1.png":

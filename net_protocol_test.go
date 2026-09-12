@@ -14,7 +14,7 @@ func sampleRec(id uint16) ActorRec {
 		ID: id, X: 12, Y: -34, SX: 1.5, SY: -900,
 		State: uint8(StateAttack), Flags: fOrientLeft | fAnimOnce | fAttackQueued,
 		Updown: 2, PrevUpdown: 1, Anim: 17, AnimFrame: 3, AnimTotal: 8, AnimYOffset: -48,
-		AnimDurMs: 300, Ticks: 123456, AnimStart: 123400, AttackCount: 2, FreezeTicks: 5, AttackerID: 7,
+		AnimDurMs: 300, Ticks: 123456, AnimStart: 123400, AttackCount: 2, FreezeTicks: 5, Structure: 73, AttackerID: 7,
 	}
 }
 
@@ -109,6 +109,29 @@ func TestSnapshotFitsPacket(t *testing.T) {
 	}
 }
 
+// The record size constant has to match what the encoder actually writes, or
+// the decoder's length check silently rejects good packets.
+func TestActorRecSize(t *testing.T) {
+	const header = 1 + 4 + 4 + 1 // message id, tick, ack, count
+	if n := len(encodeSnapshot(Snapshot{Tick: 1, Ack: 1, Actors: []ActorRec{sampleRec(1)}})); n != header+actorRecSize {
+		t.Errorf("one-actor snapshot is %d bytes, want %d", n, header+actorRecSize)
+	}
+}
+
+// Structure survives the wire to a tenth of a hit-unit.
+func TestStructureReplicates(t *testing.T) {
+	w := NewWorld(true)
+	a := w.Spawn(ZeroVec2, true)
+	for _, want := range []float32{0, 0.4, 7.3, 11.6, MaxStructure} {
+		a.Structure = want
+		b := NewActor(ZeroVec2, true)
+		recOf(a).apply(b, w)
+		if diff := b.Structure - want; diff > 0.05 || diff < -0.05 {
+			t.Errorf("structure %v arrived as %v", want, b.Structure)
+		}
+	}
+}
+
 func TestLevelHash(t *testing.T) {
 	a := []byte(`{"0":{"1,2":{"resource":"x"}}}`)
 	b := slices.Clone(a)
@@ -126,6 +149,7 @@ func TestRecApplyRoundTrip(t *testing.T) {
 	a := w.Spawn(ZeroVec2, true)
 	b := w.Spawn(ZeroVec2, false)
 	a.Pos.X, a.Pos.Y, a.Speed.X = 37, -12, -3.25
+	a.Structure = 7.3
 	a.Orientation = -1
 	a.Attacker = b
 	a.Ticks = 50

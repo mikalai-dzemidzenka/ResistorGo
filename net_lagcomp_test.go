@@ -102,8 +102,8 @@ func lagCompSwing(t *testing.T, lagComp bool) *Actor {
 }
 
 func TestLagCompHitsWhatAttackerSaw(t *testing.T) {
-	if def := lagCompSwing(t, true); def.State != StateAttacked {
-		t.Errorf("with lag compensation the defender is in state %d, want hit (%d)", def.State, StateAttacked)
+	if def := lagCompSwing(t, true); def.Structure != MaxStructure-HitStructure {
+		t.Errorf("with lag compensation the defender is at %v structure, want the %v a hit leaves", def.Structure, float32(MaxStructure-HitStructure))
 	}
 }
 
@@ -123,7 +123,7 @@ func TestNonAuthorityNeverHits(t *testing.T) {
 		att.advanceAnim()
 		att.Input = Input{Updown: 1}
 		att.Update(float32(FixedTimeStep))
-		if hit := def.State == StateAttacked; hit != auth {
+		if hit := def.Structure < MaxStructure; hit != auth {
 			t.Errorf("authority %t: defender hit = %t", auth, hit)
 		}
 		if att.AnimCurrentFrame == 0 {

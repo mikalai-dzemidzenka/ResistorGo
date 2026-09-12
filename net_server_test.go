@@ -63,7 +63,7 @@ func TestSpawnPosAvoidsActors(t *testing.T) {
 	s := &Server{W: NewWorld(true)}
 	var spawned []*Actor
 	for range 5 {
-		spawned = append(spawned, s.W.Spawn(s.spawnPos(), true))
+		spawned = append(spawned, s.W.Spawn(s.W.spawnPos(), true))
 	}
 	for i, a := range spawned {
 		for _, b := range spawned[i+1:] {

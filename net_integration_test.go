@@ -3,6 +3,7 @@ package resistor
 import (
 	"fmt"
 	"github.com/codecat/go-enet"
+	rl "github.com/gen2brain/raylib-go/raylib"
 	"testing"
 	"time"
 )
@@ -262,5 +263,90 @@ func TestParseAddr(t *testing.T) {
 		if _, _, err := parseAddr(bad); err == nil {
 			t.Errorf("%q accepted", bad)
 		}
+	}
+}
+
+// A player that dies keeps its slot while the body is gone, is given a new
+// fighter when it respawns, and its structure reaches the client.
+func TestNetDeathAndRespawn(t *testing.T) {
+	enet.Initialize()
+	defer enet.Deinitialize()
+	Stage = StageLevel // reconcile must not enter the level (needs a window)
+	defer func() { Stage = StageMainMenu }()
+	LE = NewLevelEditor(39, 83)
+
+	cfg := DefaultServerConfig()
+	cfg.Port = 27196
+	cfg.MaxPlayers = 1 // the one slot is the player's, alive or dead
+	cfg.Bots = 0
+	s, err := NewServer(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { Srv = nil; s.Close() }()
+
+	if err := startClient(fmt.Sprintf("127.0.0.1:%d", cfg.Port), false); err != nil {
+		t.Fatal(err)
+	}
+	c := Cli
+	pumpFor(1200*time.Millisecond, s, c)
+	if !c.Welcomed || c.W.Local == nil {
+		t.Fatalf("client not in the match: welcomed=%t local=%v", c.Welcomed, c.W.Local)
+	}
+	var p *netPlayer
+	for _, q := range s.Peers {
+		if q.Actor != nil {
+			p = q
+		}
+	}
+	if p == nil {
+		t.Fatal("server has no fighter for the client")
+	}
+	killer := s.W.Spawn(rl.Vector2{X: 300}, false) // an attacker that is not in reach
+
+	// one hit short of a break, so the client sees a structure it did not predict
+	p.Actor.Structure = 2 * HitStructure
+	p.Actor.takeHit(killer)
+	pumpFor(300*time.Millisecond, s, c)
+	if local := c.W.Local; local == nil || local.Structure > 2*HitStructure-HitStructure+0.05 {
+		t.Errorf("client shows structure %v, want the server's %v", local.Structure, float32(HitStructure))
+	}
+
+	dead := p.Actor
+	dead.Structure = HitStructure
+	dead.takeHit(killer)
+	if dead.State != StateDeath {
+		t.Fatalf("the killing hit left state %d, want death", dead.State)
+	}
+
+	// while the body plays out and waits, the slot stays with the dead player
+	pumpFor(1500*time.Millisecond, s, c)
+	if p.Actor != nil {
+		t.Errorf("the server still holds a fighter for the dead player")
+	}
+	if s.humans() != 1 {
+		t.Errorf("humans %d while a player is dead, want the slot kept", s.humans())
+	}
+	full := hello(t, s, c, cfg.Port, Hello{Proto: ProtocolVersion, LevelHash: LE.Hash()})
+	expectReject(t, full, RejectFull)
+	full.h.Destroy()
+
+	// and then it comes back
+	pumpFor(2200*time.Millisecond, s, c)
+	if p.Actor == nil {
+		t.Fatalf("the player has no fighter %v after dying", 3700*time.Millisecond)
+	}
+	if p.Actor == dead {
+		t.Errorf("the player was given the same fighter back")
+	}
+	if p.Actor.Structure != MaxStructure || p.Actor.State != StateIdle {
+		t.Errorf("respawned with %v structure in state %d, want a clean fighter", p.Actor.Structure, p.Actor.State)
+	}
+	if p.Actor.Owner != p.ID {
+		t.Errorf("respawned fighter belongs to player %d, want %d", p.Actor.Owner, p.ID)
+	}
+	pumpFor(500*time.Millisecond, s, c)
+	if c.W.ByID(p.Actor.ID) == nil {
+		t.Errorf("the client does not see the respawned fighter %d", p.Actor.ID)
 	}
 }

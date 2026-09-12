@@ -102,6 +102,28 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 		Peers: make(map[uint16]*netPlayer),
 		hash:  LE.Hash(),
 	}
+	// deaths and respawns have to reach the server's own registries
+	OnFighterRemoved = func(a *Actor) {
+		s.Bots = slices.DeleteFunc(s.Bots, func(b *Actor) bool { return b == a })
+		for _, p := range s.Peers {
+			if p.Actor == a {
+				p.Actor = nil
+			}
+		}
+	}
+	OnFighterRespawned = func(owner uint16, a *Actor) {
+		if owner == 0 {
+			s.Bots = append(s.Bots, a)
+			return
+		}
+		for _, p := range s.Peers {
+			if p.ID == owner && p.Role == RoleFighter {
+				p.Actor = a
+				return
+			}
+		}
+		s.W.Remove(a) // the player left while dead
+	}
 	s.fillBots()
 	s.logf("listening on UDP port %d (max players %d, max spectators %d, bots %d, lagcomp %t)", cfg.Port, cfg.MaxPlayers, cfg.MaxSpectators, cfg.Bots, cfg.LagComp)
 	return s, nil
@@ -216,7 +238,8 @@ func (s *Server) accept(p *netPlayer) {
 	p.ID = s.nextPlayerID
 	p.Role = RoleFighter
 	p.Accepted = true
-	p.Actor = s.W.Spawn(s.spawnPos(), true)
+	p.Actor = s.W.Spawn(s.W.spawnPos(), true)
+	p.Actor.Owner = p.ID
 	s.logf("connect player %d (actor %d) from %s", p.ID, p.Actor.ID, p.Peer.GetAddress())
 	sendBytes(p.Peer, ChanReliable, encodeWelcome(Welcome{PlayerID: p.ID, ActorID: p.Actor.ID, Tick: s.W.Tick}))
 }
@@ -238,9 +261,11 @@ func (s *Server) drop(peerID uint16, why string) {
 	}
 	delete(s.Peers, peerID)
 	switch {
-	case p.Actor != nil:
+	case p.Accepted && p.Role == RoleFighter:
 		s.logf("disconnect player %d: %s", p.ID, why)
-		s.W.Remove(p.Actor)
+		if p.Actor != nil { // nil while dead and waiting to respawn
+			s.W.Remove(p.Actor)
+		}
 		s.fillBots()
 	case p.Accepted:
 		s.logf("disconnect spectator %d: %s", p.ID, why)
@@ -258,34 +283,14 @@ func (s *Server) makeRoom() {
 
 func (s *Server) fillBots() {
 	for len(s.Bots) < s.Cfg.Bots && s.humans()+len(s.Bots) < s.Cfg.MaxPlayers {
-		s.Bots = append(s.Bots, s.W.Spawn(s.spawnPos(), false))
+		s.Bots = append(s.Bots, s.W.Spawn(s.W.spawnPos(), false))
 	}
-}
-
-var spawnXs = []float32{0, 50, -50, 100, -100, 150, -150, 200, -200, -250, -300, -350, -400, -450, -500}
-
-// spawnPos picks the first spawn column not overlapped by another actor's collision box.
-func (s *Server) spawnPos() rl.Vector2 {
-	for _, x := range spawnXs {
-		lo, hi := x+14, x+28
-		free := true
-		for _, a := range s.W.Actors {
-			r := a.collisionRect()
-			if r.X < hi && r.X+r.Width > lo {
-				free = false
-				break
-			}
-		}
-		if free {
-			return rl.Vector2{X: x}
-		}
-	}
-	return rl.Vector2{}
 }
 
 // Step advances the server by one tick.
 func (s *Server) Step() {
 	s.W.Tick++
+	s.W.updateRespawns()
 	players := make([]*netPlayer, 0, len(s.Peers))
 	for _, p := range s.Peers {
 		if p.Actor != nil {

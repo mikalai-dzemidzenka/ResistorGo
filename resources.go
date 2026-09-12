@@ -39,6 +39,7 @@ var animTable = []string{
 	"resources/threefour/attack-high-3.png",
 	"resources/threefour/attack-low.png",
 	"resources/threefour/hit-top.png",
+	"resources/threefour/death_fall.png",
 	"resources/threefour/back-attack-low-1.png",
 	"resources/threefour/back-attack-low-2.png",
 	"resources/threefour/back-attack-mid-1.png",
