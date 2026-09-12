@@ -381,6 +381,11 @@ func runLevel(dt float32) {
 		)
 		rl.EndBlendMode()
 
+		// structure bars go on top of the lighting, so it cannot tint them
+		for _, a := range drawList {
+			a.drawStructureBar()
+		}
+
 		rl.EndMode2D()
 	}
 	rl.EndTextureMode()
