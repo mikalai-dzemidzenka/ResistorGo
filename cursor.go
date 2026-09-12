@@ -24,11 +24,7 @@ func (c *Cursor) GetGUIZ() int8 {
 }
 
 func (c *Cursor) Update(dt float32) {
-	if rl.IsMouseButtonDown(rl.MouseButtonRight) {
-		c.AtkSpeed = CursorAttackSpeed
-	} else {
-		c.AtkSpeed = 0
-	}
+	c.AtkSpeed = CursorAttackSpeed
 
 	c.Pos = rl.GetMousePosition()
 	c.AtkPos = rl.Vector2Lerp(c.AtkPos, c.Pos, c.AtkSpeed)

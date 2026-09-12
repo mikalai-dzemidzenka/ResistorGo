@@ -4,11 +4,10 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"resistor/examples/example9/shared"
 	"time"
 
 	"github.com/codecat/go-enet"
-
-	"resistor/example9/shared"
 )
 
 const (

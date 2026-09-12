@@ -2,6 +2,7 @@ package resistor
 
 import (
 	"fmt"
+	"github.com/codecat/go-enet"
 	rl "github.com/gen2brain/raylib-go/raylib"
 	"math"
 	"math/rand"
@@ -24,6 +25,8 @@ const (
 	SecondAttackSpeed = 0.2
 	BlockSpeed        = 0.2
 )
+
+var inputSequence uint32 = 0
 
 type ActorState uint8
 
@@ -61,7 +64,16 @@ const (
 	AttackFrame = 4
 )
 
+type ActorNet struct {
+	ID     uint16
+	Server struct {
+		PeerID uint16
+		Peer   enet.Peer
+	}
+}
+
 type Actor struct {
+	Net               *ActorNet
 	Pos               rl.Vector2
 	PrevPos           rl.Vector2
 	InterpolatedPos   rl.Vector2
@@ -101,10 +113,11 @@ type Actor struct {
 	CanClimbLeft      bool
 }
 type Input struct {
-	Left   bool
-	Right  bool
-	Attack bool
-	Jump   bool
+	Sequence uint32
+	Left     bool
+	Right    bool
+	Attack   bool
+	Jump     bool
 }
 
 func NewActor(pos rl.Vector2, isPlayer bool) *Actor {
@@ -152,6 +165,8 @@ func (a *Actor) Update(dt float32) {
 	}
 	if a.IsPlayer {
 		a.updatePlayerInput()
+	} else if Multiplayer {
+		a.updateMultiplayerInput()
 	} else {
 		a.updateBotInput()
 	}
@@ -598,7 +613,8 @@ func (a *Actor) updateBotInput() {
 }
 
 func (a *Actor) updatePlayerInput() {
-	a.Input = Input{}
+	inputSequence++
+	a.Input = Input{Sequence: inputSequence}
 	if rl.IsKeyDown(rl.KeyA) {
 		a.Input.Right = true
 	}
@@ -893,4 +909,8 @@ func (a *Actor) MouseOnLeft() bool {
 		return false
 	}
 	return float32(MouseWorldPos.X) < a.Pos.X+24
+}
+
+func (a *Actor) updateMultiplayerInput() {
+
 }

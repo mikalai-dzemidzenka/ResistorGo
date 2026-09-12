@@ -5,7 +5,14 @@ import (
 	"math"
 )
 
+var mainMenuInit bool
+
 func runMainMenu(dt float32) {
+	if !mainMenuInit {
+		mainMenuInit = true
+		MainMenuTexture = rl.LoadRenderTexture(SW, SH)
+		rl.SetTextureFilter(MainMenuTexture.Texture, rl.FilterPoint)
+	}
 	rl.BeginTextureMode(MainMenuTexture)
 	rl.ClearBackground(rl.Color{0, 0, 0, 0})
 	rl.BeginMode3D(rl.NewCamera3D(rl.Vector3{0, -1.5, 10}, rl.Vector3{0, 0, 0}, rl.Vector3{0, 1, 0}, 120, rl.CameraPerspective))

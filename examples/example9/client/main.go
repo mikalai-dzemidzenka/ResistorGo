@@ -4,11 +4,10 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"resistor/examples/example9/shared"
 
 	"github.com/codecat/go-enet"
 	rl "github.com/gen2brain/raylib-go/raylib"
-
-	"resistor/example9/shared"
 )
 
 const (

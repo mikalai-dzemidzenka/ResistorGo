@@ -2,6 +2,7 @@ package resistor
 
 import (
 	"fmt"
+	"github.com/codecat/go-enet"
 	rlg "github.com/gen2brain/raylib-go/raygui"
 	rl "github.com/gen2brain/raylib-go/raylib"
 	"slices"
@@ -26,12 +27,11 @@ var (
 	Accumulator          float64
 	PhysicsTime          float64
 	PauseTime            float64
-	Ticks                int
 	FixedTimeStep        float64 = 1.0 / 60.0
 	MouseWorldPos        Vector2i
 	MousePos             rl.Vector2
-	Cam                  Camera
-	LE                   LevelEditor
+	Cam                  Camera      = NewCamera(3, rl.Vector2{SW * WindowScale * 0.9 / 2, SH * WindowScale / 2})
+	LE                   LevelEditor = NewLevelEditor(39, 83)
 	Pl                   *Actor
 	Actors               []*Actor
 	Stage                int = 1
@@ -43,9 +43,13 @@ var (
 	light1               *ZimaLight
 	light2               *ZimaLight
 	light3               *ZimaLight
-	Palette              []rl.Color
-	Cur                  *Cursor
-	WhiteShader          rl.Shader
+	Cur                  *Cursor = &Cursor{
+		AtkSpeed: CursorAttackSpeed,
+		AtkPos:   rl.Vector2{SW * WindowScale / 2, SH * WindowScale / 2},
+		GUIZ:     2,
+	}
+	WhiteShader rl.Shader
+	Multiplayer bool = true
 )
 
 type Vector2i struct {
@@ -87,11 +91,13 @@ func v2f(v Vector2i) rl.Vector2 {
 	}
 }
 
+var Host enet.Host
+
+var Peer enet.Peer
+
 func Game() {
 	rl.InitWindow(SW*WindowScale, SH*WindowScale, "Resistor")
 	defer rl.CloseWindow()
-
-	//rl.DisableCursor()
 
 	rlg.LoadStyle("resources/style_dark.rgs")
 
@@ -99,66 +105,13 @@ func Game() {
 
 	LoadTextures()
 
-	WhiteShader = rl.LoadShaderFromMemory("", fsWhite)
-
-	rl.DisableCursor()
-	Cam = NewCamera(3)
-	Cur = &Cursor{
-		AtkSpeed: CursorAttackSpeed,
-		AtkPos:   rl.Vector2{SW * WindowScale / 2, SH * WindowScale / 2},
-		GUIZ:     2,
-	}
-	Pl = NewActor(rl.Vector2{}, true)
 	enemy := NewActor(rl.Vector2{X: 50}, false)
 	LE = NewLevelEditor(39, 83)
 	LE.LoadLevel("level_1.json")
-
+	Pl = NewActor(rl.Vector2{}, true)
 	Actors = []*Actor{enemy, Pl}
 
-	MainMenuTexture = rl.LoadRenderTexture(SW, SH)
-	rl.SetTextureFilter(MainMenuTexture.Texture, rl.FilterPoint)
-	Cam.Camera2D.Offset = rl.Vector2{SW * WindowScale * 0.9 / 2, SH * WindowScale / 2}
-
-	Sh = loadShaders()
-	const intense = 1.0
-	light1 = newZimaLight(512, 256, rl.White, intense)
-	light2 = newZimaLight(512, 128, rl.White, intense)
-	light3 = newZimaLight(512, 128, rl.White, intense)
-
-	PaletteShader = rl.LoadShaderFromMemory("", fsPalette)
-
-	Palette = []rl.Color{
-		rl.NewColor(57, 31, 33, 255),
-		rl.NewColor(39, 35, 36, 255),
-		rl.NewColor(60, 51, 53, 255),
-		rl.NewColor(87, 28, 39, 255),
-		rl.NewColor(85, 70, 78, 255),
-		rl.NewColor(91, 74, 100, 255),
-		rl.NewColor(117, 102, 108, 255),
-		rl.NewColor(137, 30, 43, 255),
-		rl.NewColor(196, 36, 48, 255),
-		rl.NewColor(234, 50, 60, 255),
-		rl.NewColor(138, 72, 54, 255),
-		rl.NewColor(191, 111, 74, 255),
-		rl.NewColor(230, 156, 105, 255),
-		rl.NewColor(156, 123, 132, 255),
-		rl.NewColor(173, 153, 140, 255),
-		rl.NewColor(186, 177, 155, 255),
-		rl.NewColor(212, 207, 107, 255),
-		rl.NewColor(234, 240, 147, 255),
-		rl.NewColor(242, 221, 161, 255),
-		rl.NewColor(246, 245, 192, 255),
-		rl.SkyBlue,
-		rl.White,
-		rl.Red,
-		rl.Green,
-		rl.NewColor(0, 200, 48, 255),
-		rl.NewColor(10, 250, 50, 255),
-		rl.NewColor(10, 255, 60, 255),
-	}
-
-	ScreenPaletteTexture = makePaletteTexture(Palette)
-	ScreenFullTexture = rl.LoadRenderTexture(SW*WindowScale, SH*WindowScale)
+	rl.DisableCursor()
 
 	for !rl.WindowShouldClose() {
 		if rl.IsKeyPressed(rl.KeyGrave) {
@@ -182,7 +135,24 @@ func Game() {
 	LE.SaveLevel("level_1.json")
 }
 
+var levelInit bool
+
 func runLevel(dt float32) {
+	if !levelInit {
+		levelInit = true
+		WhiteShader = rl.LoadShaderFromMemory("", fsWhite)
+		LE.LoadLevel("level_1.json")
+
+		Sh = loadShaders()
+		const intense = 1.0
+		light1 = newZimaLight(512, 256, rl.White, intense)
+		light2 = newZimaLight(512, 128, rl.White, intense)
+		light3 = newZimaLight(512, 128, rl.White, intense)
+
+		PaletteShader = rl.LoadShaderFromMemory("", fsPalette)
+		ScreenPaletteTexture = makePaletteTexture(Palette)
+		ScreenFullTexture = rl.LoadRenderTexture(SW*WindowScale, SH*WindowScale)
+	}
 	Accumulator += float64(dt)
 
 	for Accumulator > FixedTimeStep {
