@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	ProtocolVersion  uint16 = 1
+	ProtocolVersion  uint16 = 2
 	DefaultPort             = 27015
 	ChanUnreliable   uint8  = 0 // commands, snapshots
 	ChanReliable     uint8  = 1 // hello, welcome, reject, bye
@@ -24,13 +24,28 @@ const (
 	MsgBye
 	MsgCmds
 	MsgSnapshot
+	MsgKeepalive // spectator -> server, keeps an idle connection from timing out
 )
 
 const (
 	RejectVersion uint8 = iota + 1
 	RejectLevel
 	RejectFull
+	RejectSpectatorsFull
 )
+
+// joining role carried in Hello
+const (
+	RoleFighter uint8 = iota
+	RoleSpectator
+)
+
+func roleName(r uint8) string {
+	if r == RoleSpectator {
+		return "spectator"
+	}
+	return "player"
+}
 
 const (
 	ByeServerClosed uint8 = iota + 1
@@ -47,6 +62,8 @@ func rejectText(r uint8) string {
 		return "level mismatch"
 	case RejectFull:
 		return "server full"
+	case RejectSpectatorsFull:
+		return "spectators full"
 	}
 	return "rejected by server"
 }
@@ -67,6 +84,7 @@ func levelHash(b []byte) uint64 {
 type Hello struct {
 	Proto     uint16
 	LevelHash uint64
+	Role      uint8
 }
 
 type Welcome struct {
@@ -267,14 +285,25 @@ func (r *reader) err() error {
 func encodeHello(h Hello) []byte {
 	b := []byte{MsgHello}
 	b = putU16(b, h.Proto)
-	return putU64(b, h.LevelHash)
+	b = putU64(b, h.LevelHash)
+	return append(b, h.Role)
 }
 
+// decodeHello accepts the version-1 layout without a role byte, so an old
+// client can still be told "version mismatch" instead of being ignored.
 func decodeHello(b []byte) (Hello, error) {
 	r := newReader(b, MsgHello)
 	h := Hello{Proto: r.u16(), LevelHash: r.u64()}
+	if !r.bad && len(r.b) > 0 {
+		h.Role = r.u8()
+		if h.Role > RoleSpectator {
+			r.bad = true
+		}
+	}
 	return h, r.err()
 }
+
+func encodeKeepalive() []byte { return []byte{MsgKeepalive} }
 
 func encodeWelcome(w Welcome) []byte {
 	b := []byte{MsgWelcome}
