@@ -350,3 +350,49 @@ func TestNetDeathAndRespawn(t *testing.T) {
 		t.Errorf("the client does not see the respawned fighter %d", p.Actor.ID)
 	}
 }
+
+// A client sees a remote fighter's structure and its hits toward the next
+// stun, which is what its bar and pips are drawn from.
+func TestNetStructureBarReplicates(t *testing.T) {
+	enet.Initialize()
+	defer enet.Deinitialize()
+	Stage = StageLevel // reconcile must not enter the level (needs a window)
+	defer func() { Stage = StageMainMenu }()
+	LE = NewLevelEditor(39, 83)
+
+	cfg := DefaultServerConfig()
+	cfg.Port = 27197
+	cfg.MaxPlayers = 2
+	cfg.Bots = 1
+	s, err := NewServer(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { Srv = nil; s.Close() }()
+
+	if err := startClient(fmt.Sprintf("127.0.0.1:%d", cfg.Port), false); err != nil {
+		t.Fatal(err)
+	}
+	c := Cli
+	pumpFor(1200*time.Millisecond, s, c)
+	if !c.Welcomed || c.W.Local == nil || len(s.Bots) != 1 {
+		t.Fatalf("not in the match: welcomed=%t local=%v bots=%d", c.Welcomed, c.W.Local, len(s.Bots))
+	}
+
+	bot := s.Bots[0]
+	hitter := s.W.Spawn(rl.Vector2{X: 300}, false) // out of everyone's reach
+	bot.takeHit(hitter)
+	bot.takeHit(hitter)
+	pumpFor(300*time.Millisecond, s, c)
+
+	seen := c.W.ByID(bot.ID)
+	if seen == nil {
+		t.Fatalf("the client does not see the bot")
+	}
+	if seen.Structure != bot.Structure {
+		t.Errorf("the client shows the bot at %v structure, the server has %v", seen.Structure, bot.Structure)
+	}
+	if seen.HitCount != 2 {
+		t.Errorf("the client shows %d hits toward the bot's next stun, want 2", seen.HitCount)
+	}
+}

@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	ProtocolVersion  uint16 = 3
+	ProtocolVersion  uint16 = 4
 	DefaultPort             = 27015
 	ChanUnreliable   uint8  = 0 // commands, snapshots
 	ChanReliable     uint8  = 1 // hello, welcome, reject, bye
@@ -134,6 +134,13 @@ const (
 	fClimbLeft
 )
 
+// The landed-hit count toward the next stun (0..2) rides in the two flag bits
+// after the ones above, so the record does not grow to carry it.
+const (
+	fHitCountShift        = 8
+	fHitCountMask  uint16 = 3 << fHitCountShift
+)
+
 const (
 	bLeft uint8 = 1 << iota
 	bRight
@@ -176,6 +183,7 @@ func recOf(a *Actor) ActorRec {
 	flag(fAttackQueued, a.AttackQueued)
 	flag(fClimbRight, a.CanClimbRight)
 	flag(fClimbLeft, a.CanClimbLeft)
+	r.Flags |= uint16(min(a.HitCount, StunEveryHits-1)) << fHitCountShift
 	if a.Attacker != nil {
 		r.AttackerID = a.Attacker.ID
 	}
@@ -199,6 +207,7 @@ func (r ActorRec) apply(a *Actor, w *World) {
 	a.AttackQueued = r.Flags&fAttackQueued != 0
 	a.CanClimbRight = r.Flags&fClimbRight != 0
 	a.CanClimbLeft = r.Flags&fClimbLeft != 0
+	a.HitCount = min(uint8((r.Flags&fHitCountMask)>>fHitCountShift), StunEveryHits-1)
 	a.Updown = r.Updown
 	a.PrevUpdown = r.PrevUpdown
 	a.Anim = animPath(r.Anim)
