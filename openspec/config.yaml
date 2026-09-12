@@ -11,8 +11,9 @@ context: |
   - Go 1.27, module `resistor` (single flat package `resistor` at repo root)
   - raylib-go (github.com/gen2brain/raylib-go/raylib v0.60) for window, input,
     rendering, shaders, audio; raygui for editor UI (style: resources/style_dark.rgs)
-  - go-enet (github.com/codecat/go-enet) for networking (multiplayer is WIP;
-    `Actor.updateMultiplayerInput` is a stub)
+  - go-enet (github.com/codecat/go-enet) for networking: client-side prediction,
+    snapshot interpolation, server lag compensation and spectators all work;
+    a headless dedicated server runs with `go run ./cmd -dedicated`
   - GLSL 330 fragment shaders embedded as Go string constants in shaders.go
 
   Layout:
@@ -27,7 +28,14 @@ context: |
   - shaders.go — 2D shadow-casting lights (Catalin Zima technique: distance →
     distort → reduction → shadow passes), palette-quantization post-process, hit-flash
   - palette.go — the fixed color palette the final frame is quantized to
-  - main_menu.go — 3D wireframe animated main menu
+  - main_menu.go — 3D wireframe animated main menu and its raygui screens
+    (main / host / join / connecting)
+  - world.go — World: the set of actors making up one simulation, client or server
+  - net_protocol.go — packet types and (de)serialisation; net_server.go,
+    net_client.go — the authoritative server and the predicting client;
+    net_interp.go — snapshot interpolation; net_lagcomp.go — server-side rewind
+    for hit tests
+  - spectator.go — spectator camera modes and HUD
   - math.go — small generic helpers (clamp, moveTo, lerp, aabb)
   - cursor.go — custom cursor; a lagging "attack cursor" drives guard/attack height
   - examples/ — standalone throwaway prototypes (each its own main package); not game code
@@ -36,9 +44,12 @@ context: |
   - level_1.json — level data, written back on exit by the editor
 
   Core conventions and constraints:
-  - Virtual resolution SW x SH = 160x90, window scaled by WindowScale (8).
-    Pixel-perfect rendering: point filtering, integer positions (actor Pos is
-    truncated to int each physics step).
+  - The level uses a virtual resolution SW x SH = 160x90, scaled by WindowScale (8)
+    to the fixed 1280x720 window. Pixel-perfect rendering: point filtering,
+    integer positions (actor Pos is truncated to int each physics step).
+  - The main menu does NOT use that grid: it has its own `menuPixel` (4), the
+    on-screen size of one scene pixel, and lays its widgets out in window pixels.
+    Do not assume WindowScale applies outside the level.
   - Fixed-timestep simulation at 60 Hz (accumulator in runLevel); rendering
     interpolates actor positions with `alpha`. Gameplay logic belongs in the fixed
     step (Actor.Update), not in per-frame code. PauseTime freezes physics (hit-stop).
@@ -63,7 +74,10 @@ context: |
   Code style:
   - Standard gofmt Go. Short, plain names. Minimal comments; existing comments
     (mostly in shaders) are often in Russian — either language is fine.
-  - No automated tests currently exist; verify changes by running the game.
+  - Tests cover the parts that run without a window: the net protocol, client,
+    server, interpolation, lag compensation, spectators and the menu layout math
+    (`go test ./...`). Anything needing a GL context, and everything visual, is
+    still verified by running the game.
   - Commit messages are short and lowercase (e.g. "smooth camera", "fixes").
 
 # Per-artifact rules (optional)
