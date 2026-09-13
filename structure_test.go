@@ -114,18 +114,22 @@ func TestStructureRegen(t *testing.T) {
 	}
 }
 
-// Two hits flinch, the third stuns, and the count starts again after it.
+// Two hits flinch, the third stuns, and the count starts again after it. The
+// structure a run costs is escalating and is covered on its own; here the pool
+// is topped up between hits so six of them can be counted without the defender
+// dying partway through.
 func TestEveryThirdHitStuns(t *testing.T) {
 	_, att, def := swing(t, 0)
 	for i, want := range []ActorState{StateIdle, StateIdle, StateAttacked, StateIdle, StateIdle, StateAttacked} {
 		def.State = StateIdle // the stun's own exit is not what is under test
+		def.Structure = MaxStructure
 		def.takeHit(att)
 		if def.State != want {
 			t.Errorf("hit %d left state %d, want %d", i+1, def.State, want)
 		}
-	}
-	if want := float32(MaxStructure - 6*HitStructure); def.Structure != want {
-		t.Errorf("after six hits: %v structure, want %v", def.Structure, want)
+		if def.Structure >= MaxStructure {
+			t.Errorf("hit %d cost no structure", i+1)
+		}
 	}
 }
 
@@ -244,7 +248,8 @@ func TestOneLandingPerSwing(t *testing.T) {
 
 	att.SwingHit = false // as starting the next swing does
 	att.updateAttack()
-	if want := float32(MaxStructure - 2*HitStructure); def.Structure != want {
+	// the second hit of the run costs a step more than the first
+	if want := float32(MaxStructure - HitStructure - (HitStructure + HitStructureStep)); def.Structure != want {
 		t.Errorf("after a second swing: %v structure, want %v", def.Structure, want)
 	}
 }
@@ -275,15 +280,25 @@ func TestBlockResolvesAtTheHitFrame(t *testing.T) {
 // out of the fight.
 func TestStructureBreakKills(t *testing.T) {
 	_, att, def := swing(t, 0)
-	for i := range 12 {
+	// a run kills when the pool runs out, not after a fixed number of hits: the
+	// escalating cost is what decides how many that is
+	hits := 0
+	for range 12 {
+		if def.State == StateDeath {
+			break
+		}
+		if def.Structure <= 0 {
+			t.Fatalf("after hit %d the fighter is at %v structure and still alive", hits, def.Structure)
+		}
 		def.State = StateIdle
 		def.takeHit(att)
-		if i < 11 && def.State == StateDeath {
-			t.Fatalf("hit %d killed a fighter that still had %v structure", i+1, def.Structure)
-		}
+		hits++
 	}
 	if def.State != StateDeath {
 		t.Errorf("twelve hits left state %d, want death (%d)", def.State, StateDeath)
+	}
+	if hits != 6 {
+		t.Errorf("a clean run killed in %d hits, want the 6 the escalating cost takes", hits)
 	}
 	if def.Structure != 0 {
 		t.Errorf("a broken fighter has %v structure, want 0", def.Structure)

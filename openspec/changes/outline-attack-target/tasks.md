@@ -22,9 +22,10 @@
 
 - [x] 4.1 Add an outline shader that traces a sprite frame's silhouette: discard the fighter's own pixels, keep a transparent pixel only where the body touches it, discard everything outside the band, and clamp neighbour sampling to the frame's own columns so a neighbouring pose cannot bleed in. Verify `go build ./...` succeeds.
 - [x] 4.2 Add one place that reports the texture, source rectangle and position the fighter's sprite is drawn with, and draw the outline from it so the two passes cannot drift. Verify by reading that it matches what `DrawAnimOnce` and `DrawAnim` use, including the frame and the facing.
-- [x] 4.3 Add the draw function: convert the band into the sprite's own coordinates, set the shader's uniforms, and draw the marked fighter's sprite a second time through it, in a colour taken from the palette so the palette pass leaves it unchanged and distinct from the structure bar's red and the energy bar's green. Verify it draws nothing when the band misses the sprite entirely.
-- [x] 4.4 Call it from the overlay loop in `runLevel`, before the structure bars and after the lighting, over the same sorted draw list. Verify `go build ./...` succeeds and that the lighting cannot tint it.
-- [ ] 4.5 Verify the debug overlay is untouched: its three red attack boxes still draw in debug builds, and `go build -tags release ./...` still succeeds with the outline present.
+- [x] 4.3 Add the draw function: convert the band into the sprite's own coordinates, set the shader's uniforms, and draw the marked fighter's sprite a second time through it, in a red taken from the palette so the palette pass leaves it unchanged at full strength. Verify it draws nothing when the band misses the sprite entirely.
+- [x] 4.4 Fade the outline across the band in the shader: full strength along the middle row and nothing at the top and bottom edges, from the band's unclipped range so the fade stays centred on the row the swing lands on when the band runs past the sprite. Verify `go build ./...` succeeds.
+- [x] 4.5 Call it from the overlay loop in `runLevel`, before the structure bars and after the lighting, over the same sorted draw list. Verify `go build ./...` succeeds and that the lighting cannot tint it.
+- [ ] 4.6 Verify the debug overlay is untouched: its three red attack boxes still draw in debug builds, and `go build -tags release ./...` still succeeds with the outline present.
 
 ## 5. Whole-change verification
 

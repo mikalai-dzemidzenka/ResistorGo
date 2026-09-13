@@ -31,6 +31,23 @@ The outline SHALL follow the sprite the fighter is actually showing, changing wi
 - **WHEN** a marked fighter's animation advances to a frame with a different pose
 - **THEN** the outline traces the new pose
 
+### Requirement: The outline is red and fades across the band
+The outline SHALL be red. It SHALL be drawn at full strength along the middle of the band — the row the swing lands on — and SHALL fade out towards the band's top and bottom edges, reaching nothing at each, so the mark has no hard edge where the band stops and its brightest row is the one that would be hit.
+
+The fade SHALL stay centred on the row the swing lands on even where the band runs past the top or bottom of the fighter's sprite, so a mark clipped by the edge of the body is not a mark whose strongest row has moved.
+
+#### Scenario: Brightest where it lands
+- **WHEN** a fighter is marked
+- **THEN** the outline is strongest along the middle of the band and weakest at its top and bottom edges
+
+#### Scenario: No hard edge
+- **WHEN** a fighter is marked
+- **THEN** the outline fades to nothing at the band's edges rather than stopping at full strength
+
+#### Scenario: Clipped by the body
+- **WHEN** the band runs past the top or the bottom of the marked fighter's sprite
+- **THEN** the part of the outline that is still on the body is drawn at the strength that row calls for, unmoved by the clipping
+
 ### Requirement: The outline follows the attack height
 The outlined band SHALL follow the local player's current attack height as it changes, without waiting for a swing to be thrown. Moving the aim from one height to another SHALL move the band on the next rendered frame.
 

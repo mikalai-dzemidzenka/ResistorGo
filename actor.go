@@ -33,8 +33,15 @@ const (
 	// Structure is the fighter's only health model, counted in hit-units.
 	// A hit costs 1, block-all costs less than a hit, a block at the attacker's
 	// height pays back, and time pays back once the pressure stops.
-	MaxStructure       = 12
-	HitStructure       = 1
+	MaxStructure = 12
+	HitStructure = 1
+	// A run of hits costs more as it goes: each hit after the first in the same
+	// run costs a step more than the one before, up to a ceiling. HitRunCapped
+	// is the run length at which the cost has reached that ceiling - derived,
+	// so retuning the step or the ceiling cannot leave the two disagreeing.
+	HitStructureStep   = 0.5
+	HitStructureMax    = 3
+	HitRunCapped       = uint8((HitStructureMax - HitStructure) / HitStructureStep)
 	BlockAllStructure  = 0.4
 	BlockStructure     = 0.5
 	StructureRegen     = 1  // per second, once calm
@@ -157,6 +164,7 @@ type Actor struct {
 	CanClimbLeft     bool
 	Structure        float32
 	HitCount         uint8   // landed hits since the last stun or recovery
+	HitRun           uint8   // hits landed in a row; unlike HitCount a stun does not clear it
 	CalmTicks        uint16  // ticks since structure was last lost
 	EnergyCalm       uint16  // ticks since energy was last spent
 	FlinchTicks      uint8   // ticks a hit that did not stun keeps the fighter flickering
@@ -929,7 +937,10 @@ func (a *Actor) regenStructure() {
 	if a.CalmTicks < StructureCalmTicks {
 		a.CalmTicks++
 		if a.CalmTicks == StructureCalmTicks {
+			// both counts go: a fighter left alone this long is out from under
+			// whatever was happening to it, the stun and the run alike
 			a.HitCount = 0
+			a.endHitRun()
 		}
 		return
 	}
@@ -955,12 +966,25 @@ func (a *Actor) regenEnergy() {
 	}
 }
 
+// hitCost is what the next hit on this fighter costs: the base, plus a step for
+// each hit already landed in the same run, never past the ceiling. It reads the
+// run as it stands before the hit, so the first hit of a run costs the base.
+func (a *Actor) hitCost() float32 {
+	return min(HitStructure+HitStructureStep*float32(a.HitRun), HitStructureMax)
+}
+
+// endHitRun ends the run of hits against this fighter: the next one to land
+// costs the base again. A block does this, and so does recovery.
+func (a *Actor) endHitRun() { a.HitRun = 0 }
+
 // takeHit resolves an attack that landed. Every hit costs structure and
 // flinches, every third one stuns instead, and the one that empties the pool
 // kills. It is one of the two places structure is spent.
 func (a *Actor) takeHit(attacker *Actor) {
 	attacker.SwingHit = true
-	if a.spendStructure(HitStructure) {
+	cost := a.hitCost()
+	a.HitRun = min(a.HitRun+1, HitRunCapped)
+	if a.spendStructure(cost) {
 		a.enterDeathState(attacker)
 		return
 	}
@@ -978,6 +1002,7 @@ func (a *Actor) takeHit(attacker *Actor) {
 // hit would have cost.
 func (a *Actor) confirmBlock(attacker *Actor) {
 	attacker.SwingHit = true
+	a.endHitRun() // any attack stopped is the run broken, block-all included
 	if a.Updown == 3 {
 		if a.spendStructure(BlockAllStructure) {
 			a.enterDeathState(attacker)
@@ -1043,7 +1068,7 @@ func (a *Actor) enterDeathState(attacker *Actor) {
 	a.State = StateDeath
 	a.Attacker = attacker
 	a.Events |= EvHit
-	a.HitCount, a.FlinchTicks, a.DeathTicks = 0, 0, 0
+	a.HitCount, a.HitRun, a.FlinchTicks, a.DeathTicks = 0, 0, 0, 0
 	a.AnimWhite = false
 	a.Speed = rl.Vector2{}
 	a.AttackQueued = false
