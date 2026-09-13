@@ -127,6 +127,9 @@ func scrubDirection(dx float32) int {
 // restores the world onto it. Input is passed in rather than read here so the
 // state machine can be tested without a window.
 func UpdateTime(rPressed bool, dx, dt float32) bool {
+	if Editing {
+		rPressed = false // edit mode holds the match; time manipulation waits
+	}
 	if rPressed {
 		if TimeMode == TimeOff {
 			TimeMode = TimePaused

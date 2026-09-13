@@ -30,7 +30,7 @@ const (
 )
 
 var (
-	Debug                = true
+	Debug                = DevTools
 	GameTimeSec          float64
 	Accumulator          float64
 	PhysicsTime          float64
@@ -130,7 +130,7 @@ func Game() {
 	LE.LoadLevel("level_1.json")
 
 	for !rl.WindowShouldClose() && !quit {
-		if rl.IsKeyPressed(rl.KeyGrave) {
+		if DevTools && rl.IsKeyPressed(rl.KeyGrave) {
 			Debug = !Debug
 		}
 		dt := rl.GetFrameTime()
@@ -151,9 +151,6 @@ func Game() {
 		present()
 	}
 	leaveMatch("", menuMain)
-	if LE.dirty {
-		LE.SaveLevel("level_1.json")
-	}
 }
 
 func loadStyle() {
@@ -190,6 +187,7 @@ func leaveMatch(reason string, screen int) {
 	CL, SV = nil, nil
 	NetMode = NetOffline
 	ResetTime()
+	Editing = false
 	Stage = StageMainMenu
 	menuScreen = screen
 	menuError = reason
@@ -273,10 +271,13 @@ func runLevel(dt float32) {
 	}
 
 	spectating := Cli != nil && Cli.Spectator
-	if !spectating {
+	if !spectating && !Editing {
 		latchInput()
 	}
 	if NetMode == NetOffline {
+		if DevTools && rl.IsKeyPressed(rl.KeyF2) {
+			toggleEditing(true, TimeMode != TimeOff)
+		}
 		// Time manipulation is single player only, and holds the simulation
 		// while it is on: no step, and no dt banked up for one either.
 		if UpdateTime(rl.IsKeyPressed(rl.KeyR), rl.GetMouseDelta().X, dt) {
@@ -284,7 +285,7 @@ func runLevel(dt float32) {
 				actor.restoreRewind()
 			}
 		}
-		if TimeMode == TimeOff {
+		if TimeMode == TimeOff && !Editing {
 			stepOffline(dt)
 		}
 	} else {
@@ -309,10 +310,10 @@ func runLevel(dt float32) {
 	}
 	presentEffects(w)
 
-	if NetMode == NetOffline && Debug {
+	if Editing {
 		LE.Update(dt)
 	}
-	if Debug && Cli != nil {
+	if DevTools && Debug && Cli != nil {
 		Cli.Sim.controls()
 	}
 	if local != nil {
@@ -351,7 +352,7 @@ func runLevel(dt float32) {
 				a.Draw()
 			}
 		}
-		if Debug && Srv != nil {
+		if DevTools && Debug && Srv != nil {
 			for _, r := range Srv.LastRewound {
 				rl.DrawRectangleLinesEx(r, 1, rl.Orange)
 			}
@@ -409,8 +410,9 @@ func runLevel(dt float32) {
 	dst := rl.NewRectangle(0, 0, SW*WindowScale, SH*WindowScale)
 	rl.DrawTexturePro(ScreenFullTexture.Texture, src, dst, rl.Vector2{}, 0, rl.White)
 	rl.EndShaderMode()
-	if Debug && NetMode == NetOffline {
+	if Editing {
 		LE.DrawGui()
+		drawEditMarker()
 	}
 	if spectating {
 		drawSpectatorHUD()
@@ -418,7 +420,7 @@ func runLevel(dt float32) {
 		Cur.DrawGUI()
 	}
 
-	if Debug {
+	if DevTools && Debug {
 		fps := strconv.Itoa(int(rl.GetFPS()))
 		rl.DrawText("fps:"+fps, 20, 20, 2, rl.White)
 		rl.DrawText(fmt.Sprintf("gameTime:%f", GameTimeSec), 20, 30, 2, rl.White)

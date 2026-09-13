@@ -53,7 +53,7 @@ type LevelEditor struct {
 	gridH                  int32
 	objects                map[int]LevelLayer // layer - pos - object
 	objectsIndexed         []LevelObject
-	dirty                  bool // edited since load; saved on exit only if set
+	dirty                  bool // edited since the last save; only Ctrl+S in edit mode writes
 }
 type LevelObject struct {
 	Resource      string        `json:"resource,omitempty"`
@@ -96,6 +96,10 @@ func (le *LevelEditor) updateCursor() {
 }
 
 func (le *LevelEditor) Update(dt float32) {
+	if (rl.IsKeyDown(rl.KeyLeftControl) || rl.IsKeyDown(rl.KeyRightControl)) && rl.IsKeyPressed(rl.KeyS) {
+		le.SaveLevel("level_1.json")
+		return
+	}
 	if rl.IsKeyPressed(rl.KeyTab) {
 		LE.OpenObjects()
 	}
@@ -162,7 +166,7 @@ func (le *LevelEditor) Draw() {
 	for _, obj := range le.objectsIndexed {
 		rl.DrawTexture(resources[obj.Resource], obj.X, obj.Y, rl.White)
 	}
-	if Debug {
+	if DevTools && Debug {
 		for _, obj := range le.objectsIndexed {
 			if obj.CollisionRect != nil {
 				rl.DrawRectangleLinesEx(rl.Rectangle{
@@ -216,9 +220,14 @@ func (le *LevelEditor) DrawGrid() {
 }
 
 func (le *LevelEditor) LoadLevel(path string) {
-	// Disk wins so the in-game editor's saves take effect on the next run; the
-	// embedded copy is what a shipped binary, which has no resources beside it, uses.
-	b, err := os.ReadFile(path)
+	// A development build reads the disk first, so a level saved from the editor
+	// takes effect on the next run. A release build plays the level it was built
+	// with, whatever lies beside it, so every copy agrees on the level fingerprint.
+	var b []byte
+	err := os.ErrNotExist
+	if DevTools {
+		b, err = os.ReadFile(path)
+	}
 	if err != nil {
 		b, err = assetFS.ReadFile(path)
 	}
@@ -251,6 +260,9 @@ func (le *LevelEditor) Hash() uint64 {
 }
 
 func (le *LevelEditor) SaveLevel(path string) {
+	if !DevTools {
+		return // a release build never writes the level
+	}
 	b, err := le.marshal()
 	if err != nil {
 		rl.TraceLog(rl.LogError, "failed to save level: marshal level: %s", err.Error())
@@ -268,6 +280,7 @@ func (le *LevelEditor) SaveLevel(path string) {
 		rl.TraceLog(rl.LogError, "failed to save level: save file: %s", err.Error())
 		return
 	}
+	le.dirty = false
 }
 
 func (le *LevelEditor) OpenObjects() {
@@ -307,4 +320,37 @@ func (le *LevelEditor) LightOccluders() []rl.Rectangle {
 		}
 	}
 	return result
+}
+
+// Editing is edit mode: the match is paused and the level editor takes the
+// mouse. Outside it the editor reads no input at all, so an attack is never
+// also an edit.
+var Editing bool
+
+// toggleEditing handles a press of the edit-mode key. Edit mode is only for a
+// development build's single-player match, and never while time manipulation
+// holds the match. Leaving it drops any click latched while editing, so it
+// does not fire as an attack on the first tick back.
+func toggleEditing(offline, timeManipulating bool) {
+	if !DevTools {
+		return
+	}
+	if Editing {
+		Editing = false
+		pressedAttack, pressedJump = false, false
+		return
+	}
+	if offline && !timeManipulating {
+		Editing = true
+	}
+}
+
+// drawEditMarker says that edit mode is on, and whether the level has edits
+// that Ctrl+S has not saved yet. Drawn in screen space, after the palette pass.
+func drawEditMarker() {
+	text := "EDIT"
+	if LE.dirty {
+		text = "EDIT (unsaved - Ctrl+S)"
+	}
+	rl.DrawText(text, 20, 70, 20, rl.Yellow)
 }
