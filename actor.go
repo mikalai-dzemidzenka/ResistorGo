@@ -739,6 +739,21 @@ func latchInput() {
 	}
 }
 
+// matchHeld reports whether a paused mode is holding the match: edit mode, or
+// time manipulation. No fixed step runs while it is true, so nothing would
+// consume input latched for one. Every pause path answers this one question,
+// rather than each keeping its own list of conditions.
+func matchHeld() bool {
+	return Editing || TimeMode != TimeOff
+}
+
+// clearLatchedInput drops input latched for a fixed step that is not going to
+// run. Both paused modes call it as they end, so a click made while the match
+// was held cannot fire the moment it resumes.
+func clearLatchedInput() {
+	pressedAttack, pressedJump = false, false
+}
+
 // sampleInput reads the local player's devices into a command for actor a.
 func sampleInput(a *Actor) Input {
 	in := Input{

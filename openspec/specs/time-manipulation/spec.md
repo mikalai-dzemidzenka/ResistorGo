@@ -97,7 +97,7 @@ When the player leaves the mode on a frame earlier than the live edge, the match
 - **THEN** the frames played after resuming are recorded and can be rewound through in a later session
 
 ### Requirement: Gameplay input is suppressed while the mode is on
-While time-manipulation mode is on, fighter input SHALL NOT be applied: movement, jumping, attacking and stance changes SHALL have no effect on the match until the mode is left. The mouse SHALL drive only the scrub. The crosshair MAY keep following the mouse.
+While time-manipulation mode is on, fighter input SHALL NOT be applied: movement, jumping, attacking and stance changes SHALL have no effect on the match until the mode is left. The mouse SHALL drive only the scrub. The crosshair MAY keep following the mouse. Input given while the mode is on SHALL NOT be held over and acted on once the match resumes.
 
 #### Scenario: Attacking does nothing while scrubbing
 - **WHEN** the player clicks the attack button while the mode is on
@@ -106,3 +106,7 @@ While time-manipulation mode is on, fighter input SHALL NOT be applied: movement
 #### Scenario: Movement keys do nothing while scrubbing
 - **WHEN** the player holds a movement key while the mode is on
 - **THEN** the fighter does not move and no input is buffered for when the mode is left
+
+#### Scenario: Clicks do not carry over
+- **WHEN** the player clicks the attack button several times while the mode is on and then leaves it
+- **THEN** the fighter does not attack on leaving, and the match resumes with no action pending
