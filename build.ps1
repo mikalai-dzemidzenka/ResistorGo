@@ -6,6 +6,8 @@
 #
 #   -trimpath   drops absolute build paths
 #   -s -w       drops the symbol table and DWARF, roughly halving the binary
+#   -tags release  leaves the developer tools out: no level editor, debug overlay,
+#                  network-simulation keys or level writes (devtools_release.go)
 #
 # UPX, if installed, packs it further (~2.5x). It is optional because a packed
 # binary occasionally trips heuristic antivirus scanners; drop it if that bites.
@@ -15,7 +17,7 @@ param([string]$Out = "resistor.exe")
 
 $ErrorActionPreference = "Stop"
 
-go build -trimpath -ldflags "-s -w" -o $Out ./cmd
+go build -trimpath -tags release -ldflags "-s -w" -o $Out ./cmd
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 $size = (Get-Item $Out).Length

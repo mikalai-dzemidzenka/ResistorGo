@@ -115,15 +115,19 @@ The server SHALL maintain the configured number of bot fighters. Bots SHALL be s
 - **THEN** the second human is accepted and one bot is removed
 
 ### Requirement: Offline-only features are disabled online
-While in a networked match (host or client), time rewind, the level editor and writing the level file on exit SHALL be disabled. Debug overlays SHALL remain available.
+While in a networked match (host or client), time manipulation, the level editor and writing the level file SHALL be disabled. In a development build, debug overlays SHALL remain available; a release build has none.
 
 #### Scenario: Rewind key online
-- **WHEN** a player in a networked match holds R
-- **THEN** nothing is rewound and gameplay continues normally
+- **WHEN** a player in a networked match presses R
+- **THEN** nothing is paused or rewound and gameplay continues normally
 
 #### Scenario: Level not saved
 - **WHEN** a player exits the game after a networked match
 - **THEN** the level file on disk is unchanged
+
+#### Scenario: Overlay online in a development build
+- **WHEN** a player of a development build toggles the debug overlay in a networked match
+- **THEN** the overlay is shown and the match is unaffected
 
 ### Requirement: Network diagnostics
 In debug mode, a networked client SHALL display round-trip time, interpolation delay, snapshot receive rate and the number of prediction corrections. The client SHALL also offer a network simulation setting that adds configurable artificial latency (0–500 ms) and packet loss (0–50 %) to its traffic.

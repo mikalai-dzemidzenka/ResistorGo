@@ -390,7 +390,7 @@ func (a *Actor) Draw() {
 		}
 	}
 
-	if Debug {
+	if DevTools && Debug {
 		rl.DrawRectangleLinesEx(rl.Rectangle{
 			X:      a.Pos.X,
 			Y:      a.Pos.Y,
