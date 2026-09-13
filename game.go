@@ -42,6 +42,9 @@ var (
 	LE                   LevelEditor = NewLevelEditor(39, 83)
 	Stage                int         = StageMainMenu
 	MainMenuTexture      rl.RenderTexture2D
+	MenuBackground       rl.RenderTexture2D
+	MenuFrame            rl.RenderTexture2D
+	MenuPaletteTexture   rl.Texture2D
 	ScreenFullTexture    rl.RenderTexture2D
 	ScreenPaletteTexture rl.Texture2D
 	PaletteShader        rl.Shader
@@ -261,8 +264,6 @@ func runLevel(dt float32) {
 		light2 = newZimaLight(512, 128, rl.White, intense)
 		light3 = newZimaLight(512, 128, rl.White, intense)
 
-		PaletteShader = rl.LoadShaderFromMemory("", fsPalette)
-		ScreenPaletteTexture = makePaletteTexture(Palette)
 		ScreenFullTexture = rl.LoadRenderTexture(SW*WindowScale, SH*WindowScale)
 	}
 	if rl.IsKeyPressed(rl.KeyEscape) {

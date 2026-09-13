@@ -32,7 +32,10 @@ var (
 	winSizeEdit     bool
 )
 
-var mainMenuInit bool
+var (
+	mainMenuInit bool
+	menuCity     []cityBuilding
+)
 
 func runMainMenu(dt float32) {
 	if Srv != nil || Cli != nil {
@@ -40,25 +43,27 @@ func runMainMenu(dt float32) {
 	}
 	if !mainMenuInit {
 		mainMenuInit = true
-		MainMenuTexture = rl.LoadRenderTexture(SW*WindowScale/menuPixel, SH*WindowScale/menuPixel)
+		MainMenuTexture = rl.LoadRenderTexture(menuSceneW, menuSceneH)
 		rl.SetTextureFilter(MainMenuTexture.Texture, rl.FilterPoint)
+		MenuBackground = rl.LoadRenderTexture(menuSceneW, menuSceneH)
+		rl.SetTextureFilter(MenuBackground.Texture, rl.FilterPoint)
+		menuCity = cityLayout(citySeed)
 	}
+	t := GameTimeSec
+	gridCol := neonColor(neonGrid, t)
+	windowCol := neonColor(neonWindow, t)
+
+	// the fixed layers: dusk sky, Neo-Minsk and the neon grid
+	drawMenuBackground(t, gridCol, windowCol)
+
 	rl.BeginTextureMode(MainMenuTexture)
-	rl.ClearBackground(rl.Color{0, 0, 0, 0})
-	rl.BeginMode3D(rl.NewCamera3D(rl.Vector3{0, -1.5, 10}, rl.Vector3{0, 0, 0}, rl.Vector3{0, 1, 0}, 120, rl.CameraPerspective))
-	var linesColor = rl.Red
-	linesColor.A = 200
-	for i := float32(-30); i <= 30; i++ {
-		rl.DrawLine3D(rl.Vector3{X: i}, rl.Vector3{X: i * 1.5, Z: 10}, linesColor)
-	}
-	for i := float32(-30); i <= 30; i++ {
-		rl.DrawLine3D(rl.Vector3{Y: float32(math.Sin(GameTimeSec)+1.2) * i}, rl.Vector3{X: -15, Y: i * 3}, linesColor)
-		rl.DrawLine3D(rl.Vector3{Y: float32(math.Sin(GameTimeSec)+1.2) * i}, rl.Vector3{X: 15, Y: i * 3}, linesColor)
-	}
-	rl.EndMode3D()
+	rl.ClearBackground(menuSilhouette)
+	drawSceneBackground()
 
 	// 72 screen px per unit; the texture is drawn unflipped, so -Y is up on screen.
 	// Models sit right of the menu panel, never behind the logo or the widgets.
+	// They do not rock with the background: their placement is what the menu
+	// layout guarantees rest on.
 	rl.BeginMode3D(rl.NewCamera3D(rl.Vector3{0, 5, 10}, rl.Vector3{0, 0, 0}, rl.Vector3{0, 1, 0}, 10, rl.CameraOrthographic))
 	head()
 	jab1()
@@ -67,13 +72,13 @@ func runMainMenu(dt float32) {
 	martelo()
 	rl.EndMode3D()
 	rl.EndTextureMode()
-	rl.BeginTextureMode(VirtualScreen)
+	rl.BeginTextureMode(MenuFrame)
 	rl.ClearBackground(rl.Black)
 	{
 		rl.DrawTextureEx(MainMenuTexture.Texture, rl.Vector2{
 			X: 0,
 			Y: 0,
-		}, 0, menuPixel, rl.Red)
+		}, 0, menuPixel, rl.White)
 		tex := resources["resources/main_menu/resistor.png"]
 		col := rl.White
 		if GameTimeSec > 3 {
@@ -88,6 +93,22 @@ func runMainMenu(dt float32) {
 		rl.DrawTextureEx(tex, rl.Vector2{float32(x), menuLogoBottom - float32(tex.Height)*s}, 0, s, col)
 	}
 	drawMenuUI()
+	rl.EndTextureMode()
+
+	// everything the menu shows goes through the palette pass, so every pixel of
+	// it - fades, blends and widget text included - is an Endesga 64 colour
+	rl.BeginTextureMode(VirtualScreen)
+	rl.ClearBackground(rl.Black)
+	rl.BeginShaderMode(PaletteShader)
+	rl.SetShaderValueTexture(PaletteShader, rl.GetShaderLocation(PaletteShader, "texture1"), MenuPaletteTexture)
+	rl.SetShaderValue(PaletteShader, rl.GetShaderLocation(PaletteShader, "resolution"), []float32{VW, VH}, rl.ShaderUniformVec2)
+	rl.SetShaderValue(PaletteShader, rl.GetShaderLocation(PaletteShader, "pixelSize"), []float32{1}, rl.ShaderUniformFloat)
+	rl.SetShaderValue(PaletteShader, rl.GetShaderLocation(PaletteShader, "paletteSize"), []float32{float32(len(EndesgaPalette))}, rl.ShaderUniformFloat)
+	rl.SetShaderValue(PaletteShader, rl.GetShaderLocation(PaletteShader, "ditherStrength"), []float32{0}, rl.ShaderUniformFloat)
+	rl.DrawTexturePro(MenuFrame.Texture,
+		rl.Rectangle{Width: VW, Height: -VH}, // флип render-текстуры
+		rl.Rectangle{Width: VW, Height: VH}, rl.Vector2{}, 0, rl.White)
+	rl.EndShaderMode()
 	rl.EndTextureMode()
 }
 
@@ -273,7 +294,7 @@ func hostGame() {
 
 func head() {
 	const headScale = 1.3
-	color := rl.Red
+	color := menuModelHead
 	color.A = uint8((math.Sin(GameTimeSec) + 1) * 127)
 	rl.DrawModelWiresEx(
 		models["resources/main_menu/head.obj"],
@@ -287,7 +308,7 @@ func head() {
 
 func jab1() {
 	const jabScale = 0.55
-	colorJab := rl.Red
+	colorJab := menuModelJab
 	if GameTimeSec > 1.5 {
 		colorJab.A = uint8((math.Sin(GameTimeSec-1.5) + 1) * 127)
 	} else {
@@ -305,7 +326,7 @@ func jab1() {
 
 func jab2() {
 	const jabScale = 0.55
-	colorJab := rl.Red
+	colorJab := menuModelJab
 	if GameTimeSec > 1.8 {
 		colorJab.A = uint8((math.Sin(GameTimeSec-1.8) + 1) * 127)
 	} else {
@@ -323,7 +344,7 @@ func jab2() {
 
 func kick() {
 	const jabScale = 0.7
-	colorJab := rl.Red
+	colorJab := menuModelKick
 	if GameTimeSec > 4 {
 		colorJab.A = uint8((math.Sin(GameTimeSec-4) + 1) * 127)
 	} else {
@@ -341,7 +362,7 @@ func kick() {
 
 func martelo() {
 	const jabScale = 0.7
-	colorJab := rl.Red
+	colorJab := menuModelKick
 	if GameTimeSec > 4.5 {
 		colorJab.A = uint8((math.Sin(GameTimeSec-4.5) + 1) * 127)
 	} else {
