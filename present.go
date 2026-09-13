@@ -16,6 +16,15 @@ var dstRect = rl.NewRectangle(0, 0, VW, VH)
 
 func initPresent() {
 	VirtualScreen = rl.LoadRenderTexture(VW, VH)
+	MenuFrame = rl.LoadRenderTexture(VW, VH)
+	rl.SetTextureFilter(MenuFrame.Texture, rl.FilterPoint)
+	// The palette pass serves the menu as well as the level, and the menu draws
+	// first, so the shader and both palette textures are loaded here rather than
+	// when a level starts. The menu quantizes to Endesga 64, the level to its own
+	// palette.
+	PaletteShader = rl.LoadShaderFromMemory("", fsPalette)
+	MenuPaletteTexture = makePaletteTexture(EndesgaPalette)
+	ScreenPaletteTexture = makePaletteTexture(Palette)
 	letterbox()
 }
 
