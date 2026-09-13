@@ -134,9 +134,11 @@ func UpdateTime(rPressed bool, dx, dt float32) bool {
 		if TimeMode == TimeOff {
 			TimeMode = TimePaused
 		} else {
-			// Resuming here: the frames ahead are a future that will not happen.
+			// Resuming here: the frames ahead are a future that will not happen,
+			// and a click made while the match was held is not an attack now.
 			rewindResumeHere()
 			TimeMode = TimeOff
+			clearLatchedInput()
 		}
 		ScrubDir, scrubAcc = 0, 0
 		return false

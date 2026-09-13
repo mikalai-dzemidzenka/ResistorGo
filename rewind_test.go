@@ -231,3 +231,52 @@ func TestScrubStopsWithTheMouse(t *testing.T) {
 		t.Errorf("cursor %d mode %d after stopping, want %d and paused", rewindCursor, TimeMode, stopped)
 	}
 }
+
+// One rule answers "is a paused mode holding the match?" for every pause path,
+// so no path can be left out of a gate the way time manipulation once was.
+func TestMatchHeld(t *testing.T) {
+	defer func() { Editing = false; ResetTime() }()
+	ResetTime()
+	Editing = false
+	if matchHeld() {
+		t.Errorf("the match is held during normal play")
+	}
+	Editing = true
+	if !matchHeld() {
+		t.Errorf("the match is not held while edit mode is on")
+	}
+	Editing = false
+	for _, mode := range []int{TimePaused, TimeScrubbing} {
+		TimeMode = mode
+		if !matchHeld() {
+			t.Errorf("the match is not held while time manipulation is in mode %d", mode)
+		}
+	}
+	TimeMode = TimeOff
+	if matchHeld() {
+		t.Errorf("the match is still held once both modes are off")
+	}
+}
+
+// A click made while time manipulation holds the match must not fire when the
+// match resumes: no fixed step runs during the pause, so nothing consumes the
+// latch unless leaving the mode drops it.
+func TestLeavingTimeManipulationDropsLatchedInput(t *testing.T) {
+	defer func() { ResetTime(); clearLatchedInput() }()
+	ResetTime()
+	recordFrames(10)
+
+	UpdateTime(true, 0, 1.0/60) // enter
+	if !matchHeld() {
+		t.Fatalf("time manipulation is on but the match is not held")
+	}
+	pressedAttack, pressedJump = true, true // clicked while the match is held
+
+	UpdateTime(true, 0, 1.0/60) // leave
+	if pressedAttack || pressedJump {
+		t.Errorf("leaving time manipulation kept latched input: attack %t jump %t", pressedAttack, pressedJump)
+	}
+	if matchHeld() {
+		t.Errorf("the match is still held after leaving time manipulation")
+	}
+}

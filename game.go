@@ -272,7 +272,7 @@ func runLevel(dt float32) {
 	}
 
 	spectating := Cli != nil && Cli.Spectator
-	if !spectating && !Editing {
+	if !spectating && !matchHeld() {
 		latchInput()
 	}
 	if NetMode == NetOffline {
@@ -286,7 +286,7 @@ func runLevel(dt float32) {
 				actor.restoreRewind()
 			}
 		}
-		if TimeMode == TimeOff && !Editing {
+		if !matchHeld() {
 			stepOffline(dt)
 		}
 	} else {

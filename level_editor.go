@@ -337,7 +337,7 @@ func toggleEditing(offline, timeManipulating bool) {
 	}
 	if Editing {
 		Editing = false
-		pressedAttack, pressedJump = false, false
+		clearLatchedInput()
 		return
 	}
 	if offline && !timeManipulating {
