@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	ProtocolVersion  uint16 = 5
+	ProtocolVersion  uint16 = 6
 	DefaultPort             = 27015
 	ChanUnreliable   uint8  = 0 // commands, snapshots
 	ChanReliable     uint8  = 1 // hello, welcome, reject, bye
@@ -143,6 +143,15 @@ const (
 	fHitCountMask  uint16 = 3 << fHitCountShift
 )
 
+// The run of hits against a fighter rides in the three flag bits above the stun
+// count, so the record does not grow to carry it. Three bits hold every run the
+// cost can climb over; a longer one buys nothing, which is why it is clamped
+// rather than widened.
+const (
+	fHitRunShift        = 10
+	fHitRunMask  uint16 = 7 << fHitRunShift
+)
+
 const (
 	bLeft uint8 = 1 << iota
 	bRight
@@ -188,6 +197,7 @@ func recOf(a *Actor) ActorRec {
 	flag(fClimbRight, a.CanClimbRight)
 	flag(fClimbLeft, a.CanClimbLeft)
 	r.Flags |= uint16(min(a.HitCount, StunEveryHits-1)) << fHitCountShift
+	r.Flags |= uint16(min(a.HitRun, HitRunCapped)) << fHitRunShift
 	if a.Attacker != nil {
 		r.AttackerID = a.Attacker.ID
 	}
@@ -212,6 +222,7 @@ func (r ActorRec) apply(a *Actor, w *World) {
 	a.CanClimbRight = r.Flags&fClimbRight != 0
 	a.CanClimbLeft = r.Flags&fClimbLeft != 0
 	a.HitCount = min(uint8((r.Flags&fHitCountMask)>>fHitCountShift), StunEveryHits-1)
+	a.HitRun = min(uint8((r.Flags&fHitRunMask)>>fHitRunShift), HitRunCapped)
 	a.Updown = r.Updown
 	a.PrevUpdown = r.PrevUpdown
 	a.Anim = animPath(r.Anim)

@@ -136,7 +136,7 @@ in vec4 fragColor;
 uniform sampler2D texture0;
 uniform vec2 texelSize;    // one texel, in texture coordinates
 uniform vec4 frameBounds;  // u0, v0, u1, v1 of this frame within the sheet
-uniform vec2 band;         // the v range to keep; the rest is discarded
+uniform vec2 band;         // the v range the swing lands on
 uniform vec4 outlineColor;
 
 out vec4 finalColor;
@@ -172,7 +172,15 @@ void main()
     if (neighbours < 0.5) {
         discard;
     }
-    finalColor = outlineColor;
+
+    // Solid along the middle of the band - the line the swing actually lands
+    // on - fading to nothing at its top and bottom. The mark has no hard edge
+    // where the band stops, and the brightest row is the one that would be hit.
+    float middle = (band.x + band.y) * 0.5;
+    float reach = max((band.y - band.x) * 0.5, 1e-6);
+    float fade = clamp(1.0 - abs(uv.y - middle) / reach, 0.0, 1.0);
+
+    finalColor = vec4(outlineColor.rgb, outlineColor.a * fade);
 }
 `
 

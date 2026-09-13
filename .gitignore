@@ -1,2 +1,5 @@
 # per-machine settings written by the options screen
 settings.json
+
+# build output of `go build ./cmd`; the shipped binary is resistor.exe
+cmd.exe

@@ -12,9 +12,10 @@ import (
 // stays the player's read.
 const spriteFrame = 48 // one animation frame, in world pixels
 
-// An exact palette entry, so the palette pass leaves it unchanged. Blue-ish:
-// not the structure bar's red, not the energy bar's green.
-var attackOutlineColor = rl.SkyBlue
+// An exact palette entry, so the palette pass leaves it unchanged where the
+// mark is at full strength. The fade takes it through the palette's darker reds
+// as it thins out, which is what gives the gradient its steps.
+var attackOutlineColor = rl.Red
 
 // outlineTarget reports whether aimer's swing marks target this frame. It is
 // the drawing rule in one place: there is a fighter aiming, it is not the one
@@ -83,12 +84,14 @@ func drawAttackOutline(aimer, target *Actor) {
 	}
 	band := attackOutlineBand(aimer, target)
 
-	// the band, as a range of the sprite's own height
+	// The band, as a range of the sprite's own height. The shader is given the
+	// range unclipped, so the fade stays centred on the row the swing lands on
+	// even when the band runs past the top or bottom of the sprite; clipping it
+	// is only how we tell that it misses the sprite altogether.
 	top := (band.Y - pos.Y) / src.Height
 	bottom := (band.Y + band.Height - pos.Y) / src.Height
 	frameBottom := src.Height / float32(tex.Height)
-	top, bottom = clamp(top, 0, frameBottom), clamp(bottom, 0, frameBottom)
-	if bottom-top <= 0 {
+	if clamp(bottom, 0, frameBottom)-clamp(top, 0, frameBottom) <= 0 {
 		return // the swing passes over or under the sprite entirely
 	}
 
