@@ -33,8 +33,17 @@ const (
 	HitStructure       = 1
 	BlockAllStructure  = 0.4
 	BlockStructure     = 0.5
-	StructureRegen     = 2  // per second, once calm
+	StructureRegen     = 1  // per second, once calm
 	StructureCalmTicks = 90 // 1.5s without a loss before it refills
+
+	// Energy is what a fighter spends to attack, counted in whole points.
+	// Every swing costs the same, a block at the attacker's height pays back,
+	// and time pays back once the fighter stops swinging.
+	MaxEnergy          = 200
+	EnergySwing        = 12 // sixteen swings from a full pool
+	EnergyBlockRestore = 15 // more than a swing costs: one read pays for the answer
+	EnergyRegenTicks   = 4  // one point every 4 ticks, so 15 per second
+	EnergyCalmTicks    = 90 // 1.5s without a swing before it refills
 
 	StunEveryHits   = 3
 	StunKnockback   = 150
@@ -87,6 +96,7 @@ const (
 	EvAttackStart uint8 = 1 << iota
 	EvHit
 	EvBlocked
+	EvNoEnergy
 )
 
 type Actor struct {
@@ -134,13 +144,15 @@ type Actor struct {
 	CanClimbRight    bool
 	CanClimbLeft     bool
 	Structure        float32
-	HitCount         uint8  // landed hits since the last stun or recovery
-	CalmTicks        uint16 // ticks since structure was last lost
-	FlinchTicks      uint8  // holds the hit animation without taking control
-	SwingHit         bool   // this fighter's current swing has already landed
-	Dying            bool   // dead and waiting to be taken out of the world
-	DeathTicks       uint16 // ticks since the death animation finished
-	Owner            uint16 // network player this fighter belongs to; 0 for bots
+	HitCount         uint8   // landed hits since the last stun or recovery
+	CalmTicks        uint16  // ticks since structure was last lost
+	EnergyCalm       uint16  // ticks since energy was last spent
+	FlinchTicks      uint8   // ticks a hit that did not stun keeps the fighter flickering
+	SwingHit         bool    // this fighter's current swing has already landed
+	Dying            bool    // dead and waiting to be taken out of the world
+	DeathTicks       uint16  // ticks since the death animation finished
+	DenyUntil        float64 // game time a refused swing stops flashing; local only, never replicated
+	Owner            uint16  // network player this fighter belongs to; 0 for bots
 }
 
 // Input is one simulation tick of player intent; it is also the network command.
@@ -164,6 +176,7 @@ func NewActor(pos rl.Vector2, isPlayer bool) *Actor {
 		Friction:    DefaultFriction,
 		State:       StateIdle,
 		Structure:   MaxStructure,
+		Energy:      MaxEnergy,
 		Orientation: 1,
 		OnGround:    false,
 		CollisionBox: rl.Rectangle{
@@ -208,6 +221,7 @@ func (a *Actor) Update(dt float32) {
 		return
 	}
 	a.regenStructure()
+	a.regenEnergy()
 	if a.FlinchTicks > 0 {
 		a.FlinchTicks--
 		if a.FlinchTicks == 0 {
@@ -228,9 +242,7 @@ func (a *Actor) Update(dt float32) {
 	case StateIdle:
 		prevUpdown := a.Updown
 		a.updateUpdown()
-		if a.FlinchTicks > 0 {
-			// held: the hit animation plays out, but the fighter still acts
-		} else if prevUpdown == 3 && a.Updown != 3 {
+		if prevUpdown == 3 && a.Updown != 3 {
 			a.SetAnimFrame("resources/threefour/updown.png", a.Updown)
 		} else if a.Updown == 3 {
 			a.SetAnimFrame("resources/threefour/block.png", 0)
@@ -252,8 +264,7 @@ func (a *Actor) Update(dt float32) {
 		} else if absSpeed < 0.1 && a.Anim == "resources/threefour/walk.png" {
 			a.SetAnimFrame("resources/threefour/updown.png", a.Updown)
 		}
-		if a.Input.Attack && a.Updown != 3 {
-			a.enterAttackState()
+		if a.Input.Attack && a.Updown != 3 && a.enterAttackState() {
 			return
 		}
 		if a.Input.Jump {
@@ -787,9 +798,17 @@ func (a *Actor) updateUpdown() {
 	}
 }
 
-func (a *Actor) enterAttackState() {
+// enterAttackState starts a swing, if the fighter can pay for one. A swing that
+// cannot be paid for does not happen: nothing is spent, nothing is entered, and
+// the refusal is raised for the renderer to show.
+func (a *Actor) enterAttackState() bool {
+	if !a.canSwing() {
+		a.Events |= EvNoEnergy
+		return false
+	}
+	a.spendEnergy()
 	a.State = StateAttack
-	a.FlinchTicks = 0
+	a.stopFlicker()
 	a.SwingHit = false
 	a.Events |= EvAttackStart
 	a.Pos.X += float32(a.Orientation) * AttackDash
@@ -801,6 +820,7 @@ func (a *Actor) enterAttackState() {
 	case 2, 3:
 		a.SetAnim("resources/threefour/attack-high.png", AnimOptions{animDuration: 0.3, totalFrames: 8, once: true})
 	}
+	return true
 }
 
 // spendStructure takes cost off the pool and reports whether that emptied it.
@@ -819,6 +839,22 @@ func (a *Actor) restoreStructure(amount float32) {
 	a.Structure = min(a.Structure+amount, MaxStructure)
 }
 
+// canSwing reports whether the fighter can pay for a swing.
+func (a *Actor) canSwing() bool { return a.Energy >= EnergySwing }
+
+// spendEnergy pays for one swing. The calm wait starts again: swinging is the
+// only thing that holds energy back from refilling.
+func (a *Actor) spendEnergy() {
+	a.EnergyCalm = 0
+	a.Energy = max(a.Energy-EnergySwing, 0)
+}
+
+// restoreEnergy puts energy back, never past the cap. It leaves the calm wait
+// alone, so a block pays on top of whatever refilling was already under way.
+func (a *Actor) restoreEnergy(amount int32) {
+	a.Energy = min(a.Energy+amount, MaxEnergy)
+}
+
 // regenStructure refills the pool once the fighter has been left alone long
 // enough. The hit count goes with it: a run of hits is over once its target has
 // had time to recover from it.
@@ -834,6 +870,25 @@ func (a *Actor) regenStructure() {
 		return
 	}
 	a.restoreStructure(StructureRegen * float32(FixedTimeStep))
+}
+
+// regenEnergy refills the pool once the fighter has stopped swinging. Only
+// spending holds it back: being hit, blocking and blocking-all all leave the
+// wait running.
+//
+// Unlike regenStructure this runs in a predicted world too. A client that spent
+// but did not refill would refuse swings the server allows, and the server's
+// swing would then arrive as an attack the player never saw start; both inputs
+// it is decided from, the tick counter and the wait, are replicated so a client
+// refills on the same tick the server does.
+func (a *Actor) regenEnergy() {
+	if a.EnergyCalm < EnergyCalmTicks {
+		a.EnergyCalm++
+		return
+	}
+	if a.Energy < MaxEnergy && a.Ticks%EnergyRegenTicks == 0 {
+		a.restoreEnergy(1)
+	}
 }
 
 // takeHit resolves an attack that landed. Every hit costs structure and
@@ -866,9 +921,12 @@ func (a *Actor) confirmBlock(attacker *Actor) {
 		return
 	}
 	a.restoreStructure(BlockStructure)
+	a.restoreEnergy(EnergyBlockRestore)
 }
 
-// hitFeedback is what every landed hit does, stunning or not.
+// hitFeedback is what every landed hit does, stunning or not. The hit
+// animation is not part of it: only the stun is worth interrupting a fighter
+// for, so a flinch is told apart by the flicker alone.
 func (a *Actor) hitFeedback(attacker *Actor, knockback float32) {
 	a.Attacker = attacker
 	a.AnimWhite = true
@@ -876,22 +934,43 @@ func (a *Actor) hitFeedback(attacker *Actor, knockback float32) {
 	a.FreezeTicks = HitStopTicks
 	attacker.FreezeTicks = HitStopTicks
 	a.Speed.X = float32(attacker.Orientation) * knockback
-	a.SetAnim("resources/threefour/hit-top.png", AnimOptions{animDuration: 0.3, totalFrames: 4, once: true})
 }
 
 // enterFlinchState is a hit that did not stun: the fighter keeps control and
-// only its animation is held for a moment.
+// whatever it was doing, and only flickers for a moment.
 func (a *Actor) enterFlinchState(attacker *Actor) {
 	a.hitFeedback(attacker, PunchSpeed)
 	a.FlinchTicks = FlinchHoldTicks
 }
 
 // enterAttackedState is the stun every third hit lands: a lockout until the
-// animation finishes, and a longer throw back than a flinch.
+// animation finishes, and a longer throw back than a flinch. It is the only
+// hit that plays the hit animation.
 func (a *Actor) enterAttackedState(attacker *Actor) {
 	a.State = StateAttacked
-	a.FlinchTicks = 0
+	a.stopFlicker()
 	a.hitFeedback(attacker, StunKnockback)
+	a.SetAnim("resources/threefour/hit-top.png", AnimOptions{animDuration: 0.3, totalFrames: 4, once: true})
+}
+
+// stopFlicker ends a flinch early: anything the fighter does of its own accord
+// takes the flicker with it, or it would be left white for good.
+func (a *Actor) stopFlicker() {
+	a.FlinchTicks = 0
+	a.AnimWhite = false
+}
+
+// Flickering reports whether the fighter is drawn through the white flash.
+// A stun flashes over the opening frames of its hit animation; a flinch has no
+// animation of its own, so it flickers for as long as it is held.
+func (a *Actor) Flickering() bool {
+	if !a.AnimWhite {
+		return false
+	}
+	if a.State == StateAttacked {
+		return a.AnimCurrentFrame < 2
+	}
+	return true
 }
 
 // enterDeathState is where a broken structure goes. The fighter stops acting
@@ -929,7 +1008,7 @@ func (a *Actor) deathHidden() bool {
 
 func (a *Actor) enterBlockState(attacker *Actor) {
 	a.State = StateBlock
-	a.FlinchTicks = 0
+	a.stopFlicker()
 	a.Attacker = attacker
 	a.Events |= EvBlocked
 	a.Speed.X = float32(attacker.Orientation) * PunchSpeed
@@ -1036,7 +1115,11 @@ func (a *Actor) updateAttack() {
 			return
 		}
 
-		if !a.AttackQueued {
+		if !a.AttackQueued || !a.canSwing() {
+			if a.AttackQueued { // asked for, but there is nothing left to pay with
+				a.AttackQueued = false
+				a.Events |= EvNoEnergy
+			}
 			switch a.Updown {
 			case 0:
 				if strings.HasSuffix(a.Anim, "attack-low-2.png") {
@@ -1067,6 +1150,7 @@ func (a *Actor) updateAttack() {
 			a.enterIdleState()
 			return
 		}
+		a.spendEnergy()
 		if a.Updown != prevUpdown {
 			anim := fmt.Sprintf("resources/threefour/updown-atk-%d-%d.png", prevUpdown, a.Updown)
 			a.SetAnim(anim, AnimOptions{animDuration: 0.4, totalFrames: 7, once: true})

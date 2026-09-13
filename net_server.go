@@ -88,6 +88,7 @@ type Server struct {
 var Srv *Server
 
 func NewServer(cfg ServerConfig) (*Server, error) {
+	initNet()
 	// spare peers let the server answer extra clients with a rejection
 	host, err := enet.NewHost(enet.NewListenAddress(cfg.Port), uint64(cfg.MaxPlayers+cfg.MaxSpectators+4), ChannelCount, 0, 0)
 	if err != nil {
@@ -387,8 +388,8 @@ func serviceFor(h enet.Host, d time.Duration, peers int) {
 
 // Dedicated runs a headless server until the process is interrupted.
 func Dedicated(cfg ServerConfig) {
-	enet.Initialize()
-	defer enet.Deinitialize()
+	initNet()
+	defer shutdownNet()
 
 	NetMode = NetDedicated
 	LE = NewLevelEditor(39, 83)

@@ -6,6 +6,25 @@ import (
 	rl "github.com/gen2brain/raylib-go/raylib"
 )
 
+// The menu scene is drawn at this size in scene pixels; menuPixel screen pixels
+// show one scene pixel.
+const (
+	menuSceneW = SW * WindowScale / menuPixel
+	menuSceneH = SH * WindowScale / menuPixel
+
+	// The scene is composed for a menuDesignH-tall scene and every length in it
+	// is scaled from there (see menuScaled), so menuPixel decides how finely the
+	// scene is drawn, not where anything in it sits.
+	menuDesignH = 180
+
+	menuHorizonY = 104 * menuSceneH / menuDesignH // the sky stands above this line; the grid runs below it
+)
+
+// menuScaled is a length of the menuDesignH-tall composition in scene pixels.
+// Line widths are not scaled: a neon line is one scene pixel whatever the scene
+// is drawn at, so a finer scene draws a finer line.
+func menuScaled(v float32) float32 { return v * menuSceneH / menuDesignH }
+
 // menuRedIndexes are the Endesga 64 entries the menu scene may be painted from:
 // the palette's reds, every one of them within 20 degrees of pure red. Nothing
 // in the scene takes a colour from anywhere else, so it cannot drift off-red.
@@ -13,13 +32,12 @@ var menuRedIndexes = []int{17, 63, 62, 27, 61, 26, 60, 59, 58, 0}
 
 // The colours the scene is painted with, each an entry of menuRedIndexes.
 var (
-	menuSkyBands   = []int{17, 63, 62, 27, 61, 60} // the top of the scene down to the horizon
-	menuSunColors  = []int{58, 59, 60, 61}         // the top of the sun down
-	menuSilhouette = EndesgaPalette[17]            // the city, and the ground under it
-	menuGround     = EndesgaPalette[17]
-	menuModelHead  = EndesgaPalette[60]
-	menuModelJab   = EndesgaPalette[59]
-	menuModelKick  = EndesgaPalette[58]
+	menuSky       = EndesgaPalette[17]    // the whole sky, down to the horizon
+	menuSunColors = []int{58, 59, 60, 61} // the top of the sun down
+	menuGround    = EndesgaPalette[17]
+	menuModelHead = EndesgaPalette[60]
+	menuModelJab  = EndesgaPalette[59]
+	menuModelKick = EndesgaPalette[58]
 )
 
 // neonRole is what a cycling colour is used for.
@@ -27,7 +45,6 @@ type neonRole uint8
 
 const (
 	neonGrid neonRole = iota
-	neonWindow
 	neonRoleCount
 )
 
@@ -35,8 +52,7 @@ const (
 // index into menuRedIndexes' colours, so a cycling colour is always a palette
 // red: it never blends through anything in between.
 var neonRamps = [neonRoleCount][]int{
-	neonGrid:   {62, 61, 60, 59, 60, 61},
-	neonWindow: {59, 58, 60, 61},
+	neonGrid: {62, 61, 60, 59, 60, 61},
 }
 
 // neonStepSec is how long one colour of a ramp is held.
@@ -52,24 +68,16 @@ func neonColor(role neonRole, t float64) rl.Color {
 	return EndesgaPalette[ramp[i]]
 }
 
-// drawMenuBackground paints the scene's fixed layers: the dusk sky and its sun,
-// the Neo-Minsk skyline, and the neon grid running to the horizon. Only the
-// grid's scroll and the cycling colours change from frame to frame; nothing
-// here moves as a whole.
-func drawMenuBackground(t float64, grid, window rl.Color) {
+// drawMenuBackground paints the scene's fixed layers: the flat sky and its sun,
+// and the neon grid running to the horizon. Only the grid's scroll and the
+// cycling colours change from frame to frame; nothing here moves as a whole.
+func drawMenuBackground(t float64, grid rl.Color) {
 	rl.BeginTextureMode(MenuBackground)
-	rl.ClearBackground(EndesgaPalette[menuSkyBands[0]])
+	rl.ClearBackground(menuSky)
 
-	// the sky, in bands from the top of the scene down to the horizon
-	band := float32(cityHorizonY) / float32(len(menuSkyBands))
-	for i, c := range menuSkyBands {
-		y := float32(i) * band
-		rl.DrawRectangleRec(rl.Rectangle{Y: y, Width: menuSceneW, Height: band + 1}, EndesgaPalette[c])
-	}
-
-	// the sun, banded like a synthwave sun and cut off by the skyline
+	// the sun, banded like a synthwave sun and cut off by the horizon
 	cx := float32(menuSceneW) / 2
-	sunY, sunR := float32(cityHorizonY)-16, float32(21)
+	sunY, sunR := menuHorizonY-menuScaled(16), menuScaled(21)
 	for i, c := range menuSunColors {
 		h := 2 * sunR / float32(len(menuSunColors))
 		top := sunY - sunR + float32(i)*h
@@ -77,18 +85,17 @@ func drawMenuBackground(t float64, grid, window rl.Color) {
 		rl.DrawCircle(int32(cx), int32(sunY), sunR, EndesgaPalette[c])
 		rl.EndScissorMode()
 	}
-	for y := sunY; y < sunY+sunR; y += 4 { // the sun's scanline gaps
-		rl.DrawRectangleRec(rl.Rectangle{X: cx - sunR, Y: y, Width: 2 * sunR, Height: 2}, EndesgaPalette[menuSkyBands[len(menuSkyBands)-1]])
+	for y := sunY; y < sunY+sunR; y += menuScaled(4) { // the sun's scanline gaps
+		rl.DrawRectangleRec(rl.Rectangle{X: cx - sunR, Y: y, Width: 2 * sunR, Height: menuScaled(2)}, menuSky)
 	}
 
-	drawCity(menuCity, menuSilhouette, window)
 	drawNeonGrid(t, grid)
 
 	rl.EndTextureMode()
 }
 
 // gridSpeed is how fast the grid scrolls toward the viewer, in rows per second.
-const gridSpeed = 0.45
+const gridSpeed = 1.25
 
 // drawNeonGrid draws the synthwave floor below the horizon: lines converging on
 // the vanishing point, crossed by lines that scroll toward the viewer. The cross
@@ -96,20 +103,20 @@ const gridSpeed = 0.45
 // scroll repeats seamlessly because row k at the end of a step is exactly where
 // row k-1 started.
 func drawNeonGrid(t float64, col rl.Color) {
-	rl.DrawRectangleRec(rl.Rectangle{Y: cityHorizonY, Width: menuSceneW, Height: menuSceneH - cityHorizonY}, menuGround)
+	rl.DrawRectangleRec(rl.Rectangle{Y: menuHorizonY, Width: menuSceneW, Height: menuSceneH - menuHorizonY}, menuGround)
 	cx := float32(menuSceneW) / 2
 	for i := -14; i <= 14; i++ {
-		end := rl.Vector2{X: cx + float32(i)*26, Y: menuSceneH}
-		rl.DrawLineEx(rl.Vector2{X: cx, Y: cityHorizonY}, end, 1, col)
+		end := rl.Vector2{X: cx + float32(i)*menuScaled(26), Y: menuSceneH}
+		rl.DrawLineEx(rl.Vector2{X: cx, Y: menuHorizonY}, end, 1, col)
 	}
-	const depth = float64(menuSceneH - cityHorizonY)
+	depth := float64(menuSceneH - menuHorizonY)
 	frac := t*gridSpeed - math.Floor(t*gridSpeed)
 	for k := 1; k <= 18; k++ {
 		z := float64(k) - frac
 		if z < 0.35 {
 			continue
 		}
-		y := float32(cityHorizonY + depth/z)
+		y := float32(menuHorizonY + depth/z)
 		if y > menuSceneH {
 			continue
 		}

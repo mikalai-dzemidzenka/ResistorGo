@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	ProtocolVersion  uint16 = 4
+	ProtocolVersion  uint16 = 5
 	DefaultPort             = 27015
 	ChanUnreliable   uint8  = 0 // commands, snapshots
 	ChanReliable     uint8  = 1 // hello, welcome, reject, bye
@@ -118,10 +118,12 @@ type ActorRec struct {
 	AttackCount uint8
 	FreezeTicks uint8
 	Structure   uint8 // tenths of a hit-unit
+	Energy      uint8 // whole energy points, 0..MaxEnergy
+	EnergyCalm  uint8 // ticks since the last swing, 0..EnergyCalmTicks
 	AttackerID  uint16
 }
 
-const actorRecSize = 42
+const actorRecSize = 44
 
 const (
 	fOrientLeft uint16 = 1 << iota
@@ -169,6 +171,8 @@ func recOf(a *Actor) ActorRec {
 		AttackCount: a.AttackCount,
 		FreezeTicks: a.FreezeTicks,
 		Structure:   uint8(math.Round(float64(clamp(a.Structure, 0, MaxStructure)) * 10)),
+		Energy:      uint8(clamp(a.Energy, 0, MaxEnergy)),
+		EnergyCalm:  uint8(min(a.EnergyCalm, EnergyCalmTicks)),
 	}
 	flag := func(f uint16, on bool) {
 		if on {
@@ -220,6 +224,8 @@ func (r ActorRec) apply(a *Actor, w *World) {
 	a.AttackCount = r.AttackCount
 	a.FreezeTicks = r.FreezeTicks
 	a.Structure = float32(r.Structure) / 10
+	a.Energy = int32(min(r.Energy, MaxEnergy))
+	a.EnergyCalm = uint16(min(r.EnergyCalm, EnergyCalmTicks))
 	a.Attacker = nil
 	if r.AttackerID != 0 && w != nil {
 		a.Attacker = w.ByID(r.AttackerID)
@@ -421,7 +427,7 @@ func encodeSnapshot(s Snapshot) []byte {
 		b = putU16(b, a.AnimDurMs)
 		b = putU32(b, a.Ticks)
 		b = putU32(b, a.AnimStart)
-		b = append(b, a.AttackCount, a.FreezeTicks, a.Structure)
+		b = append(b, a.AttackCount, a.FreezeTicks, a.Structure, a.Energy, a.EnergyCalm)
 		b = putU16(b, a.AttackerID)
 	}
 	return b
@@ -456,6 +462,8 @@ func decodeSnapshot(b []byte) (Snapshot, error) {
 		a.AttackCount = r.u8()
 		a.FreezeTicks = r.u8()
 		a.Structure = r.u8()
+		a.Energy = r.u8()
+		a.EnergyCalm = r.u8()
 		a.AttackerID = r.u16()
 		if a.State > uint8(StateDeath) || a.Updown > 3 {
 			r.bad = true

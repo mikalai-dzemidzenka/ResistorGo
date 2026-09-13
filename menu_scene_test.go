@@ -50,25 +50,17 @@ func TestSceneColorsArePaletteReds(t *testing.T) {
 	}
 
 	used := map[string][]rl.Color{
-		"the sky":         nil,
-		"the sun":         nil,
-		"the silhouette":  {menuSilhouette},
-		"the ground":      {menuGround},
-		"the models":      {menuModelHead, menuModelJab, menuModelKick},
-		"the grid ramp":   nil,
-		"the window ramp": nil,
-	}
-	for _, i := range menuSkyBands {
-		used["the sky"] = append(used["the sky"], EndesgaPalette[i])
+		"the sky":       {menuSky},
+		"the sun":       nil,
+		"the ground":    {menuGround},
+		"the models":    {menuModelHead, menuModelJab, menuModelKick},
+		"the grid ramp": nil,
 	}
 	for _, i := range menuSunColors {
 		used["the sun"] = append(used["the sun"], EndesgaPalette[i])
 	}
 	for _, i := range neonRamps[neonGrid] {
 		used["the grid ramp"] = append(used["the grid ramp"], EndesgaPalette[i])
-	}
-	for _, i := range neonRamps[neonWindow] {
-		used["the window ramp"] = append(used["the window ramp"], EndesgaPalette[i])
 	}
 	for what, cs := range used {
 		if len(cs) == 0 {

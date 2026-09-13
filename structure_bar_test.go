@@ -71,7 +71,7 @@ func TestShowStructureBar(t *testing.T) {
 		t.Errorf("the bar did not come back when time manipulation was left")
 	}
 
-	run(w, StructureCalmTicks+60) // long enough to refill one hit
+	run(w, StructureCalmTicks+180) // comfortably longer than one hit takes to refill
 	if def.Structure != MaxStructure {
 		t.Fatalf("regeneration left %v structure, want full", def.Structure)
 	}
@@ -160,9 +160,104 @@ func TestStructureBarLayout(t *testing.T) {
 
 // The bar's colours must survive the palette pass unchanged.
 func TestStructureBarColoursInPalette(t *testing.T) {
-	for name, c := range map[string]rl.Color{"track": structureBarTrack, "fill": structureBarFill, "pip": stunPipColor} {
+	for name, c := range map[string]rl.Color{"track": structureBarTrack, "fill": structureBarFill, "pip": stunPipColor, "energy fill": energyBarFill} {
 		if !slices.Contains(Palette, c) {
 			t.Errorf("the %s colour %v is not a palette entry", name, c)
 		}
+	}
+}
+
+// The energy bar: what is left, under the structure bar, same width, on the
+// pixel grid, and never past either end.
+func TestEnergyBarLayout(t *testing.T) {
+	a := NewActor(ZeroVec2, true)
+	a.InterpolatedPos = rl.Vector2{X: 10.4, Y: -3.6} // interpolation leaves fractions
+
+	a.Energy = MaxEnergy
+	r := structureBarLayout(a)
+	if r.EnergyFill.Width != StructureBarWidth {
+		t.Errorf("at full energy the fill is %v px, want the whole %d", r.EnergyFill.Width, StructureBarWidth)
+	}
+	if r.Energy.Width != r.Track.Width || r.Energy.X != r.Track.X {
+		t.Errorf("the energy bar %+v does not line up with the structure bar %+v", r.Energy, r.Track)
+	}
+	if r.Energy.Y < r.Track.Y+r.Track.Height {
+		t.Errorf("the energy bar at y=%v is not below the structure bar ending at y=%v", r.Energy.Y, r.Track.Y+r.Track.Height)
+	}
+
+	a.Energy = MaxEnergy / 2
+	if w := structureBarLayout(a).EnergyFill.Width; w != StructureBarWidth/2 {
+		t.Errorf("at half energy the fill is %v px, want %d", w, StructureBarWidth/2)
+	}
+
+	a.Energy = 0
+	if w := structureBarLayout(a).EnergyFill.Width; w != 0 {
+		t.Errorf("at no energy the fill is %v px, want nothing", w)
+	}
+
+	// spending drains it and blocking grows it back
+	a.Energy = 40
+	before := structureBarLayout(a).EnergyFill.Width
+	a.Energy = 40 + EnergyBlockRestore
+	if after := structureBarLayout(a).EnergyFill.Width; after <= before {
+		t.Errorf("a block left the fill at %v px, want more than %v", after, before)
+	}
+
+	// every edge on the pixel grid, and never past either end of the bar
+	for e := int32(0); e <= MaxEnergy; e++ {
+		a.Energy = e
+		p := structureBarLayout(a)
+		if p.EnergyFill.X < p.Energy.X || p.EnergyFill.X+p.EnergyFill.Width > p.Energy.X+p.Energy.Width {
+			t.Fatalf("at %d energy the fill %+v sticks out past the track %+v", e, p.EnergyFill, p.Energy)
+		}
+		for _, q := range []rl.Rectangle{p.Energy, p.EnergyFill} {
+			for _, v := range []float32{q.X, q.Y, q.Width, q.Height} {
+				if v != roundf(v) {
+					t.Fatalf("at %d energy the rectangle %+v is off the pixel grid", e, q)
+				}
+			}
+		}
+	}
+}
+
+// The energy bar follows its own visibility rule, not the structure bar's.
+func TestShowEnergyBar(t *testing.T) {
+	a := NewActor(ZeroVec2, true)
+
+	if showEnergyBar(a) {
+		t.Error("a fighter at full energy shows an energy bar")
+	}
+	a.Energy = MaxEnergy - EnergySwing
+	if !showEnergyBar(a) {
+		t.Error("a fighter that has swung shows no energy bar")
+	}
+	if showStructureBar(a) {
+		t.Error("the structure bar appeared for a fighter that only spent energy")
+	}
+
+	a.Energy, a.Structure = MaxEnergy, MaxStructure-1
+	if showEnergyBar(a) {
+		t.Error("a hurt fighter at full energy shows an energy bar")
+	}
+	if !showStructureBar(a) {
+		t.Error("a hurt fighter shows no structure bar")
+	}
+
+	a.Energy = 0
+	a.State = StateDeath
+	if showEnergyBar(a) {
+		t.Error("a dying fighter shows an energy bar")
+	}
+	a.State = StateIdle
+
+	rewindRecord() // a recorded frame to show
+	TimeMode = TimePaused
+	defer func() { TimeMode = TimeOff }()
+	if showEnergyBar(a) {
+		t.Error("an energy bar is drawn over a recorded frame")
+	}
+	TimeMode = TimeOff
+	if !showEnergyBar(a) {
+		t.Error("the energy bar did not come back when time manipulation was left")
 	}
 }

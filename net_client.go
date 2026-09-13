@@ -87,6 +87,7 @@ func startClient(addr string, spectator bool) error {
 	if err != nil {
 		return err
 	}
+	initNet()
 	h, err := enet.NewHost(nil, 1, ChannelCount, 0, 0)
 	if err != nil {
 		return err

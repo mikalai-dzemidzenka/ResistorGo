@@ -32,10 +32,7 @@ var (
 	winSizeEdit     bool
 )
 
-var (
-	mainMenuInit bool
-	menuCity     []cityBuilding
-)
+var mainMenuInit bool
 
 func runMainMenu(dt float32) {
 	if Srv != nil || Cli != nil {
@@ -47,17 +44,15 @@ func runMainMenu(dt float32) {
 		rl.SetTextureFilter(MainMenuTexture.Texture, rl.FilterPoint)
 		MenuBackground = rl.LoadRenderTexture(menuSceneW, menuSceneH)
 		rl.SetTextureFilter(MenuBackground.Texture, rl.FilterPoint)
-		menuCity = cityLayout(citySeed)
 	}
 	t := GameTimeSec
 	gridCol := neonColor(neonGrid, t)
-	windowCol := neonColor(neonWindow, t)
 
-	// the fixed layers: dusk sky, Neo-Minsk and the neon grid
-	drawMenuBackground(t, gridCol, windowCol)
+	// the fixed layers: the sky with its sun and the neon grid
+	drawMenuBackground(t, gridCol)
 
 	rl.BeginTextureMode(MainMenuTexture)
-	rl.ClearBackground(menuSilhouette)
+	rl.ClearBackground(menuSky)
 	drawSceneBackground()
 
 	// 72 screen px per unit; the texture is drawn unflipped, so -Y is up on screen.
@@ -115,7 +110,7 @@ func runMainMenu(dt float32) {
 // menuPixel is the on-screen size of one scene pixel. The scene renders into a
 // window/menuPixel texture and is blown back up by menuPixel, so a smaller value
 // means more detail at the same size. Must divide the window evenly.
-const menuPixel = 4
+const menuPixel = 2
 
 // The logo and the widgets use the left menuPanelW pixels of the window; the models use the rest.
 const (

@@ -102,8 +102,8 @@ func expectReject(t *testing.T, r *rawPeer, want uint8) {
 }
 
 func TestNetIntegration(t *testing.T) {
-	enet.Initialize()
-	defer enet.Deinitialize()
+	initNet()
+	defer shutdownNet()
 	Stage = StageLevel // reconcile must not enter the level (needs a window)
 	defer func() { Stage = StageMainMenu }()
 	LE = NewLevelEditor(39, 83)
@@ -186,8 +186,8 @@ func TestNetIntegration(t *testing.T) {
 }
 
 func TestNetSimulatedLag(t *testing.T) {
-	enet.Initialize()
-	defer enet.Deinitialize()
+	initNet()
+	defer shutdownNet()
 	Stage = StageLevel
 	defer func() { Stage = StageMainMenu }()
 	LE = NewLevelEditor(39, 83)
@@ -234,8 +234,8 @@ func TestClientConnectTimeout(t *testing.T) {
 	if testing.Short() {
 		t.Skip("waits for the 5 s connect timeout")
 	}
-	enet.Initialize()
-	defer enet.Deinitialize()
+	initNet()
+	defer shutdownNet()
 	LE = NewLevelEditor(39, 83)
 	if err := startClient("127.0.0.1:27192", false); err != nil { // nothing listens there
 		t.Fatal(err)
@@ -269,8 +269,8 @@ func TestParseAddr(t *testing.T) {
 // A player that dies keeps its slot while the body is gone, is given a new
 // fighter when it respawns, and its structure reaches the client.
 func TestNetDeathAndRespawn(t *testing.T) {
-	enet.Initialize()
-	defer enet.Deinitialize()
+	initNet()
+	defer shutdownNet()
 	Stage = StageLevel // reconcile must not enter the level (needs a window)
 	defer func() { Stage = StageMainMenu }()
 	LE = NewLevelEditor(39, 83)
@@ -354,8 +354,8 @@ func TestNetDeathAndRespawn(t *testing.T) {
 // A client sees a remote fighter's structure and its hits toward the next
 // stun, which is what its bar and pips are drawn from.
 func TestNetStructureBarReplicates(t *testing.T) {
-	enet.Initialize()
-	defer enet.Deinitialize()
+	initNet()
+	defer shutdownNet()
 	Stage = StageLevel // reconcile must not enter the level (needs a window)
 	defer func() { Stage = StageMainMenu }()
 	LE = NewLevelEditor(39, 83)
