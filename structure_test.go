@@ -175,6 +175,37 @@ func TestOnlyTheStunPlaysTheHitAnimation(t *testing.T) {
 	}
 }
 
+// A flinch leaves the fighter's own animation running: it is hit mid-stride and
+// keeps striding, on the same frame it would have reached un-hit.
+func TestFlinchDoesNotInterruptTheAnimation(t *testing.T) {
+	w, att, def := swing(t, 0)
+	def.State = StateRun
+	def.SetAnim("resources/threefour/run.png", AnimOptions{animDuration: 0.4, totalFrames: 10})
+	anim, startTick := def.Anim, def.AnimStartTick
+
+	def.takeHit(att)
+	if def.State != StateRun {
+		t.Errorf("a flinch put the running defender in state %d, want it left running", def.State)
+	}
+	if def.Anim != anim || def.AnimStartTick != startTick {
+		t.Errorf("a flinch restarted the animation as %q at tick %d, want %q at %d", def.Anim, def.AnimStartTick, anim, startTick)
+	}
+	if !def.Flickering() {
+		t.Errorf("the flinched fighter is not flickering")
+	}
+
+	// and it goes on running: the animation advances while the flicker holds
+	frame := def.AnimCurrentFrame
+	def.FreezeTicks = 0
+	run(w, 3)
+	if def.Anim != anim {
+		t.Errorf("the run animation became %q three ticks into a flinch", def.Anim)
+	}
+	if def.AnimCurrentFrame == frame {
+		t.Errorf("the run animation is frozen on frame %d during a flinch", frame)
+	}
+}
+
 // The flicker runs out with the flinch hold, and swinging out of a flinch takes
 // it along: nothing may leave a fighter white for good.
 func TestFlickerEndsWithTheFlinch(t *testing.T) {

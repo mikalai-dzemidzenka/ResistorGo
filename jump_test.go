@@ -1,0 +1,457 @@
+package resistor
+
+import (
+	"testing"
+
+	rl "github.com/gen2brain/raylib-go/raylib"
+)
+
+// animTable's index is the animation's network id, so an entry may only be
+// appended. These ids are spelled out: inserting anything ahead of them shifts
+// every id that follows, and a client drawing from an older table would show
+// the wrong animation for every fighter.
+func TestAnimTableIsAppendOnly(t *testing.T) {
+	for path, want := range map[string]uint8{
+		"resources/threefour/run.png":        0,
+		"resources/threefour/idle.png":       1,
+		"resources/threefour/jump-start.png": 2,
+		"resources/threefour/jump-climb.png": 3,
+		"resources/threefour/updown.png":     4,
+		"resources/threefour/hit-top.png":    24,
+		"resources/threefour/death_fall.png": 25,
+		"resources/threefour/turnover.png":   45,
+	} {
+		if got := animID(path); got != want {
+			t.Errorf("%s has id %d, want %d - something was inserted rather than appended", path, got, want)
+		}
+	}
+
+	// the two new ones are on the end, in order, and survive the round trip
+	for i, path := range []string{
+		"resources/threefour/run-jump.png",
+		"resources/threefour/fall.png",
+	} {
+		id := animID(path)
+		if want := uint8(len(animTable) - 2 + i); id != want {
+			t.Errorf("%s has id %d, want %d - it is not at the end of the table", path, id, want)
+		}
+		if back := animPath(id); back != path {
+			t.Errorf("id %d came back as %q, want %q", id, back, path)
+		}
+	}
+}
+
+// ground puts a fighter standing on a floor of tiles, settled on it.
+func ground(w *World, x float32) *Actor {
+	tiles(Vector2i{X: 0, Y: 96}, Vector2i{X: 48, Y: 96}, Vector2i{X: 96, Y: 96}, Vector2i{X: 144, Y: 96})
+	a := w.Spawn(rl.Vector2{X: x, Y: 96 - 48}, true)
+	a.Orientation = 1
+	a.OnGround = true
+	return a
+}
+
+// The run-jump begins on the tick jump is pressed, and pushes off on the third
+// frame of its own animation rather than in a wind-up state of its own.
+func TestRunJumpPushesOffOnItsFrame(t *testing.T) {
+	step := float32(FixedTimeStep)
+	w := NewWorld(true)
+	a := ground(w, 10)
+	a.State = StateRun
+	a.Speed.X = RunReach + 20
+	a.Input.Jump = true
+
+	a.Update(step)
+	if a.State != StateRunJump {
+		t.Fatalf("running + jump left state %d, want the run-jump %d", a.State, StateRunJump)
+	}
+	if a.Anim != "resources/threefour/run-jump.png" {
+		t.Errorf("the run-jump plays %q, want the running-jump animation", a.Anim)
+	}
+	if !a.OnGround {
+		t.Errorf("the run-jump left the ground on frame %d, want it to wait for frame %d", a.AnimCurrentFrame, RunJumpLaunchFrame)
+	}
+
+	// released early: the jump is committed from the tick it began
+	a.Input.Jump = false
+	var launchFrame uint8 = 255
+	for range 40 {
+		if !a.OnGround {
+			break
+		}
+		if a.AnimCurrentFrame >= RunJumpLaunchFrame && launchFrame == 255 {
+			launchFrame = a.AnimCurrentFrame
+		}
+		a.Update(step)
+	}
+	if a.OnGround {
+		t.Fatalf("the run-jump never left the ground, stuck on frame %d", a.AnimCurrentFrame)
+	}
+	if launchFrame != RunJumpLaunchFrame {
+		t.Errorf("the fighter left the ground on frame %d, want frame %d", launchFrame, RunJumpLaunchFrame)
+	}
+	if a.Speed.Y >= 0 {
+		t.Errorf("the run-jump is not moving upward: %v", a.Speed.Y)
+	}
+}
+
+// The standing jump is untouched: it still winds up first, and both jumps
+// leave the ground at the same speed.
+func TestStandingJumpUnchanged(t *testing.T) {
+	w := NewWorld(true)
+	stand := ground(w, 10)
+	stand.State = StateIdle
+	stand.Input.Jump = true
+	stand.Update(float32(FixedTimeStep))
+	if stand.State != StateJumpStart {
+		t.Fatalf("a standing jump left state %d, want the wind-up %d", stand.State, StateJumpStart)
+	}
+	if !stand.OnGround {
+		t.Errorf("the standing jump left the ground before its wind-up finished")
+	}
+	if stand.Anim != "resources/threefour/jump-start.png" {
+		t.Errorf("the standing jump plays %q, want the wind-up", stand.Anim)
+	}
+
+	runner := ground(w, 10)
+	runner.State = StateRun
+	runner.Speed.X = RunReach + 20
+	runner.Input.Jump = true
+	for range 40 { // run it up to its push-off frame
+		runner.Update(float32(FixedTimeStep))
+		runner.Input.Jump = false
+		if !runner.OnGround {
+			break
+		}
+	}
+	if runner.OnGround {
+		t.Fatalf("the run-jump never left the ground")
+	}
+
+	// let the wind-up play out and compare take-off speeds
+	for range 60 {
+		if stand.State == StateJump {
+			break
+		}
+		stand.Update(float32(FixedTimeStep))
+	}
+	if stand.State != StateJump {
+		t.Fatalf("the wind-up never finished: state %d", stand.State)
+	}
+	if stand.Speed.Y != runner.Speed.Y {
+		t.Errorf("take-off speeds differ: standing %v, run-jump %v", stand.Speed.Y, runner.Speed.Y)
+	}
+}
+
+// A run-jump carries the run's momentum: the speed it left at is the speed it
+// had, and a faster run covers more ground.
+func TestRunJumpKeepsMomentum(t *testing.T) {
+	w := NewWorld(true)
+	// the jump itself must not touch horizontal speed: a runner that jumps and
+	// one that does not are moving at the same speed a tick later, whatever
+	// friction took from both of them
+	jumped := ground(w, 10)
+	jumped.State = StateRun
+	jumped.Speed.X = RunReach
+	jumped.Input.Jump = true
+	kept := ground(w, 10)
+	kept.State = StateRun
+	kept.Speed.X = RunReach
+	jumped.Update(float32(FixedTimeStep))
+	kept.Update(float32(FixedTimeStep))
+	if jumped.Speed.X != kept.Speed.X {
+		t.Errorf("taking off left %v horizontal speed, want the %v a fighter that stayed on the ground kept", jumped.Speed.X, kept.Speed.X)
+	}
+	if jumped.Speed.X < RunReach*0.9 {
+		t.Errorf("the run-jump launched at %v, far below the run's %v", jumped.Speed.X, RunReach)
+	}
+
+	distance := func(speed float32) float32 {
+		w := NewWorld(true)
+		f := ground(w, 10)
+		f.State = StateRun
+		f.Speed.X = speed
+		f.Input.Jump = true
+		start := f.Pos.X
+		for range 40 {
+			f.Input.Jump = false
+			f.Update(float32(FixedTimeStep))
+		}
+		return f.Pos.X - start
+	}
+	fast, slow := distance(RunReach), distance(RunReach/2)
+	if fast <= slow {
+		t.Errorf("jumping at %v covered %v, no further than %v at half that speed", RunReach, fast, slow)
+	}
+}
+
+// Every way of ending up airborne and going down reaches the fall.
+func TestEverythingFalls(t *testing.T) {
+	step := float32(FixedTimeStep)
+
+	t.Run("over a run-jump's apex", func(t *testing.T) {
+		w := NewWorld(true)
+		a := ground(w, 10)
+		a.State, a.Speed.X, a.Input.Jump = StateRun, RunReach, true
+		a.Update(step)
+		a.Input.Jump = false
+		for range 120 {
+			if a.State == StateFall {
+				break
+			}
+			a.Update(step)
+		}
+		if a.State != StateFall {
+			t.Fatalf("a run-jump reached state %d, want the fall %d", a.State, StateFall)
+		}
+		if a.Anim != "resources/threefour/fall.png" {
+			t.Errorf("falling plays %q, want the falling animation", a.Anim)
+		}
+	})
+
+	t.Run("over a standing jump's apex", func(t *testing.T) {
+		w := NewWorld(true)
+		a := ground(w, 10)
+		a.State, a.Input.Jump = StateIdle, true
+		for range 120 {
+			a.Update(step)
+			a.Input.Jump = false
+			if a.State == StateFall {
+				break
+			}
+		}
+		if a.State != StateFall {
+			t.Fatalf("a standing jump reached state %d, want the fall %d", a.State, StateFall)
+		}
+		if a.Anim != "resources/threefour/fall.png" {
+			t.Errorf("the standing jump falls playing %q, want the falling animation", a.Anim)
+		}
+	})
+
+	// walking off a ledge: the case the idle branch carried a TODO for
+	t.Run("off a ledge", func(t *testing.T) {
+		w := NewWorld(true)
+		a := ground(w, 10)
+		a.State = StateIdle
+		a.Pos.X = 400 // past the end of the floor
+		for range 10 {
+			a.Update(step)
+			if a.State == StateFall {
+				break
+			}
+		}
+		if a.State != StateFall {
+			t.Errorf("walking off a ledge reached state %d, want the fall %d", a.State, StateFall)
+		}
+	})
+}
+
+// A fighter on the way up is not falling: the transition reads the direction of
+// travel, not merely being off the ground.
+func TestRisingIsNotFalling(t *testing.T) {
+	w := NewWorld(true)
+	a := ground(w, 10)
+	a.State, a.Speed.X, a.Input.Jump = StateRun, RunReach, true
+	a.Update(float32(FixedTimeStep))
+	a.Input.Jump = false
+
+	for range 120 {
+		if a.Speed.Y > 0 {
+			break // past the apex, the fall is correct from here
+		}
+		if a.State == StateFall {
+			t.Fatalf("a fighter rising at %v is in the fall state", a.Speed.Y)
+		}
+		a.Update(float32(FixedTimeStep))
+	}
+}
+
+// A landing returns the fighter to what it was doing, and does not lock it out.
+func TestLanding(t *testing.T) {
+	step := float32(FixedTimeStep)
+	land := func(speed float32, attack bool) *Actor {
+		w := NewWorld(true)
+		a := ground(w, 10)
+		a.State = StateFall
+		a.Pos.Y -= 20
+		a.OnGround, a.Speed.Y, a.Speed.X = false, 100, speed
+		for range 60 {
+			a.Input.Left = speed > 0 // hold the direction, as a player would
+			a.Input.Attack = attack
+			a.Update(step)
+			if a.OnGround {
+				break
+			}
+		}
+		return a
+	}
+
+	if a := land(MaxSpeed, false); a.State != StateRun {
+		t.Errorf("landing at speed left state %d, want the run %d", a.State, StateRun)
+	}
+	if a := land(0, false); a.State != StateIdle {
+		t.Errorf("landing stopped left state %d, want idle %d", a.State, StateIdle)
+	}
+	if a := land(0, true); a.State != StateAttack {
+		t.Errorf("attacking on the landing tick left state %d, want the swing %d", a.State, StateAttack)
+	}
+}
+
+// Airborne fighters steer: in either jump and while falling, and a fighter that
+// walked off a ledge steers as it falls. The movement rule already allowed
+// this; these pin it so an airborne state cannot quietly lose it.
+func TestSteeringInTheAir(t *testing.T) {
+	step := float32(FixedTimeStep)
+
+	// Input.Left accelerates in +x (the field names read as the button, not
+	// the direction of travel)
+	drift := func(state ActorState, anim bool) float32 {
+		w := NewWorld(true)
+		a := ground(w, 10)
+		a.State = state
+		a.OnGround, a.Speed.Y = false, 40
+		a.Pos.Y -= 30
+		if anim {
+			a.SetAnim("resources/threefour/fall.png", AnimOptions{animDuration: 0.3, totalFrames: 3})
+		}
+		before := a.Speed.X
+		for range 5 {
+			a.Input.Left = true
+			a.Update(step)
+		}
+		return a.Speed.X - before
+	}
+
+	for _, c := range []struct {
+		name  string
+		state ActorState
+	}{
+		{"a standing jump", StateJump},
+		{"a run-jump", StateRunJump},
+		{"a fall", StateFall},
+	} {
+		if d := drift(c.state, c.state == StateFall); d <= 0 {
+			t.Errorf("holding a direction during %s changed speed by %v, want it to accelerate", c.name, d)
+		}
+	}
+
+	// and a fighter can turn around in the air
+	w := NewWorld(true)
+	a := ground(w, 10)
+	a.State, a.Speed.X, a.Input.Jump = StateRun, RunReach, true
+	a.Update(step)
+	a.Input.Jump = false
+	for range 30 {
+		a.Input.Right = true // the other way
+		a.Update(step)
+	}
+	if a.Speed.X >= 0 {
+		t.Errorf("holding the other direction in the air left speed at %v, want it reversed", a.Speed.X)
+	}
+}
+
+// Falling costs the fighter nothing it had on the way up: a ledge reached while
+// descending is climbed, exactly as a rising fighter climbs it.
+func TestFallCatchesALedge(t *testing.T) {
+	for _, c := range []struct {
+		name  string
+		state ActorState
+		vy    float32
+	}{
+		{"rising", StateJump, -5},
+		{"falling", StateFall, 5},
+	} {
+		tiles(Vector2i{X: 96}) // a tile at x 96..144, top at y 0
+		a := jumper(90, 16)    // just left of it, head level with its top
+		a.State, a.Speed.Y = c.state, c.vy
+
+		a.Update(float32(FixedTimeStep))
+		if a.State != StateClimb {
+			t.Errorf("%s at a ledge left state %d, want the climb %d", c.name, a.State, StateClimb)
+		}
+	}
+}
+
+// A run-jump costs half the pool: two from full, and the third is refused.
+func TestRunJumpCostsHalfThePool(t *testing.T) {
+	w := NewWorld(true)
+	a := ground(w, 10)
+	a.State, a.Speed.X = StateRun, RunReach
+
+	jump := func() bool {
+		a.State, a.OnGround, a.Speed.X, a.Speed.Y = StateRun, true, RunReach, 0
+		a.Input.Jump = true
+		out := a.enterRunJumpState()
+		a.Input.Jump = false
+		return out
+	}
+
+	if !jump() || a.Energy != MaxEnergy-EnergyRunJump {
+		t.Errorf("the first run-jump left %v energy, want %v", a.Energy, MaxEnergy-EnergyRunJump)
+	}
+	if !jump() || a.Energy != 0 {
+		t.Errorf("the second run-jump left %v energy, want 0", a.Energy)
+	}
+	if jump() {
+		t.Errorf("a third run-jump came out at %v energy", a.Energy)
+	}
+	if want := int32(MaxEnergy / 2); EnergyRunJump != want {
+		t.Errorf("a run-jump costs %d, want half the pool (%d)", int32(EnergyRunJump), want)
+	}
+}
+
+// A jump that cannot be paid for does not happen: nothing is spent, the fighter
+// stays on the ground and goes on running, and the refusal is raised.
+func TestRunJumpRefusedWhenPoor(t *testing.T) {
+	w := NewWorld(true)
+	a := ground(w, 10)
+	a.State, a.Speed.X = StateRun, RunReach
+	a.Energy = EnergyRunJump - 1
+	a.Events = 0
+	a.Input.Jump = true
+
+	a.Update(float32(FixedTimeStep))
+	if a.State != StateRun {
+		t.Errorf("a refused jump left state %d, want it still running %d", a.State, StateRun)
+	}
+	if !a.OnGround {
+		t.Errorf("a refused jump left the ground")
+	}
+	if a.Energy != EnergyRunJump-1 {
+		t.Errorf("a refused jump spent energy: %v left, want %v", a.Energy, int32(EnergyRunJump-1))
+	}
+	if a.Events&EvNoEnergy == 0 {
+		t.Errorf("a refused jump did not raise the refusal")
+	}
+}
+
+// The standing jump stays free, at any energy at all.
+func TestStandingJumpIsFree(t *testing.T) {
+	w := NewWorld(true)
+	a := ground(w, 10)
+	a.State, a.Energy, a.Input.Jump = StateIdle, 0, true
+
+	a.Update(float32(FixedTimeStep))
+	if a.State != StateJumpStart {
+		t.Fatalf("a standing jump at 0 energy left state %d, want the wind-up %d", a.State, StateJumpStart)
+	}
+	if a.Energy != 0 {
+		t.Errorf("the standing jump moved energy to %v, want it untouched at 0", a.Energy)
+	}
+}
+
+// Spending on a jump holds the refill back exactly as spending on a swing does,
+// and one jump still leaves enough to swing with.
+func TestRunJumpDelaysTheRefill(t *testing.T) {
+	w := NewWorld(true)
+	a := ground(w, 10)
+	a.State, a.Speed.X = StateRun, RunReach
+	a.EnergyCalm = EnergyCalmTicks // already refilling
+
+	a.enterRunJumpState()
+	if a.EnergyCalm != 0 {
+		t.Errorf("after a run-jump the calm wait is %d, want 0 - the refill did not start again", a.EnergyCalm)
+	}
+	if !a.canSwing() {
+		t.Errorf("a fighter that run-jumped once from full cannot swing at %v energy", a.Energy)
+	}
+}

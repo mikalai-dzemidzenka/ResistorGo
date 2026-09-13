@@ -21,7 +21,7 @@ func TestEnergyClamps(t *testing.T) {
 	a := w.Spawn(rl.Vector2{}, true)
 
 	a.Energy = 10
-	a.spendEnergy()
+	a.spendEnergy(EnergySwing)
 	if a.Energy != 0 {
 		t.Errorf("spending %d from 10 left %v, want 0", EnergySwing, a.Energy)
 	}
@@ -51,7 +51,7 @@ func TestEnergySpendResetsCalm(t *testing.T) {
 		t.Errorf("restoring reset the calm wait to %d", a.EnergyCalm)
 	}
 
-	a.spendEnergy()
+	a.spendEnergy(EnergySwing)
 	if a.EnergyCalm != 0 {
 		t.Errorf("after a swing the calm wait is %d, want 0", a.EnergyCalm)
 	}
@@ -217,9 +217,15 @@ func TestEnergyRegen(t *testing.T) {
 	a.Energy = MaxEnergy - 60
 	a.EnergyCalm = 0
 
-	run(w, EnergyCalmTicks+240) // 1.5s of waiting, then 4s of refilling
+	// 1.5s of waiting, then 1s of refilling: half of what was spent is back
+	run(w, EnergyCalmTicks+60)
+	if want := int32(MaxEnergy - 30); a.Energy != want {
+		t.Errorf("after 2.5s of calm: %v energy, want %v - half the 60 spent", a.Energy, want)
+	}
+
+	run(w, 60) // a second more finishes it
 	if a.Energy != MaxEnergy {
-		t.Errorf("after 5.5s of calm: %v energy, want it back at %v", a.Energy, int32(MaxEnergy))
+		t.Errorf("after 3.5s of calm: %v energy, want it back at %v", a.Energy, int32(MaxEnergy))
 	}
 
 	// a swing a second never gets the 1.5s wait finished, so a full pool's worth
@@ -237,6 +243,25 @@ func TestEnergyRegen(t *testing.T) {
 	}
 	if a.canSwing() {
 		t.Errorf("the pool still affords a swing at %v energy", a.Energy)
+	}
+}
+
+// An emptied pool affords a swing again two seconds after the last one: the
+// 1.5s wait, then long enough to earn a swing's worth back.
+func TestEmptyPoolAffordsASwingAgain(t *testing.T) {
+	w := NewWorld(true)
+	a := w.Spawn(rl.Vector2{}, true)
+	a.Updown = 1
+	a.Energy = 0
+	a.EnergyCalm = 0
+
+	run(w, 120) // 2 seconds
+	if !a.canSwing() {
+		t.Errorf("2s after emptying the pool: %v energy, too little for a swing at %d", a.Energy, EnergySwing)
+	}
+	a.State = StateIdle
+	if !a.enterAttackState() {
+		t.Errorf("the swing was refused at %v energy", a.Energy)
 	}
 }
 

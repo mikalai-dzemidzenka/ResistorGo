@@ -120,6 +120,62 @@ void main()
 }
 `
 
+// fsOutline traces the silhouette of a sprite frame, clipped to a band of it.
+//
+// It is an OUTER outline: it paints the transparent pixels that touch the body,
+// so the fighter's own pixels are never recoloured and the sprite underneath
+// stays exactly as it was drawn. Sampling is clamped to the frame's own
+// rectangle in the sheet, or a neighbouring frame would bleed in and outline a
+// pose the fighter is not in.
+const fsOutline = `
+#version 330
+
+in vec2 fragTexCoord;
+in vec4 fragColor;
+
+uniform sampler2D texture0;
+uniform vec2 texelSize;    // one texel, in texture coordinates
+uniform vec4 frameBounds;  // u0, v0, u1, v1 of this frame within the sheet
+uniform vec2 band;         // the v range to keep; the rest is discarded
+uniform vec4 outlineColor;
+
+out vec4 finalColor;
+
+// alphaAt reads the sprite's coverage, treating anything outside this frame as
+// empty so the outline stops at the frame's edge instead of sampling the next.
+float alphaAt(vec2 uv)
+{
+    if (uv.x < frameBounds.x || uv.x > frameBounds.z ||
+        uv.y < frameBounds.y || uv.y > frameBounds.w) {
+        return 0.0;
+    }
+    return texture(texture0, uv).a;
+}
+
+void main()
+{
+    vec2 uv = fragTexCoord;
+
+    // outside the band the swing would land on: nothing is marked
+    if (uv.y < band.x || uv.y > band.y) {
+        discard;
+    }
+    // inside the body: leave the fighter's own pixels alone
+    if (alphaAt(uv) > 0.5) {
+        discard;
+    }
+    // a transparent pixel is part of the outline only if the body touches it
+    float neighbours = alphaAt(uv + vec2(texelSize.x, 0.0))
+                     + alphaAt(uv - vec2(texelSize.x, 0.0))
+                     + alphaAt(uv + vec2(0.0, texelSize.y))
+                     + alphaAt(uv - vec2(0.0, texelSize.y));
+    if (neighbours < 0.5) {
+        discard;
+    }
+    finalColor = outlineColor;
+}
+`
+
 // ============================================================
 // REDUCTION
 // ============================================================

@@ -57,10 +57,11 @@ var (
 		AtkPos:   rl.Vector2{SW * WindowScale / 2, SH * WindowScale / 2},
 		GUIZ:     2,
 	}
-	WhiteShader rl.Shader
-	NetMode     = NetOffline
-	quit        bool
-	drawList    []*Actor
+	WhiteShader   rl.Shader
+	OutlineShader rl.Shader
+	NetMode       = NetOffline
+	quit          bool
+	drawList      []*Actor
 )
 
 type Vector2i struct {
@@ -281,6 +282,7 @@ func runLevel(dt float32) {
 	if !levelInit {
 		levelInit = true
 		WhiteShader = rl.LoadShaderFromMemory("", fsWhite)
+		OutlineShader = rl.LoadShaderFromMemory("", fsOutline)
 		LE.LoadLevel("level_1.json")
 
 		Sh = loadShaders()
@@ -408,7 +410,11 @@ func runLevel(dt float32) {
 		)
 		rl.EndBlendMode()
 
-		// structure bars go on top of the lighting, so it cannot tint them
+		// the attack outline and the structure bars go on top of the lighting,
+		// so it cannot tint them; the outline first, under the bars
+		for _, a := range drawList {
+			drawAttackOutline(w.Local, a)
+		}
 		for _, a := range drawList {
 			a.drawStructureBar()
 		}

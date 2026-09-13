@@ -15,10 +15,14 @@ const (
 	MaxSpeed        = 320
 	PunchSpeed      = 50
 	AttackDash      = 4
-	Gravity         = 1500
-	MaxJumpSpeed    = -Gravity * 10
-	MaxFallSpeed    = 900
-	AttackZoomSpeed = 2.0
+	// The run-jump leaves the ground on the third frame of its animation: the
+	// frame the fighter pushes off on. The two before it are the anticipation,
+	// drawn rather than spent in a state of its own.
+	RunJumpLaunchFrame = 2
+	Gravity            = 1500
+	MaxJumpSpeed       = -Gravity * 10
+	MaxFallSpeed       = 900
+	AttackZoomSpeed    = 2.0
 
 	BackAttackSpeed   = 0.2
 	SecondAttackSpeed = 0.2
@@ -42,8 +46,11 @@ const (
 	MaxEnergy          = 200
 	EnergySwing        = 12 // sixteen swings from a full pool
 	EnergyBlockRestore = 15 // more than a swing costs: one read pays for the answer
-	EnergyRegenTicks   = 4  // one point every 4 ticks, so 15 per second
+	EnergyRegenTicks   = 2  // one point every 2 ticks, so 30 per second
 	EnergyCalmTicks    = 90 // 1.5s without a swing before it refills
+	// A running jump costs half the pool: two from full, and the third has to
+	// be earned. Derived from MaxEnergy, so retuning the pool carries it along.
+	EnergyRunJump = MaxEnergy / 2
 
 	StunEveryHits   = 3
 	StunKnockback   = 150
@@ -85,6 +92,11 @@ const (
 	StateClimb
 	StateTurnover
 	StateDeath
+	// appended, never inserted: the enum's values are what the snapshot
+	// carries, so slotting a state in beside its relatives would renumber
+	// every state below it for anyone drawing from an older build
+	StateRunJump
+	StateFall
 )
 
 const (
@@ -232,6 +244,7 @@ func (a *Actor) Update(dt float32) {
 	a.checkCollision()
 	a.updateHorSpeed(dt)
 	a.updateVertSpeed(dt)
+	a.updateFalling()
 
 	switch a.State {
 	case StateClimb:
@@ -271,9 +284,6 @@ func (a *Actor) Update(dt float32) {
 			a.enterJumpStartState()
 			return
 		}
-		if !a.OnGround {
-			// TODO state fall
-		}
 	case StateRun:
 		if prevOrientation != a.Orientation {
 			a.enterTurnoverState()
@@ -283,7 +293,13 @@ func (a *Actor) Update(dt float32) {
 			a.enterIdleState()
 			return
 		}
-		if a.Input.Attack {
+		// no return: the take-off tick must still apply its movement, or the
+		// fighter is left standing on the floor and the next collision check
+		// cancels the jump. The standing jump leaves the ground the same way.
+		if a.Input.Jump && a.enterRunJumpState() {
+			// nothing else this tick; a refused jump falls through and the
+			// fighter goes on running
+		} else if a.Input.Attack {
 			a.enterAttackState()
 		}
 	case StateAttack:
@@ -305,6 +321,30 @@ func (a *Actor) Update(dt float32) {
 		} else if a.OnGround {
 			a.exitJumpState()
 			a.enterIdleState()
+		}
+	case StateRunJump:
+		// still on the ground until the push-off frame arrives; the fighter is
+		// committed from the tick it pressed jump, so the button is not read
+		// again here
+		if a.OnGround {
+			if a.AnimCurrentFrame >= RunJumpLaunchFrame {
+				a.launchRunJump(dt)
+			}
+			break
+		}
+		if (a.CanClimbRight && a.Orientation == 1) || (a.CanClimbLeft && a.Orientation == -1) {
+			a.exitJumpState()
+			a.enterClimbState()
+		}
+	case StateFall:
+		// a fall catches a ledge on the same terms a jump does: falling costs
+		// the fighter nothing it had on the way up
+		if (a.CanClimbRight && a.Orientation == 1) || (a.CanClimbLeft && a.Orientation == -1) {
+			a.exitJumpState()
+			a.enterClimbState()
+		} else if a.OnGround {
+			a.exitJumpState()
+			a.land()
 		}
 	case StateTurnover:
 		if a.AnimFinished {
@@ -501,6 +541,26 @@ func (a *Actor) DrawFrame() {
 		X: a.drawPos().X,
 		Y: a.drawPos().Y + float32(a.AnimYOffset),
 	}, rl.White)
+}
+
+// spriteDraw is the texture, source rectangle and position this fighter's
+// sprite is drawn with on this frame. The outline pass draws the same sprite a
+// second time, so the two must read it from one place or they would drift and
+// the outline would trace a pose the fighter is not in.
+func (a *Actor) spriteDraw() (rl.Texture2D, rl.Rectangle, rl.Vector2) {
+	tex := resources[a.Anim]
+	pos := a.drawPos()
+	height := float32(48)
+	if a.AnimOnce {
+		height = float32(tex.Height)
+		pos.Y += float32(a.AnimYOffset)
+	}
+	return tex, rl.Rectangle{
+		X:      float32(a.AnimCurrentFrame) * 48,
+		Y:      0,
+		Width:  48 * float32(a.Orientation),
+		Height: height,
+	}, pos
 }
 
 func (a *Actor) DrawAnimOnce() {
@@ -806,7 +866,7 @@ func (a *Actor) enterAttackState() bool {
 		a.Events |= EvNoEnergy
 		return false
 	}
-	a.spendEnergy()
+	a.spendEnergy(EnergySwing)
 	a.State = StateAttack
 	a.stopFlicker()
 	a.SwingHit = false
@@ -842,11 +902,15 @@ func (a *Actor) restoreStructure(amount float32) {
 // canSwing reports whether the fighter can pay for a swing.
 func (a *Actor) canSwing() bool { return a.Energy >= EnergySwing }
 
-// spendEnergy pays for one swing. The calm wait starts again: swinging is the
-// only thing that holds energy back from refilling.
-func (a *Actor) spendEnergy() {
+// canRunJump reports whether the fighter can pay for a running jump.
+func (a *Actor) canRunJump() bool { return a.Energy >= EnergyRunJump }
+
+// spendEnergy pays cost out of the pool. The calm wait starts again: spending
+// is the only thing that holds energy back from refilling, whether it went on a
+// swing or on leaving the ground at a run.
+func (a *Actor) spendEnergy(cost int32) {
 	a.EnergyCalm = 0
-	a.Energy = max(a.Energy-EnergySwing, 0)
+	a.Energy = max(a.Energy-cost, 0)
 }
 
 // restoreEnergy puts energy back, never past the cap. It leaves the calm wait
@@ -1045,35 +1109,37 @@ func (a *Actor) updateAttacked() {
 	}
 }
 
+// attackBoxAt is the swing's reach at guard height updown, placed from pos.
+// The simulation asks for it at the fighter's own position; the renderer asks
+// for it at the interpolated one, so an outline cannot lag the sprite it marks
+// and interpolation cannot reach hit resolution. Block-all (3) has no attack,
+// and reports none.
+func (a *Actor) attackBoxAt(updown uint8, pos rl.Vector2) (rl.Rectangle, bool) {
+	var box rl.Rectangle
+	switch updown {
+	case 0:
+		box = a.AttackBoxLow
+	case 1:
+		box = a.AttackBoxMid
+	case 2:
+		box = a.AttackBoxHigh
+	default:
+		return rl.Rectangle{}, false
+	}
+	return rl.Rectangle{
+		X:      pos.X + box.X + 12*float32(a.Orientation+1),
+		Y:      pos.Y + box.Y,
+		Width:  box.Width,
+		Height: box.Height,
+	}, true
+}
+
 func (a *Actor) updateAttack() {
 	if a.Input.Attack {
 		a.Events |= EvAttackStart
 		a.AttackQueued = true
 	}
-	var r1 rl.Rectangle
-	switch a.Updown {
-	case 2:
-		r1 = rl.Rectangle{
-			X:      a.Pos.X + a.AttackBoxHigh.X + 12*float32(a.Orientation+1),
-			Y:      a.Pos.Y + a.AttackBoxHigh.Y,
-			Width:  a.AttackBoxHigh.Width,
-			Height: a.AttackBoxHigh.Height,
-		}
-	case 1:
-		r1 = rl.Rectangle{
-			X:      a.Pos.X + a.AttackBoxMid.X + 12*float32(a.Orientation+1),
-			Y:      a.Pos.Y + a.AttackBoxMid.Y,
-			Width:  a.AttackBoxMid.Width,
-			Height: a.AttackBoxMid.Height,
-		}
-	case 0:
-		r1 = rl.Rectangle{
-			X:      a.Pos.X + a.AttackBoxLow.X + 12*float32(a.Orientation+1),
-			Y:      a.Pos.Y + a.AttackBoxLow.Y,
-			Width:  a.AttackBoxLow.Width,
-			Height: a.AttackBoxLow.Height,
-		}
-	}
+	r1, _ := a.attackBoxAt(a.Updown, a.Pos)
 
 	// only the authoritative world decides hits and blocks, and one swing
 	// lands on a given fighter at most once
@@ -1150,7 +1216,7 @@ func (a *Actor) updateAttack() {
 			a.enterIdleState()
 			return
 		}
-		a.spendEnergy()
+		a.spendEnergy(EnergySwing)
 		if a.Updown != prevUpdown {
 			anim := fmt.Sprintf("resources/threefour/updown-atk-%d-%d.png", prevUpdown, a.Updown)
 			a.SetAnim(anim, AnimOptions{animDuration: 0.4, totalFrames: 7, once: true})
@@ -1217,6 +1283,77 @@ func (a *Actor) enterJumpState(dt float32) {
 	a.OnGround = false
 	a.Speed.Y = MaxJumpSpeed * dt
 	a.State = StateJump
+}
+
+// enterRunJumpState commits a running fighter to its jump: the animation starts
+// on the tick the input arrives, and the fighter stays on the ground until the
+// frame it pushes off on. There is no separate wind-up state - the anticipation
+// is the two frames the animation draws before the push-off.
+//
+// A run-jump that cannot be paid for does not happen: nothing is spent, the
+// fighter stays where it was, and the refusal is raised for the renderer, the
+// same way a swing it cannot afford is refused.
+func (a *Actor) enterRunJumpState() bool {
+	if !a.canRunJump() {
+		a.Events |= EvNoEnergy
+		return false
+	}
+	a.spendEnergy(EnergyRunJump)
+	a.State = StateRunJump
+	a.SetAnim("resources/threefour/run-jump.png", AnimOptions{animDuration: 0.5, totalFrames: 6, once: true, reset: true})
+	return true
+}
+
+// launchRunJump is the push-off, on the frame the animation pushes off on. It
+// is the same upward speed a standing jump leaves at, and horizontal speed is
+// left alone, so the run's momentum is what carries it.
+func (a *Actor) launchRunJump(dt float32) {
+	a.OnGround = false
+	a.Speed.Y = MaxJumpSpeed * dt
+}
+
+// land puts a fighter that has reached the ground back into what it was doing:
+// still moving, it runs; stopped, it stands. The threshold is the one the idle
+// state already runs at, so a landing cannot leave a fighter running at a speed
+// it would not run at from a standstill.
+//
+// A landing is not a lockout: an attack pressed on the tick it lands comes out,
+// rather than being swallowed by the state change.
+func (a *Actor) land() {
+	if abs(a.Speed.X) > RunReach {
+		a.enterRunState()
+	} else {
+		a.enterIdleState()
+	}
+	if a.Input.Attack && a.Updown != 3 {
+		a.enterAttackState()
+	}
+}
+
+// updateFalling puts any fighter that is off the ground and going down into
+// the fall. It runs before the state switch rather than inside it, so every way
+// into the air reaches it: over the top of either jump, off a ledge, or carried
+// off one by a knockback. A fighter that is still rising is not falling.
+//
+// The climb is left alone - it is on a ledge, not in the air - and so are the
+// two states that are not free to act: a stun plays its own animation until it
+// ends, and the dead are falling in a sense this does not mean.
+func (a *Actor) updateFalling() {
+	switch a.State {
+	case StateFall, StateClimb, StateAttacked, StateDeath:
+		return
+	}
+	if !a.OnGround && a.Speed.Y > 0 {
+		a.enterFallState()
+	}
+}
+
+// enterFallState is every way of being in the air and going down: over the top
+// of either jump, off a ledge, or put there by a knockback. It leaves speed
+// alone - a fall is steered like anything else airborne.
+func (a *Actor) enterFallState() {
+	a.State = StateFall
+	a.SetAnim("resources/threefour/fall.png", AnimOptions{animDuration: 0.3, totalFrames: 3})
 }
 
 func (a *Actor) enterJumpStartState() {
