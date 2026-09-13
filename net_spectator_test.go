@@ -2,7 +2,6 @@ package resistor
 
 import (
 	"fmt"
-	"github.com/codecat/go-enet"
 	"testing"
 	"time"
 )
@@ -23,8 +22,8 @@ func fighterOf(s *Server, id uint16) *Actor {
 
 // Server-side spectator rules, driven by raw ENet peers.
 func TestSpectatorServer(t *testing.T) {
-	enet.Initialize()
-	defer enet.Deinitialize()
+	initNet()
+	defer shutdownNet()
 	LE = NewLevelEditor(39, 83)
 
 	cfg := DefaultServerConfig()
@@ -134,8 +133,8 @@ func lastMsg(r *rawPeer, typ byte) []byte {
 
 // A real spectator Client: enters without a fighter, sees everyone, sends no commands, stays connected.
 func TestSpectatorClient(t *testing.T) {
-	enet.Initialize()
-	defer enet.Deinitialize()
+	initNet()
+	defer shutdownNet()
 	Stage = StageLevel // entering the level needs a window
 	defer func() { Stage = StageMainMenu }()
 	LE = NewLevelEditor(39, 83)

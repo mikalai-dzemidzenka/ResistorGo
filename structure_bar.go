@@ -12,6 +12,13 @@ const (
 	StunPipSize        = 2
 	StunPipGap         = 2 // between pips; even, so a row of them centres on a whole pixel
 	StunPipLift        = 1 // gap between the pips and the bar below them
+
+	// The energy bar sits under the structure bar, the same width. It shows
+	// what the fighter has left where the bar above shows what it has lost, so
+	// what a swing costs can be retuned without touching the HUD.
+	EnergyBarHeight = 1
+	EnergyBarDrop   = 1   // gap between the structure bar and the energy bar below it
+	EnergyDenySec   = 0.2 // how long a refused swing flashes the empty bar
 )
 
 // Exact palette entries: the palette pass maps every pixel to its nearest
@@ -20,6 +27,7 @@ var (
 	structureBarTrack = rl.NewColor(39, 35, 36, 255)
 	structureBarFill  = rl.NewColor(234, 50, 60, 255)
 	stunPipColor      = rl.NewColor(242, 221, 161, 255)
+	energyBarFill     = rl.NewColor(0, 228, 48, 255) // green, so it is never read as part of the red bar above
 )
 
 // showStructureBar reports whether a fighter's bar is drawn: only while it has
@@ -29,11 +37,21 @@ func showStructureBar(a *Actor) bool {
 	return a.Structure < MaxStructure && a.State != StateDeath && !TimeShowsHistory()
 }
 
+// showEnergyBar reports whether a fighter's energy bar is drawn. Energy has its
+// own rule rather than the structure bar's: a fighter that has swung shows one
+// at full structure, and one at full energy shows none however hurt it is.
+func showEnergyBar(a *Actor) bool {
+	return a.Energy < MaxEnergy && a.State != StateDeath && !TimeShowsHistory()
+}
+
 // structureBarRects is the bar laid out in whole world pixels.
 type structureBarRects struct {
-	Track rl.Rectangle
-	Fill  [2]rl.Rectangle // the halves either side of the middle
-	Pips  []rl.Rectangle
+	Track  rl.Rectangle
+	Fill   [2]rl.Rectangle // the halves either side of the middle
+	Pips   []rl.Rectangle
+	Energy rl.Rectangle // the energy track, under the bar
+	// EnergyFill is the energy left, drained from the right as it is spent.
+	EnergyFill rl.Rectangle
 }
 
 // structureBarLayout places the bar over a fighter's head, from the position
@@ -61,22 +79,40 @@ func structureBarLayout(a *Actor) structureBarRects {
 		r.Pips = append(r.Pips, rl.Rectangle{X: x, Y: y, Width: StunPipSize, Height: StunPipSize})
 		x += StunPipSize + StunPipGap
 	}
+
+	// the energy bar, under the structure bar: what is left, not what is spent
+	ey := top + StructureBarHeight + EnergyBarDrop
+	r.Energy = rl.Rectangle{X: left, Y: ey, Width: StructureBarWidth, Height: EnergyBarHeight}
+	held := clamp(a.Energy, 0, MaxEnergy)
+	r.EnergyFill = r.Energy
+	r.EnergyFill.Width = roundf(StructureBarWidth * float32(held) / MaxEnergy)
 	return r
 }
 
-// drawStructureBar draws the bar and stun pips, when there is anything to show.
+// drawStructureBar draws the structure bar, its stun pips and the energy bar,
+// each when there is anything to show. The two bars appear independently.
 func (a *Actor) drawStructureBar() {
-	if !showStructureBar(a) {
+	bar, energy := showStructureBar(a), showEnergyBar(a)
+	denied := a.DenyUntil > GameTimeSec && a.State != StateDeath && !TimeShowsHistory()
+	if !bar && !energy && !denied {
 		return
 	}
 	r := structureBarLayout(a)
-	rl.DrawRectangleRec(r.Track, structureBarTrack)
-	for _, f := range r.Fill {
-		if f.Width > 0 {
-			rl.DrawRectangleRec(f, structureBarFill)
+	if bar {
+		rl.DrawRectangleRec(r.Track, structureBarTrack)
+		for _, f := range r.Fill {
+			if f.Width > 0 {
+				rl.DrawRectangleRec(f, structureBarFill)
+			}
+		}
+		for _, p := range r.Pips {
+			rl.DrawRectangleRec(p, stunPipColor)
 		}
 	}
-	for _, p := range r.Pips {
-		rl.DrawRectangleRec(p, stunPipColor)
+	if energy || denied { // a refusal shows the empty bar it could not pay from
+		rl.DrawRectangleRec(r.Energy, structureBarTrack)
+		if r.EnergyFill.Width > 0 {
+			rl.DrawRectangleRec(r.EnergyFill, energyBarFill)
+		}
 	}
 }

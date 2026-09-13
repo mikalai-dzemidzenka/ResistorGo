@@ -14,7 +14,7 @@ func sampleRec(id uint16) ActorRec {
 		ID: id, X: 12, Y: -34, SX: 1.5, SY: -900,
 		State: uint8(StateAttack), Flags: fOrientLeft | fAnimOnce | fAttackQueued,
 		Updown: 2, PrevUpdown: 1, Anim: 17, AnimFrame: 3, AnimTotal: 8, AnimYOffset: -48,
-		AnimDurMs: 300, Ticks: 123456, AnimStart: 123400, AttackCount: 2, FreezeTicks: 5, Structure: 73, AttackerID: 7,
+		AnimDurMs: 300, Ticks: 123456, AnimStart: 123400, AttackCount: 2, FreezeTicks: 5, Structure: 73, Energy: 45, AttackerID: 7,
 	}
 }
 
@@ -129,6 +129,29 @@ func TestStructureReplicates(t *testing.T) {
 		if diff := b.Structure - want; diff > 0.05 || diff < -0.05 {
 			t.Errorf("structure %v arrived as %v", want, b.Structure)
 		}
+	}
+}
+
+// Energy survives the wire exactly, at every value it can hold.
+func TestEnergyReplicates(t *testing.T) {
+	w := NewWorld(true)
+	a := w.Spawn(ZeroVec2, true)
+	for want := int32(0); want <= MaxEnergy; want++ {
+		a.Energy = want
+		b := NewActor(ZeroVec2, true)
+		recOf(a).apply(b, w)
+		if b.Energy != want {
+			t.Fatalf("energy %v arrived as %v", want, b.Energy)
+		}
+	}
+
+	// a value past the cap is clamped rather than dropping the snapshot
+	r := recOf(a)
+	r.Energy = 250
+	b := NewActor(ZeroVec2, true)
+	r.apply(b, w)
+	if b.Energy != MaxEnergy {
+		t.Errorf("an over-cap record gave %v energy, want it clamped to %v", b.Energy, int32(MaxEnergy))
 	}
 }
 

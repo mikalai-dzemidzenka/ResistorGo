@@ -126,8 +126,7 @@ func Game() {
 
 	LoadTextures()
 
-	enet.Initialize()
-	defer enet.Deinitialize()
+	defer shutdownNet()
 
 	LE = NewLevelEditor(39, 83)
 	LE.LoadLevel("level_1.json")
@@ -154,6 +153,29 @@ func Game() {
 		present()
 	}
 	leaveMatch("", menuMain)
+}
+
+// netReady is whether ENet has been started. Single player never touches the
+// network, so it is started on demand rather than at launch: the first host or
+// join pays for it, and a session that only ever plays offline does not.
+var netReady bool
+
+// initNet starts ENet if it has not been started already.
+func initNet() {
+	if netReady {
+		return
+	}
+	enet.Initialize()
+	netReady = true
+}
+
+// shutdownNet stops ENet, if anything ever started it.
+func shutdownNet() {
+	if !netReady {
+		return
+	}
+	enet.Deinitialize()
+	netReady = false
 }
 
 func loadStyle() {
@@ -236,6 +258,9 @@ func presentEffects(w *World) {
 	for _, a := range w.Actors {
 		if a == local && a.Events&EvAttackStart != 0 {
 			Cam.ZoomSpeed += AttackZoomSpeed
+		}
+		if a.Events&EvNoEnergy != 0 {
+			a.DenyUntil = GameTimeSec + EnergyDenySec
 		}
 		a.Events = 0
 		if a.State == StateAttacked && local != nil && (a == local || a.Attacker == local) {
@@ -344,7 +369,7 @@ func runLevel(dt float32) {
 		})
 		locTime := rl.GetShaderLocation(WhiteShader, "time")
 		for _, a := range drawList {
-			if a.AnimWhite && a.AnimCurrentFrame < 2 {
+			if a.Flickering() {
 				rl.BeginShaderMode(WhiteShader)
 				rl.SetShaderValue(WhiteShader, locTime, []float32{float32(rl.GetTime())}, rl.ShaderUniformFloat)
 				a.Draw()

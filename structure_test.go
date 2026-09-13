@@ -84,9 +84,23 @@ func TestStructureRegen(t *testing.T) {
 	def.Structure = MaxStructure - 4
 	def.CalmTicks = 0
 
-	run(w, 90+210) // 1.5s of waiting, then 3.5s of refilling
-	if def.Structure != MaxStructure {
-		t.Errorf("after 3.5s of calm: %v structure, want it back at %v", def.Structure, float32(MaxStructure))
+	// the pool is a float32 fed a fraction per tick, so a total reached part way
+	// through a refill carries the accumulated rounding; compare to a tolerance
+	// finer than anything the bar can show
+	nearly := func(got, want float32) bool { return got-want < 0.01 && want-got < 0.01 }
+
+	run(w, 90+240) // 1.5s of waiting, then 4s of refilling
+	if !nearly(def.Structure, MaxStructure) {
+		t.Errorf("after 5.5s of calm: %v structure, want it back at %v", def.Structure, float32(MaxStructure))
+	}
+
+	// half way there: 3.5s of calm once refilled all 4, and now returns 2. This
+	// is what tells the rate apart - waiting long enough passes at either rate.
+	def.Structure = MaxStructure - 4
+	def.CalmTicks = 0
+	run(w, 90+120) // 1.5s of waiting, then 2s of refilling
+	if want := float32(MaxStructure - 2); !nearly(def.Structure, want) {
+		t.Errorf("after 3.5s of calm: %v structure, want %v - half of what was lost", def.Structure, want)
 	}
 
 	// pressure keeps it down: a hit every second
@@ -125,7 +139,7 @@ func TestFlinchKeepsControl(t *testing.T) {
 		t.Errorf("a flinch put the defender in state %d, want it left alone", def.State)
 	}
 	if def.FlinchTicks == 0 {
-		t.Errorf("a flinch did not hold the hit animation")
+		t.Errorf("a flinch did not start the flicker")
 	}
 	def.takeHit(att)
 	def.takeHit(att) // the third stuns
@@ -134,6 +148,56 @@ func TestFlinchKeepsControl(t *testing.T) {
 	}
 	if abs(def.Speed.X) <= abs(flinch) {
 		t.Errorf("the stun threw the defender %v, no further than the flinch's %v", def.Speed.X, flinch)
+	}
+}
+
+// Only the stunning hit plays the hit animation; the two before it leave the
+// fighter's own animation alone and just flicker.
+func TestOnlyTheStunPlaysTheHitAnimation(t *testing.T) {
+	_, att, def := swing(t, 0)
+	const hitAnim = "resources/threefour/hit-top.png"
+	for i := range 2 {
+		def.SetAnimFrame("resources/threefour/updown.png", def.Updown)
+		def.takeHit(att)
+		if def.Anim == hitAnim {
+			t.Errorf("hit %d played the hit animation, want the fighter's own left alone", i+1)
+		}
+		if !def.Flickering() {
+			t.Errorf("hit %d did not flicker", i+1)
+		}
+	}
+	def.takeHit(att) // the third stuns
+	if def.Anim != hitAnim {
+		t.Errorf("the stun played %q, want the hit animation", def.Anim)
+	}
+	if !def.Flickering() {
+		t.Errorf("the stun did not flicker over its opening frames")
+	}
+}
+
+// The flicker runs out with the flinch hold, and swinging out of a flinch takes
+// it along: nothing may leave a fighter white for good.
+func TestFlickerEndsWithTheFlinch(t *testing.T) {
+	_, att, def := swing(t, 0)
+	def.takeHit(att)
+	def.FreezeTicks = 0
+	for range FlinchHoldTicks {
+		if !def.Flickering() {
+			t.Fatalf("the flicker stopped with %d flinch ticks left", def.FlinchTicks)
+		}
+		def.Update(float32(FixedTimeStep))
+	}
+	if def.Flickering() {
+		t.Errorf("the flicker outlasted the flinch hold")
+	}
+
+	def.takeHit(att)
+	def.FreezeTicks = 0
+	if !def.enterAttackState() {
+		t.Fatal("the flinching fighter could not swing")
+	}
+	if def.Flickering() {
+		t.Errorf("swinging out of a flinch left the fighter flickering")
 	}
 }
 
