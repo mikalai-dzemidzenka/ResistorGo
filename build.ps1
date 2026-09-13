@@ -9,11 +9,15 @@
 #   -tags release  leaves the developer tools out: no level editor, debug overlay,
 #                  network-simulation keys or level writes (devtools_release.go)
 #
-# UPX, if installed, packs it further (~2.5x). It is optional because a packed
-# binary occasionally trips heuristic antivirus scanners; drop it if that bites.
+# UPX packs it further (~1.7x, 9.0 MB -> 5.2 MB) and is required: resistor.exe is
+# tracked in the repo, so an unpacked build silently doubles what every clone
+# carries. A missing upx fails the build rather than quietly shipping 9 MB.
 # Install with: scoop install upx
+#
+# If a packed binary ever trips a heuristic antivirus scanner, pass -NoPack to
+# get the unpacked one deliberately, rather than by accident.
 
-param([string]$Out = "resistor.exe")
+param([string]$Out = "resistor.exe", [switch]$NoPack)
 
 $ErrorActionPreference = "Stop"
 
@@ -23,11 +27,16 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 $size = (Get-Item $Out).Length
 Write-Host ("built {0}: {1:N1} MB" -f $Out, ($size / 1MB))
 
-$upx = Get-Command upx -ErrorAction SilentlyContinue
-if ($upx) {
-    & $upx.Source --best --lzma -q $Out
-    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-    Write-Host ("packed {0}: {1:N1} MB" -f $Out, ((Get-Item $Out).Length / 1MB))
-} else {
-    Write-Host "upx not found - skipping compression (scoop install upx)"
+if ($NoPack) {
+    Write-Host "-NoPack given: leaving $Out unpacked"
+    exit 0
 }
+
+$upx = Get-Command upx -ErrorAction SilentlyContinue
+if (-not $upx) {
+    Write-Error "upx not found. Install it (scoop install upx), or pass -NoPack to build without it."
+    exit 1
+}
+& $upx.Source --best --lzma -q $Out
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+Write-Host ("packed {0}: {1:N1} MB" -f $Out, ((Get-Item $Out).Length / 1MB))
