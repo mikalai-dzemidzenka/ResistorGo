@@ -740,6 +740,9 @@ func (a *Actor) checkCollision() {
 	pPosX := a.Pos.X
 	hitTop := a.headBlocked(pColCenterX)
 	for _, obj := range LE.objectsIndexed {
+		if obj.CollisionRect == nil {
+			continue // an object with no collision rectangle is not stood on
+		}
 		oColY := float32(obj.Y + int32(obj.CollisionRect.Y))
 		oColHeight := obj.CollisionRect.Height
 		oColX := float32(obj.X + int32(obj.CollisionRect.X))

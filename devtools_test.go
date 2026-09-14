@@ -1,7 +1,6 @@
 package resistor
 
 import (
-	"encoding/json"
 	"os"
 	"testing"
 )
@@ -18,9 +17,11 @@ func TestLoadLevelSource(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err := json.Unmarshal(b, &le.objects); err != nil {
+		objects, _, err := parseLevel(b)
+		if err != nil {
 			t.Fatal(err)
 		}
+		le.objects = objects
 		return &le
 	}
 	want := embedded().Hash()

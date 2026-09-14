@@ -49,10 +49,9 @@ var (
 	ScreenPaletteTexture rl.Texture2D
 	PaletteShader        rl.Shader
 	Sh                   *Shaders
-	light1               *ZimaLight
-	light2               *ZimaLight
-	light3               *ZimaLight
-	Cur                  *Cursor = &Cursor{
+	sharedLight          *ZimaLight         // one set of shadow textures, taken in turn by every light
+	LightAccum           rl.RenderTexture2D // every light in view, added up
+	Cur                  *Cursor            = &Cursor{
 		AtkSpeed: CursorAttackSpeed,
 		AtkPos:   rl.Vector2{SW * WindowScale / 2, SH * WindowScale / 2},
 		GUIZ:     2,
@@ -144,6 +143,15 @@ func Game() {
 		GameTimeSec += float64(dt)
 		MousePos = rl.GetMousePosition()
 		MouseWorldPos = v2i(rl.GetScreenToWorld2D(MousePos, Cam.View()))
+		// A dropped file always comes off the queue, so one dropped during a
+		// match is not waiting to be imported when edit mode is entered. Only
+		// edit mode acts on it.
+		if rl.IsFileDropped() {
+			dropped := rl.LoadDroppedFiles()
+			if DevTools && Editing && Stage == StageLevel {
+				LE.importDropped(dropped)
+			}
+		}
 		updateAudio(dt)
 		switch Stage {
 		case StageMainMenu:
@@ -296,12 +304,12 @@ func runLevel(dt float32) {
 		LE.LoadLevel("level_1.json")
 
 		Sh = loadShaders()
-		const intense = 1.0
-		light1 = newZimaLight(512, 256, rl.White, intense)
-		light2 = newZimaLight(512, 128, rl.White, intense)
-		light3 = newZimaLight(512, 128, rl.White, intense)
+		// 512 is the resolution every light has always been drawn at; radius,
+		// color and intensity are set per light as it takes its turn
+		sharedLight = newZimaLight(512, 128, rl.White, 1)
 
 		ScreenFullTexture = rl.LoadRenderTexture(SW*WindowScale, SH*WindowScale)
+		LightAccum = rl.LoadRenderTexture(SW*WindowScale, SH*WindowScale)
 	}
 	if rl.IsKeyPressed(rl.KeyEscape) {
 		leaveMatch("", menuMain)
@@ -361,12 +369,7 @@ func runLevel(dt float32) {
 	}
 	Cam.Update(dt)
 
-	pos1 := rl.Vector2{40, 30}
-	pos2 := rl.Vector2{120, 120}
-	pos3 := rl.Vector2{-40, 30}
-	tex1 := light1.Compute(Sh, pos1, LE.LightOccluders())
-	tex2 := light2.Compute(Sh, pos2, LE.LightOccluders())
-	tex3 := light3.Compute(Sh, pos3, LE.LightOccluders())
+	computeLights(LE.lights, LE.LightOccluders(), Cam.View())
 	rl.BeginTextureMode(ScreenFullTexture)
 	{
 		rl.ClearBackground(rl.Black)
@@ -398,27 +401,8 @@ func runLevel(dt float32) {
 
 		rl.EndMode2D()
 		rl.DrawRectangle(0, 0, SW*WindowScale, SH*WindowScale, rl.NewColor(0, 0, 0, 50))
+		drawLightAccum()
 		rl.BeginMode2D(Cam.View())
-
-		rl.BeginBlendMode(rl.BlendAdditive)
-		addLight(
-			tex1,
-			pos1,
-			light1.Radius,
-		)
-
-		addLight(
-			tex2,
-			pos2,
-			light2.Radius,
-		)
-
-		addLight(
-			tex3,
-			pos3,
-			light3.Radius,
-		)
-		rl.EndBlendMode()
 
 		// the attack outline and the structure bars go on top of the lighting,
 		// so it cannot tint them; the outline first, under the bars
@@ -428,6 +412,7 @@ func runLevel(dt float32) {
 		for _, a := range drawList {
 			a.drawStructureBar()
 		}
+		LE.DrawOverlay()
 
 		rl.EndMode2D()
 	}

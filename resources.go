@@ -1,7 +1,11 @@
 package resistor
 
 import (
+	"io/fs"
+	"os"
 	"path"
+	"slices"
+	"strings"
 
 	rl "github.com/gen2brain/raylib-go/raylib"
 )
@@ -10,6 +14,10 @@ var (
 	resources = make(map[string]rl.Texture2D)
 	models    = make(map[string]rl.Model)
 )
+
+// blocksDir is where every placeable level texture lives. assets.go embeds the
+// whole directory, so a texture dropped in here ships with the next build.
+const blocksDir = "resources/blocks"
 
 // animTable lists every actor animation. The index is the animation's network id,
 // so the order must be identical on client and server (append only).
@@ -87,10 +95,74 @@ func animPath(id uint8) string {
 	return animTable[animID("resources/threefour/updown.png")]
 }
 
+// embeddedBlocks is every block texture this binary carries. It is what tells
+// the editor whether a texture would still be there in a build made now: one
+// that is only on disk can be placed, but would not ship.
+var embeddedBlocks = func() map[string]bool {
+	m := make(map[string]bool)
+	for _, p := range embeddedBlockPaths() {
+		m[p] = true
+	}
+	return m
+}()
+
+// embeddedBlockPaths lists the block textures in the binary.
+func embeddedBlockPaths() []string {
+	names, err := fs.Glob(assetFS, blocksDir+"/*.png")
+	if err != nil {
+		return nil
+	}
+	return names
+}
+
+// diskBlockPaths lists the block textures beside the game on disk. A release
+// build never looks: it plays with the textures it was built with.
+func diskBlockPaths() []string {
+	if !DevTools {
+		return nil
+	}
+	entries, err := os.ReadDir(blocksDir)
+	if err != nil {
+		return nil
+	}
+	var names []string
+	for _, e := range entries {
+		// the same rule go:embed applies to *.png, so what is listed here is
+		// exactly what a rebuild would carry
+		n := e.Name()
+		if e.IsDir() || path.Ext(n) != ".png" || strings.HasPrefix(n, ".") || strings.HasPrefix(n, "_") {
+			continue
+		}
+		names = append(names, blocksDir+"/"+e.Name())
+	}
+	return names
+}
+
+// mergeTextureLists merges two lists of texture paths into one sorted list with
+// no repeats. Sorting is what gives the object picker the same order every run,
+// whichever order the two sources came in.
+func mergeTextureLists(embedded, disk []string) []string {
+	all := make([]string, 0, len(embedded)+len(disk))
+	all = append(all, embedded...)
+	all = append(all, disk...)
+	slices.Sort(all)
+	return slices.Compact(all)
+}
+
+// blockTextures is every placeable block texture: what the build carries, plus
+// whatever a development build finds beside it on disk. It reads no textures, so
+// it is safe before there is a window to read them into.
+func blockTextures() []string {
+	return mergeTextureLists(embeddedBlockPaths(), diskBlockPaths())
+}
+
+// inBuild reports whether a texture is embedded in this binary.
+func inBuild(name string) bool { return embeddedBlocks[name] }
+
 func LoadTextures() {
-	loadTex("resources/blocks/e1m1_wall1.png")
-	loadTex("resources/blocks/e1m1_platform1.png")
-	loadTex("resources/blocks/e1m1_door1.png")
+	for _, p := range blockTextures() {
+		loadBlockTex(p)
+	}
 	for _, p := range animTable {
 		loadTex(p)
 	}
@@ -151,10 +223,58 @@ func LoadLevelObjects() []LevelObject {
 // loadTex decodes an embedded image straight into a GPU texture, so nothing is
 // read from disk at runtime.
 func loadTex(name string) {
-	data := asset(name)
+	loadTexBytes(name, asset(name))
+}
+
+// loadTexBytes decodes an image into a GPU texture registered under name.
+func loadTexBytes(name string, data []byte) bool {
+	if !imageDecodable(path.Ext(name), data) {
+		rl.TraceLog(rl.LogError, "texture: cannot decode %s", name)
+		return false
+	}
 	img := rl.LoadImageFromMemory(path.Ext(name), data, int32(len(data)))
 	resources[name] = rl.LoadTextureFromImage(img)
 	rl.UnloadImage(img)
+	return true
+}
+
+// imageDecodable reports whether these bytes are an image raylib can read. It
+// decodes on the CPU only, so it can be asked before anything is copied
+// anywhere or uploaded to the GPU.
+func imageDecodable(ext string, data []byte) bool {
+	if len(data) == 0 {
+		return false
+	}
+	img := rl.LoadImageFromMemory(ext, data, int32(len(data)))
+	if img == nil || img.Width == 0 || img.Height == 0 {
+		return false
+	}
+	rl.UnloadImage(img)
+	return true
+}
+
+// loadTexDisk registers a texture read from disk under name. Only a development
+// build calls it: a release build has nothing but the assets it was built with.
+func loadTexDisk(name, diskPath string) bool {
+	if !DevTools {
+		return false
+	}
+	data, err := os.ReadFile(diskPath)
+	if err != nil {
+		rl.TraceLog(rl.LogError, "texture: read %s: %s", diskPath, err.Error())
+		return false
+	}
+	return loadTexBytes(name, data)
+}
+
+// loadBlockTex loads a block texture from wherever it is: the binary, or - for
+// one a development build found beside the game - the disk.
+func loadBlockTex(name string) {
+	if inBuild(name) {
+		loadTex(name)
+		return
+	}
+	loadTexDisk(name, name)
 }
 
 func loadModel(name string) {
