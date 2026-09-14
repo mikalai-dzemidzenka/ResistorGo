@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	ProtocolVersion  uint16 = 6
+	ProtocolVersion  uint16 = 7
 	DefaultPort             = 27015
 	ChanUnreliable   uint8  = 0 // commands, snapshots
 	ChanReliable     uint8  = 1 // hello, welcome, reject, bye
@@ -152,6 +152,16 @@ const (
 	fHitRunMask  uint16 = 7 << fHitRunShift
 )
 
+// Input held across a hit-stop freeze rides in two of the three bits left above
+// the hit run, so the record does not grow to carry it. It has to be replicated
+// at all because reconcile applies a record and then replays the command ring:
+// a freeze spanning the acknowledged tick would otherwise lose its held press
+// on every correction.
+const (
+	fBufAttack uint16 = 1 << 13
+	fBufJump   uint16 = 1 << 14
+)
+
 const (
 	bLeft uint8 = 1 << iota
 	bRight
@@ -194,6 +204,8 @@ func recOf(a *Actor) ActorRec {
 	flag(fAnimReverse, a.AnimReverse)
 	flag(fAnimWhite, a.AnimWhite)
 	flag(fAttackQueued, a.AttackQueued)
+	flag(fBufAttack, a.BufAttack)
+	flag(fBufJump, a.BufJump)
 	flag(fClimbRight, a.CanClimbRight)
 	flag(fClimbLeft, a.CanClimbLeft)
 	r.Flags |= uint16(min(a.HitCount, StunEveryHits-1)) << fHitCountShift
@@ -219,6 +231,8 @@ func (r ActorRec) apply(a *Actor, w *World) {
 	a.AnimReverse = r.Flags&fAnimReverse != 0
 	a.AnimWhite = r.Flags&fAnimWhite != 0
 	a.AttackQueued = r.Flags&fAttackQueued != 0
+	a.BufAttack = r.Flags&fBufAttack != 0
+	a.BufJump = r.Flags&fBufJump != 0
 	a.CanClimbRight = r.Flags&fClimbRight != 0
 	a.CanClimbLeft = r.Flags&fClimbLeft != 0
 	a.HitCount = min(uint8((r.Flags&fHitCountMask)>>fHitCountShift), StunEveryHits-1)

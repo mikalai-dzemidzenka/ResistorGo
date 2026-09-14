@@ -12,7 +12,7 @@ import (
 func sampleRec(id uint16) ActorRec {
 	return ActorRec{
 		ID: id, X: 12, Y: -34, SX: 1.5, SY: -900,
-		State: uint8(StateAttack), Flags: fOrientLeft | fAnimOnce | fAttackQueued,
+		State: uint8(StateAttack), Flags: fOrientLeft | fAnimOnce | fAttackQueued | fBufAttack | fBufJump,
 		Updown: 2, PrevUpdown: 1, Anim: 17, AnimFrame: 3, AnimTotal: 8, AnimYOffset: -48,
 		AnimDurMs: 300, Ticks: 123456, AnimStart: 123400, AttackCount: 2, FreezeTicks: 5, Structure: 73, Energy: 45, AttackerID: 7,
 	}
@@ -115,6 +115,22 @@ func TestActorRecSize(t *testing.T) {
 	const header = 1 + 4 + 4 + 1 // message id, tick, ack, count
 	if n := len(encodeSnapshot(Snapshot{Tick: 1, Ack: 1, Actors: []ActorRec{sampleRec(1)}})); n != header+actorRecSize {
 		t.Errorf("one-actor snapshot is %d bytes, want %d", n, header+actorRecSize)
+	}
+}
+
+// Input held across a hit-stop freeze survives the wire. It has to: reconcile
+// applies a record and then replays the command ring, so a buffer that did not
+// cross would be dropped on every correction that lands inside a freeze.
+func TestHeldInputReplicates(t *testing.T) {
+	w := NewWorld(true)
+	a := w.Spawn(ZeroVec2, true)
+	for _, c := range []struct{ attack, jump bool }{{false, false}, {true, false}, {false, true}, {true, true}} {
+		a.BufAttack, a.BufJump = c.attack, c.jump
+		b := NewActor(ZeroVec2, true)
+		recOf(a).apply(b, w)
+		if b.BufAttack != c.attack || b.BufJump != c.jump {
+			t.Errorf("held attack=%v jump=%v arrived as attack=%v jump=%v", c.attack, c.jump, b.BufAttack, b.BufJump)
+		}
 	}
 }
 

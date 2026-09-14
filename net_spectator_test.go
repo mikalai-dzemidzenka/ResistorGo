@@ -24,7 +24,7 @@ func fighterOf(s *Server, id uint16) *Actor {
 func TestSpectatorServer(t *testing.T) {
 	initNet()
 	defer shutdownNet()
-	LE = NewLevelEditor(39, 83)
+	floor()
 
 	cfg := DefaultServerConfig()
 	cfg.Port = 27194
@@ -137,7 +137,7 @@ func TestSpectatorClient(t *testing.T) {
 	defer shutdownNet()
 	Stage = StageLevel // entering the level needs a window
 	defer func() { Stage = StageMainMenu }()
-	LE = NewLevelEditor(39, 83)
+	floor()
 
 	cfg := DefaultServerConfig()
 	cfg.Port = 27195

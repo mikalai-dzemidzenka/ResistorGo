@@ -1,39 +1,52 @@
 ## Why
 
-A click made during hit-stop is destroyed. The attack button is latched for the next fixed step (`pressedAttack`), `sampleInput` clears the latch as it builds the tick's command, and `Actor.Update` returns at its first line while `FreezeTicks > 0` — before any state reads `Input`. So on each of the six `HitStopTicks` the latch is set, consumed and thrown away.
+A click made during hit-stop is destroyed. The attack button is latched for the next fixed step (`pressedAttack`, `actor.go:810`), `sampleInput` clears the latch as it builds the tick's command (`actor.go:844`), and `Actor.Update` returns while `FreezeTicks > 0` (`actor.go:230`) — before any state reads `Input`. So on each of the six `HitStopTicks` the latch is set, consumed and thrown away.
 
 The `structure` spec forbids exactly this. *A landed hit costs structure and flinches* says a flinch "SHALL NOT lock the defender out of acting — it can move, attack, block and jump during one", and its scenario says the fighter "can act on the next tick". The freeze sits in front of the flinch and eats the first 100 ms of it, so the defender who counters fastest gets nothing while a slower one is served. The requirement names the freeze and the right to act in the same breath without saying how they compose; the code resolves that by dropping the input.
 
-The same tick also bypasses a buffer the game already has. `AttackQueued` exists to hold a click made mid-swing and fire the chain when the animation finishes, and it is set in `updateAttack`, downstream of the freeze return. `hitFeedback` freezes *both* fighters, so a swing that lands opens a dead window at its own start: clicks in it never reach the buffer built to catch them, and the same clicks on a whiff do.
+The same tick also bypasses a buffer the game already has. `AttackQueued` exists to hold a click made mid-swing and fire the chain when the animation finishes, and it is set in `updateAttack` (`actor.go:1165`), downstream of the freeze return. `hitFeedback` freezes *both* fighters (`actor.go:1023`), so a swing that lands opens a dead window at its own start: clicks in it never reach the buffer built to catch them, and the same clicks on a whiff do.
 
-This is the third appearance of one shape — input latched for a step that will not act on it. The two paused modes were fixed by `fix-paused-input-latch`; this is the remaining one, and it is not the same fix.
+Jump has the identical hole and no buffer at all. `pressedJump` runs the same path (`actor.go:814`, `:842`) and dies at the same line, and there is no `JumpQueued` to fall back on. A jump pressed during hit-stop is gone with no recourse, in every state that would have taken it.
 
 ## What Changes
 
-- **The latch is consumed only by a tick that will act on it.** While a fighter is frozen, `sampleInput` still reports the input and still produces a command, but leaves the latch standing. The first unfrozen tick consumes it.
-- **A click during hit-stop acts when the freeze ends** instead of vanishing: the defender's counter comes out, and the attacker's mashed chain reaches `AttackQueued`.
-- **Hit-stop is not folded into `matchHeld()`.** The two are different questions with opposite answers, and the spec delta says which is which.
+- **The freeze holds the input instead of eating it.** A frozen tick moves `Input.Attack` and `Input.Jump` into two new per-actor bools (`BufAttack`, `BufJump`) before its early return. The first unfrozen tick ORs them back into `a.Input` and clears them, then runs the state switch as it always has.
+- **A press during hit-stop acts when the freeze ends** instead of vanishing: the defender's counter comes out, the attacker's mashed chain reaches `AttackQueued`, and a buffered jump is taken by whatever state can take it.
+- **The buffer's lifetime is derived, not tuned.** It is exactly the freeze — at most `HitStopTicks`, 6 ticks, 100 ms. There is no new window constant and nothing to balance.
+- **The six `Input` read sites are untouched.** Folding the buffer back into `a.Input` before the switch means `StateIdle`, `StateRun`, `StateAttack`, `land()` and the two jump reads keep their own conditions and need no edit.
+- **Death drops the buffer.** `enterDeathState` already clears `AttackQueued` (`actor.go:1074`); it clears `BufAttack` and `BufJump` beside it, so a press buffered on the killing blow cannot survive into the respawned fighter.
+- **BREAKING** (wire): the buffer is replicated in two of the three free bits of the existing `Flags uint16`, so `ProtocolVersion` moves 6 → 7. The record does not grow — `actorRecSize` stays 44 and no packet gets larger — but the bits change meaning, so client and server must be built together, which the existing version handshake already enforces.
 
-### Why hit-stop defers where a paused mode discards
+### Routing, not discard
 
-`fix-paused-input-latch` fixed its two cases by *dropping* the latch. Hit-stop needs the opposite, because the click means something different:
+The earlier reading of this bug called it the third appearance of one shape, alongside the two cases `fix-paused-input-latch` fixed, and sorted the three by what the click meant. Sorted by mechanism they are two shapes, not one:
 
-| Held by | The click meant | Right response |
-| --- | --- | --- |
-| Edit mode | place a tile | discard |
-| Time manipulation | scrub | discard |
-| Hit-stop | attack | defer |
+| Held by | A fixed step runs? | Was the input consumed? | Shape |
+| --- | --- | --- | --- |
+| Edit mode | no | yes — by the editor (LMB places a tile) | routing |
+| Time manipulation | no | yes — by the scrubber (the drag) | routing |
+| Hit-stop | **yes** | no — nothing took it, it was dropped | buffering |
 
-The predicates differ in kind as well as in answer. `matchHeld()` is global and asks whether the *match* is held; `FreezeTicks` is per-actor and asks whether *one fighter* is. In a two-fighter match one side can be frozen while the other is not, so gating the fixed-step loop on a freeze would stop the world for both. The freeze test therefore stays beside the actor, and `matchHeld()` is left alone.
+Nothing is discarded in the first two rows. The click *was* consumed, by a second consumer that owns the device while that mode holds the match; `clearLatchedInput()` tidies a latch that has already been serviced, which is why it is right there and wrong here. Hit-stop is the first appearance of the other shape: a fixed step ran, read the input, and threw it away.
+
+That gives two rules instead of one table:
+
+1. **Routing** — while another consumer owns the device, the simulation latch is tidied up. Already correct, and untouched by this change: `matchHeld()` and `clearLatchedInput()` stay exactly as they are.
+2. **Buffering** — input that reaches the simulation is held *in* the simulation until a tick can act on it. `AttackQueued` is already this; the freeze buffer is the same idea one layer earlier, before the state gate rather than inside it.
+
+### Why the buffer lives in the simulation, not in `sampleInput`
+
+Withholding the latch in `sampleInput` puts the buffer in the input layer, and on a client `sampleInput` is not input-layer only — it mints a networked command (`net_client.go:310`). A standing latch would repeat `Attack: true` on each of the seven ticks it spans, and the server's freeze need not be tick-aligned with the client's, because lag compensation resolved the hit at its own tick. Whichever tick the server unfreezes on it *probably* has an `Attack` waiting; if its window opens before the click it does not, and the client has already predicted a swing. That is a correction on the most feel-sensitive input in the game.
+
+Keeping the buffer in the simulation removes the question. The command stays a one-tick edge, so *Input commands* keeps meaning what it says; client and server run the same fold-back on the same replicated `FreezeTicks`; and the buffer is in the snapshot, so `reconcile`'s rollback (`net_client.go:283`) restores it before replaying.
 
 ### Assumptions
 
-- Nothing on a frozen tick reads `Input`: `Update` returns before the state switch, and `advanceAnim` is deferred after that return. Leaving the latch standing changes no other behaviour on that tick.
-- The client keeps producing one command per fixed tick, as *Input commands* requires. The fix withholds the latch, it does not skip sampling — so `Seq` stays unbroken and the redundant-command window is unaffected.
-- `Attack` therefore reads true on each frozen tick and on the first live one. That is safe: a frozen tick ignores it, `enterAttackState` can only fire once because the state changes, and `AttackQueued` is idempotent. Client and server run the same commands through the same freeze, and `FreezeTicks` is already replicated, so prediction and the authority agree without a protocol change.
-- A stun still locks the defender out. The latch survives the six freeze ticks and is then consumed and dropped by `StateAttacked`, which reads no input — as *Every third landed hit stuns* requires.
-- The latch's life is bounded: at most the freeze, then the first live tick either acts on it or drops it per its own state.
-- Entering a paused mode during a freeze is unaffected. The preserved latch is cleared by `clearLatchedInput()` on leaving, so discard still wins where discard is right.
+- A frozen tick reads nothing else: `Update` returns before the state switch, and `advanceAnim` is deferred after that return. Capturing the two bools there changes no other behaviour on that tick.
+- A fighter's energy cannot move during its own freeze — `regenEnergy` is at `actor.go:243`, after the return, and nothing spends. So a buffered press cannot become unaffordable while it waits, and `enterAttackState`'s `canSwing` check (`actor.go:873`) is reached with the same pool the player pressed against.
+- A stun still locks the defender out, with no extra code. The fold-back happens on the first unfrozen tick; on that tick a stunned fighter is in `StateAttacked`, whose arm calls `updateAttacked()` and reads no input, so the press is folded in and dropped by that tick. A flinch leaves the fighter in `StateIdle` or `StateRun`, where `actor.go:288` and `:310` do read it. The requirement's split between flinch and stun falls out of the state machine rather than being spelled out in the fix.
+- Two free bits exist. `Flags uint16` uses bits 0–7 for the named flags, 8–9 for `HitCount` and 10–12 for `HitRun`; 13, 14 and 15 are unused.
+- The latch itself, `sampleInput`, `matchHeld()` and both paused modes are unchanged. Entering a paused mode during a freeze still ends in `clearLatchedInput()`, so routing still wins where routing is right.
 
 ## Capabilities
 
@@ -43,18 +56,21 @@ None.
 
 ### Modified Capabilities
 
-- `structure`: *A landed hit costs structure and flinches* gains the rule that input given during the shared hit-stop freeze is held rather than lost, and a scenario for it. The requirement already grants the defender the right to act during a flinch; it does not currently say how that composes with the freeze it names in the same sentence, which is the gap the code fell into.
+- `structure`: *A landed hit costs structure and flinches* gains the rule that input given during the shared hit-stop freeze is held rather than lost, and scenarios for the defender's counter, the attacker's chain, jump, one-press-one-action, the stun boundary and death. The requirement already grants the defender the right to act during a flinch; it does not currently say how that composes with the freeze it names in the same sentence, which is the gap the code fell into.
+
+`multiplayer/replication` is deliberately **not** listed. *Snapshots* already requires "the full state needed to predict or display" each fighter "and combat flags", and the buffer is exactly that; two more bits inside an existing field change no requirement, and *Still fits the packet* holds unchanged because the record does not grow. *Input commands* keeps calling attack and jump edge-triggered, which stays true under this design.
 
 ## Impact
 
 - **Code**
-  - `actor.go`: `sampleInput` leaves `pressedAttack` and `pressedJump` standing while the sampled actor is frozen.
-- **Tests**: a regression test that an attack latched while `FreezeTicks > 0` survives the frozen ticks and fires on the first live one; and one that a stun still swallows it.
-- **Not affected**: `matchHeld()` and both paused modes, `HitStopTicks` and every other gameplay value, the packet format and the snapshot flags, the rewind buffer, the camera effects.
+  - `actor.go`: two `bool` fields on `Actor`; capture and fold-back around the freeze guard in `Update`; clear in `enterDeathState` beside `AttackQueued`.
+  - `net_protocol.go`: `fBufAttack` and `fBufJump` at bits 13 and 14; set in `recOf`, read in `apply`; `ProtocolVersion` 6 → 7. `actorRecSize` unchanged at 44.
+- **Tests**: regressions that a press latched while `FreezeTicks > 0` survives the freeze and fires on the first live tick, for attack and for jump; that one press is one action; that a stun swallows it; that death drops it; and a protocol round-trip carrying the two new flags.
+- **Not affected**: `sampleInput`, `latchInput`, `matchHeld()`, `clearLatchedInput()` and both paused modes; `AttackQueued` and its window; `HitStopTicks` and every other gameplay value; packet size; the rewind buffer; the camera effects; the six `Input` read sites in the state switch.
 
 ## Non-goals
 
-- **The wider input model.** Every state that does not read `Input` consumes and drops the latch: `StateRun` ignores `Jump`, `StateJumpStart` and `StateJump` buffer no attack for the landing, `StateIdle` drops an attack while guarding with block-all. Turning the latch into a decaying buffer would fix all of those at once and change the feel of the game everywhere; it is a design change with its own tuning pass, not this bug fix.
-- **The missing running jump.** `enterJumpStartState` has one caller, in `case StateIdle`, so W does nothing above `RunReach`. Whether that is intended is a gameplay question and is not settled here.
-- **`HitStopTicks` itself.** How long the freeze lasts is a feel decision; this change is only about what happens to input during it.
-- Hit-stop's visual hold, the knockback, the flinch animation, and the chain rules beyond the click reaching `AttackQueued`.
+- **A general input buffer with a tunable window.** Turning every `Input` read into a decaying buffer would also fix the cases outside a freeze — an attack pressed during `StateJumpStart` and wanted on landing, an attack pressed while guarding with block-all — and would subsume `AttackQueued`. It cannot be done without picking a window, and any window short enough to feel tight is shorter than the 18 ticks `AttackQueued` effectively allows today, so it changes how chaining feels. That is a design pass with its own playtest, not this bug fix.
+- **`AttackQueued`'s own semantics.** It stays a bool with no expiry inside the swing. Chaining feels exactly as it does now.
+- **`HitStopTicks` itself.** Whether the defender's freeze should simply be shorter is a live design question and a different answer to the same complaint; this change is only about what happens to input during the freeze, and does not foreclose tuning the length later.
+- Hit-stop's visual hold, the knockback, the flinch flicker, and the chain rules beyond the press reaching `AttackQueued`.

@@ -10,6 +10,7 @@ import (
 // already passed, and a defender standing inside the attack box.
 func swing(t *testing.T, defUpdown uint8) (*World, *Actor, *Actor) {
 	t.Helper()
+	floor()
 	w := NewWorld(true)
 	att := w.Spawn(rl.Vector2{}, true)
 	def := w.Spawn(rl.Vector2{X: 20}, true)

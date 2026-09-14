@@ -102,6 +102,7 @@ func TestSwingCostsEnergy(t *testing.T) {
 // A held attack chains until the pool runs out, and the swings it does throw
 // cost exactly one swing each.
 func TestChainedSwingsCostEnergy(t *testing.T) {
+	floor()
 	w := NewWorld(true)
 	a := w.Spawn(rl.Vector2{}, true)
 	a.Updown = 1

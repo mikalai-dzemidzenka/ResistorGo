@@ -106,7 +106,7 @@ func TestNetIntegration(t *testing.T) {
 	defer shutdownNet()
 	Stage = StageLevel // reconcile must not enter the level (needs a window)
 	defer func() { Stage = StageMainMenu }()
-	LE = NewLevelEditor(39, 83)
+	floor()
 
 	cfg := DefaultServerConfig()
 	cfg.Port = 27191
@@ -190,7 +190,7 @@ func TestNetSimulatedLag(t *testing.T) {
 	defer shutdownNet()
 	Stage = StageLevel
 	defer func() { Stage = StageMainMenu }()
-	LE = NewLevelEditor(39, 83)
+	floor()
 
 	cfg := DefaultServerConfig()
 	cfg.Port = 27193
@@ -236,7 +236,7 @@ func TestClientConnectTimeout(t *testing.T) {
 	}
 	initNet()
 	defer shutdownNet()
-	LE = NewLevelEditor(39, 83)
+	floor()
 	if err := startClient("127.0.0.1:27192", false); err != nil { // nothing listens there
 		t.Fatal(err)
 	}
@@ -273,7 +273,7 @@ func TestNetDeathAndRespawn(t *testing.T) {
 	defer shutdownNet()
 	Stage = StageLevel // reconcile must not enter the level (needs a window)
 	defer func() { Stage = StageMainMenu }()
-	LE = NewLevelEditor(39, 83)
+	floor()
 
 	cfg := DefaultServerConfig()
 	cfg.Port = 27196
@@ -358,7 +358,7 @@ func TestNetStructureBarReplicates(t *testing.T) {
 	defer shutdownNet()
 	Stage = StageLevel // reconcile must not enter the level (needs a window)
 	defer func() { Stage = StageMainMenu }()
-	LE = NewLevelEditor(39, 83)
+	floor()
 
 	cfg := DefaultServerConfig()
 	cfg.Port = 27197
