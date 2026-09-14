@@ -337,7 +337,10 @@ func (a *Actor) Update(dt float32) {
 		a.Speed.X = clamp(a.Speed.X, -AttackDash, AttackDash)
 		a.updateAttack()
 	case StateAttacked:
-		a.Speed.X = clamp(a.Speed.X, -AttackDash, AttackDash)
+		// no AttackDash cap here: that is the lunge of the fighter doing the
+		// swinging, and capping the one being hit threw StunKnockback away.
+		// The lockout says what a stunned fighter may do, not how far the hit
+		// carries it; friction ends the throw, as it does every other.
 		a.updateAttacked()
 	case StateBlock:
 		a.updateBlock()

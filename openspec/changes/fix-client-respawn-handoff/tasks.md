@@ -24,8 +24,8 @@
 
 ## 5. Offline hands over too
 
-- [ ] 5.1 In `stepOffline`, adopt the player's fighter into `CL.Local` when it has none, in the loop that already tests `actor.IsPlayer`; verify a test that after an offline death and respawn `CL.Local` is the new fighter
-- [ ] 5.2 Verify with a test that the effects keyed on the local fighter work again after an offline respawn — `presentEffects` sees the new fighter as `local` and its attack raises the camera zoom
+- [x] 5.1 In `stepOffline`, adopt the player's fighter into `CL.Local` when it has none, in the loop that already tests `actor.IsPlayer`; verify a test that after an offline death and respawn `CL.Local` is the new fighter
+- [x] 5.2 Verify with a test that the effects keyed on the local fighter work again after an offline respawn — `presentEffects` sees the new fighter as `local` and its attack raises the camera zoom
 
 ## 6. Whole-change verification
 
