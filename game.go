@@ -242,6 +242,16 @@ func stepOffline(dt float32) {
 		for _, actor := range CL.Actors {
 			actor.recordRewind()
 			if actor.IsPlayer {
+				// A death nils CL.Local through World.Remove, and the respawn
+				// spawns a fighter nothing points at. Adopting it here is the
+				// offline answer to the question a snapshot answers over the
+				// wire: whose fighter is this. Without it the player keeps
+				// control - input routes on IsPlayer, not on Local - while the
+				// camera and every effect keyed on the local fighter stay with
+				// the corpse.
+				if CL.Local == nil {
+					CL.Local = actor
+				}
 				actor.Input = sampleInput(actor)
 			} else {
 				actor.Input = botInput(actor)
