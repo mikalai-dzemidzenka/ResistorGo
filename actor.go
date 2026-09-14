@@ -63,6 +63,10 @@ const (
 	StunKnockback   = 150
 	FlinchHoldTicks = 12
 
+	// One in three: the odds a bot answers a landed hit by moving its guard to
+	// the height that hit it. A feel number, to be turned by eye in play.
+	GuardAdaptOdds = 3
+
 	DeathFlickerTicks = 36 // ~0.6s of flickering after the fall animation
 	DeathFlickerSpan  = 4  // ticks per visible or hidden span
 	RespawnTicks      = 120
@@ -144,6 +148,8 @@ type Actor struct {
 	Updown           uint8
 	Ticks            uint32
 	FreezeTicks      uint8
+	BufAttack        bool // attack pressed while frozen; handed to the first live tick
+	BufJump          bool // jump pressed while frozen; handed to the first live tick
 	Events           uint8
 	AnimStartTick    uint32
 	AnimTop          *string
@@ -227,9 +233,26 @@ func NewActor(pos rl.Vector2, isPlayer bool) *Actor {
 // Update advances the actor by one fixed tick using a.Input.
 func (a *Actor) Update(dt float32) {
 	a.PrevPos = a.Pos
+	// Hit-stop holds input, it does not eat it. A frozen tick puts the press
+	// aside; the first live tick takes it back and clears it. So an attack or
+	// jump read below may be up to HitStopTicks old - none of the state arms
+	// that read Input can tell, and none of them need to.
 	if a.FreezeTicks > 0 {
 		a.FreezeTicks--
+		a.BufAttack = a.BufAttack || a.Input.Attack
+		a.BufJump = a.BufJump || a.Input.Jump
 		return
+	}
+	if a.BufAttack || a.BufJump {
+		// folded in for this tick only, then put back: Input is the command
+		// that arrived, and a held press that this tick does not act on has
+		// been offered and is spent. Leaving it in would let a stun, which
+		// reads no input, hand the press on to whatever state follows it.
+		cmd := a.Input
+		defer func() { a.Input = cmd }()
+		a.Input.Attack = a.Input.Attack || a.BufAttack
+		a.Input.Jump = a.Input.Jump || a.BufJump
+		a.BufAttack, a.BufJump = false, false
 	}
 
 	prevOrientation := a.Orientation
@@ -727,7 +750,9 @@ func (a *Actor) checkCollision() {
 			continue
 		}
 		pColUpY := a.Pos.Y + a.CollisionBox.Y
-		jump := a.Speed.Y < 0
+		// a ledge is caught going either way: rising into it on a jump, or
+		// dropping past it on a fall
+		airborne := a.Speed.Y != 0
 		const climbOffset = 32
 		if oColX <= pColCenterX && oColX+oColWidth >= pColCenterX &&
 			pColUpY >= oColY && pColUpY <= oColY+oColHeight {
@@ -739,13 +764,13 @@ func (a *Actor) checkCollision() {
 			a.Pos.Y = float32(int32(oColY + oColHeight))
 			continue
 		} else if pColCenterX+climbOffset >= oColX && oColX >= pColCenterX &&
-			pColUpY >= oColY && pColUpY <= oColY+oColHeight && a.Orientation == 1 && jump && !hitTop {
+			pColUpY >= oColY && pColUpY <= oColY+oColHeight && a.Orientation == 1 && airborne && !hitTop {
 			a.CanClimbRight = true
 			a.Pos.X = float32(int32(oColX) - 20)
 			a.Pos.Y = float32(int32(math.Ceil(float64(oColY)) - 48 + 1))
 			continue
 		} else if pColCenterX >= oColX+oColWidth && oColX+oColWidth >= pColCenterX-climbOffset &&
-			pColUpY >= oColY && pColUpY <= oColY+oColHeight && a.Orientation == -1 && jump && !hitTop {
+			pColUpY >= oColY && pColUpY <= oColY+oColHeight && a.Orientation == -1 && airborne && !hitTop {
 			a.CanClimbLeft = true
 			a.Pos.X = oColX + oColWidth - 24
 			a.Pos.Y = float32(int32(math.Ceil(float64(oColY)) - 48 + 1))
@@ -988,6 +1013,17 @@ func (a *Actor) takeHit(attacker *Actor) {
 		a.enterDeathState(attacker)
 		return
 	}
+	// A bot answers the hit a third of the time by guarding where it landed, so
+	// one attack repeated is not reliable forever. Bots only, and explicitly:
+	// a player's guard follows their aim, and writing it here - even for the
+	// one tick before the cursor takes it back - would be read by any other
+	// attacker whose hit is resolved later in the same actor loop.
+	if !a.IsPlayer && rand.Int()%GuardAdaptOdds == 0 {
+		if a.Updown != attacker.Updown {
+			a.PrevUpdown = a.Updown
+		}
+		a.Updown = attacker.Updown
+	}
 	a.HitCount++
 	if a.HitCount >= StunEveryHits {
 		a.HitCount = 0
@@ -1071,7 +1107,7 @@ func (a *Actor) enterDeathState(attacker *Actor) {
 	a.HitCount, a.HitRun, a.FlinchTicks, a.DeathTicks = 0, 0, 0, 0
 	a.AnimWhite = false
 	a.Speed = rl.Vector2{}
-	a.AttackQueued = false
+	a.AttackQueued, a.BufAttack, a.BufJump = false, false, false
 	if attacker != nil {
 		attacker.FreezeTicks = HitStopTicks
 	}

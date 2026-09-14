@@ -9,6 +9,7 @@ import (
 // commands; the server runs them `lag` ticks late and snapshots every 3 ticks.
 func predictionRun(t *testing.T, lag int, onServer func(tick int, a *Actor)) *Client {
 	t.Helper()
+	floor()
 	Stage = StageLevel // so reconcile does not try to enter the level (needs a window)
 	defer func() { Stage = StageMainMenu }()
 
@@ -75,6 +76,7 @@ func TestPredictionCorrectsServerHit(t *testing.T) {
 // client already had, which is what c.Corrections counts.
 func energyRun(t *testing.T, lag int, ticks int, in func(tick int) Input) (c *Client, mispredicted int) {
 	t.Helper()
+	floor()
 	Stage = StageLevel // so reconcile does not try to enter the level (needs a window)
 	defer func() { Stage = StageMainMenu }()
 

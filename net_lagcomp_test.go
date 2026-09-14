@@ -6,6 +6,7 @@ import (
 )
 
 func historyWorld() (*World, *Actor, *Actor) {
+	floor()
 	w := NewWorld(true)
 	w.History = NewLagHistory()
 	att := w.Spawn(rl.Vector2{}, true)
@@ -71,6 +72,7 @@ func TestClampViewTime(t *testing.T) {
 // On the server the defender has since stepped out of range and raised its guard.
 func lagCompSwing(t *testing.T, lagComp bool) *Actor {
 	t.Helper()
+	floor()
 	w := NewWorld(true)
 	w.History = NewLagHistory()
 	att := w.Spawn(rl.Vector2{}, true)
