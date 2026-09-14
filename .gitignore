@@ -3,3 +3,10 @@ settings.json
 
 # build output of `go build ./cmd`; the shipped binary is resistor.exe
 cmd.exe
+
+# build output of `build.ps1 -Linux`; unlike resistor.exe it is not tracked
+resistor-linux-amd64
+
+# build.ps1 builds into <out>.tmp and moves it into place; one is only left
+# behind by an interrupted build
+*.tmp
