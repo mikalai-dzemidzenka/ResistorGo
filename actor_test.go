@@ -44,7 +44,7 @@ func tiles(corners ...Vector2i) {
 	for _, c := range corners {
 		LE.objects[0][c] = LevelObject{
 			X: c.X, Y: c.Y,
-			CollisionRect: &rl.Rectangle{Width: 48, Height: 48},
+			CollisionRects: []rl.Rectangle{{Width: 48, Height: 48}},
 		}
 	}
 	LE.buildIndex()

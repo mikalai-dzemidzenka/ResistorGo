@@ -19,7 +19,7 @@ var threeLights = []LevelLight{
 func levelWithLights(lights []LevelLight) *LevelEditor {
 	le := newLevelEditor(39, 83, nil, nil)
 	le.objects[0] = LevelLayer{
-		{X: 39}:         {Resource: "a", X: 39, CollisionRect: &rl.Rectangle{Width: 5, Height: 5}},
+		{X: 39}:         {Resource: "a", X: 39, CollisionRects: []rl.Rectangle{{Width: 5, Height: 5}}},
 		{X: -78, Y: 83}: {Resource: "b", X: -78, Y: 83},
 	}
 	le.objects[-1] = nil

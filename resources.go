@@ -182,12 +182,12 @@ func LoadLevelObjects() []LevelObject {
 			Layer:    0,
 			X:        0,
 			Y:        0,
-			CollisionRect: &rl.Rectangle{
+			CollisionRects: []rl.Rectangle{{
 				X:      15,
 				Y:      86,
 				Width:  40,
 				Height: 20,
-			},
+			}},
 			LightRect: &rl.Rectangle{
 				X:      22,
 				Y:      90,
@@ -199,23 +199,23 @@ func LoadLevelObjects() []LevelObject {
 			Layer:    0,
 			X:        0,
 			Y:        0,
-			CollisionRect: &rl.Rectangle{
+			CollisionRects: []rl.Rectangle{{
 				X:      0,
 				Y:      86,
 				Width:  40,
 				Height: 20,
-			},
+			}},
 		}, {
 			Resource: "resources/blocks/e1m1_platform1.png",
 			Layer:    0,
 			X:        0,
 			Y:        0,
-			CollisionRect: &rl.Rectangle{
+			CollisionRects: []rl.Rectangle{{
 				X:      0,
 				Y:      86,
 				Width:  40,
 				Height: 20,
-			},
+			}},
 		},
 	}
 }

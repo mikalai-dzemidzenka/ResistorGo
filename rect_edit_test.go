@@ -94,7 +94,7 @@ func TestRectLocalWorldRoundTrip(t *testing.T) {
 func TestDragAtNegativeOriginRounds(t *testing.T) {
 	le := newLevelEditor(39, 83, []LevelObject{{Resource: "x"}}, nil)
 	le.objects[0] = LevelLayer{
-		{X: -117, Y: 83}: {Resource: "x", X: -117, Y: 83, CollisionRect: &rl.Rectangle{X: 15, Y: 86, Width: 40, Height: 20}},
+		{X: -117, Y: 83}: {Resource: "x", X: -117, Y: 83, CollisionRects: []rl.Rectangle{{X: 15, Y: 86, Width: 40, Height: 20}}},
 	}
 	le.buildIndex()
 	if !le.selectAt(Vector2i{X: -117, Y: 83}) {
@@ -106,11 +106,11 @@ func TestDragAtNegativeOriginRounds(t *testing.T) {
 	}
 	le.dragTo(rl.Vector2{X: -100.6, Y: 175})
 	obj, _ := le.selectedObject()
-	if obj.CollisionRect.X != 14 {
-		t.Errorf("after dragging 0.6px left the rectangle is at local X %v, want 14 (rounded, not truncated)", obj.CollisionRect.X)
+	if obj.CollisionRects[0].X != 14 {
+		t.Errorf("after dragging 0.6px left the rectangle is at local X %v, want 14 (rounded, not truncated)", obj.CollisionRects[0].X)
 	}
-	if obj.CollisionRect.Width != 40 || obj.CollisionRect.Height != 20 {
-		t.Errorf("a body drag resized the rectangle to %vx%v", obj.CollisionRect.Width, obj.CollisionRect.Height)
+	if obj.CollisionRects[0].Width != 40 || obj.CollisionRects[0].Height != 20 {
+		t.Errorf("a body drag resized the rectangle to %vx%v", obj.CollisionRects[0].Width, obj.CollisionRects[0].Height)
 	}
 }
 

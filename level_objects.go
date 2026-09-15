@@ -3,6 +3,7 @@ package resistor
 import (
 	"encoding/json"
 	"os"
+	"slices"
 
 	rl "github.com/gen2brain/raylib-go/raylib"
 )
@@ -14,24 +15,26 @@ import (
 // and a release build has no editor.
 const objectDefaultsPath = "level_objects.json"
 
-// ObjectRects is an object's two rectangles: what fighters collide with, and
-// what casts a shadow. A nil one means the object has neither - a texture that
-// should not be stood on, or should not cast a shadow, says so this way.
+// ObjectRects is an object's rectangles: the ones fighters collide with - any
+// number, in order - and the one that casts a shadow. No collision rectangles,
+// or no light rectangle, is how a texture says it should not be stood on, or
+// should not cast a shadow.
 type ObjectRects struct {
-	Collision *rl.Rectangle `json:"collisionRect,omitempty"`
-	Light     *rl.Rectangle `json:"lightRect,omitempty"`
+	Collision []rl.Rectangle
+	Light     *rl.Rectangle
 }
 
 // clone copies the rectangles themselves, not the pointers to them, so a tile
 // placed from a palette entry does not share them with the entry.
 func (o ObjectRects) clone() ObjectRects {
-	return ObjectRects{Collision: cloneRect(o.Collision), Light: cloneRect(o.Light)}
+	return ObjectRects{Collision: slices.Clone(o.Collision), Light: cloneRect(o.Light)}
 }
 
-// sameRects reports whether two objects have the same rectangles: a missing
-// rectangle matches only a missing one, and two present ones match by value.
+// sameRects reports whether two objects have the same rectangles: the same
+// collision rectangles in the same order, and the same light rectangle - a
+// missing one matching only a missing one.
 func sameRects(a, b ObjectRects) bool {
-	return sameRect(a.Collision, b.Collision) && sameRect(a.Light, b.Light)
+	return slices.Equal(a.Collision, b.Collision) && sameRect(a.Light, b.Light)
 }
 
 func sameRect(a, b *rl.Rectangle) bool {
@@ -50,11 +53,11 @@ func cloneRect(r *rl.Rectangle) *rl.Rectangle {
 }
 
 func (o LevelObject) rects() ObjectRects {
-	return ObjectRects{Collision: o.CollisionRect, Light: o.LightRect}
+	return ObjectRects{Collision: o.CollisionRects, Light: o.LightRect}
 }
 
 func (o *LevelObject) setRects(r ObjectRects) {
-	o.CollisionRect = r.Collision
+	o.CollisionRects = r.Collision
 	o.LightRect = r.Light
 }
 
@@ -127,4 +130,88 @@ func buildPalette(defaults map[string]ObjectRects) []LevelObject {
 		palette = append(palette, obj)
 	}
 	return palette
+}
+
+// On disk one collision rectangle is "collisionRect", exactly as it was before
+// objects could have several, so a level or defaults file with no more than one
+// per object keeps its bytes and its fingerprint. Two or more are
+// "collisionRects", and none is neither.
+func collisionToWire(rs []rl.Rectangle) (*rl.Rectangle, []rl.Rectangle) {
+	switch len(rs) {
+	case 0:
+		return nil, nil
+	case 1:
+		r := rs[0]
+		return &r, nil
+	}
+	return nil, rs
+}
+
+func collisionFromWire(one *rl.Rectangle, many []rl.Rectangle) []rl.Rectangle {
+	if many != nil {
+		if one != nil {
+			rl.TraceLog(rl.LogWarning, "level: both collisionRect and collisionRects; keeping collisionRects")
+		}
+		return many
+	}
+	if one != nil {
+		return []rl.Rectangle{*one}
+	}
+	return nil
+}
+
+// levelObjectWire is a LevelObject as the level file holds it, in the order its
+// fields have always been written.
+type levelObjectWire struct {
+	Resource       string         `json:"resource,omitempty"`
+	Layer          int            `json:"layer,omitempty"`
+	X              int32          `json:"x,omitempty"`
+	Y              int32          `json:"y,omitempty"`
+	CollisionRect  *rl.Rectangle  `json:"collisionRect,omitempty"`
+	CollisionRects []rl.Rectangle `json:"collisionRects,omitempty"`
+	LightRect      *rl.Rectangle  `json:"lightRect,omitempty"`
+}
+
+func (o LevelObject) MarshalJSON() ([]byte, error) {
+	w := levelObjectWire{Resource: o.Resource, Layer: o.Layer, X: o.X, Y: o.Y, LightRect: o.LightRect}
+	w.CollisionRect, w.CollisionRects = collisionToWire(o.CollisionRects)
+	return json.Marshal(w)
+}
+
+func (o *LevelObject) UnmarshalJSON(b []byte) error {
+	var w levelObjectWire
+	if err := json.Unmarshal(b, &w); err != nil {
+		return err
+	}
+	*o = LevelObject{
+		Resource:       w.Resource,
+		Layer:          w.Layer,
+		X:              w.X,
+		Y:              w.Y,
+		CollisionRects: collisionFromWire(w.CollisionRect, w.CollisionRects),
+		LightRect:      w.LightRect,
+	}
+	return nil
+}
+
+// objectRectsWire is an ObjectRects as the texture defaults file holds it.
+type objectRectsWire struct {
+	CollisionRect  *rl.Rectangle  `json:"collisionRect,omitempty"`
+	CollisionRects []rl.Rectangle `json:"collisionRects,omitempty"`
+	LightRect      *rl.Rectangle  `json:"lightRect,omitempty"`
+}
+
+func (o ObjectRects) MarshalJSON() ([]byte, error) {
+	w := objectRectsWire{LightRect: o.Light}
+	w.CollisionRect, w.CollisionRects = collisionToWire(o.Collision)
+	return json.Marshal(w)
+}
+
+func (o *ObjectRects) UnmarshalJSON(b []byte) error {
+	var w objectRectsWire
+	if err := json.Unmarshal(b, &w); err != nil {
+		return err
+	}
+	*o = ObjectRects{Collision: collisionFromWire(w.CollisionRect, w.CollisionRects), Light: w.LightRect}
+	return nil
 }

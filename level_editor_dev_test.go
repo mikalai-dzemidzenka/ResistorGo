@@ -5,6 +5,7 @@ package resistor
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	rl "github.com/gen2brain/raylib-go/raylib"
@@ -34,8 +35,9 @@ func realPNG(t *testing.T) []byte {
 func TestObjectDefaultsRoundTrip(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "level_objects.json")
 	want := map[string]ObjectRects{
-		"both":  {Collision: &rl.Rectangle{X: 1, Y: 2, Width: 3, Height: 4}, Light: &rl.Rectangle{X: 5, Y: 6, Width: 7, Height: 8}},
-		"no-lt": {Collision: &rl.Rectangle{X: -1, Width: 1, Height: 1}},
+		"both":  {Collision: []rl.Rectangle{{X: 1, Y: 2, Width: 3, Height: 4}}, Light: &rl.Rectangle{X: 5, Y: 6, Width: 7, Height: 8}},
+		"no-lt": {Collision: []rl.Rectangle{{X: -1, Width: 1, Height: 1}}},
+		"three": {Collision: []rl.Rectangle{{Width: 1, Height: 1}, {X: 2, Width: 1, Height: 1}, {X: 4, Width: 1, Height: 1}}},
 		"none":  {},
 	}
 	if !saveObjectDefaults(path, want) {
@@ -51,11 +53,8 @@ func TestObjectDefaultsRoundTrip(t *testing.T) {
 			t.Errorf("%s was lost", k)
 			continue
 		}
-		for _, which := range []int{rectCollision, rectLight} {
-			gr, wr := g.get(which), w.get(which)
-			if (gr == nil) != (wr == nil) || (gr != nil && *gr != *wr) {
-				t.Errorf("%s rect %d = %+v, want %+v", k, which, gr, wr)
-			}
+		if !sameRects(g, w) {
+			t.Errorf("%s = %+v, want %+v", k, g, w)
 		}
 	}
 }
@@ -84,8 +83,8 @@ func TestMalformedDefaultsFallBack(t *testing.T) {
 	le := NewLevelEditor(39, 83)
 	wall := blocksDir + "/e1m1_wall1.png"
 	w := paletteEntry(t, le.levelObjects, wall)
-	if w.CollisionRect == nil || *w.CollisionRect != *builtinRects()[wall].Collision {
-		t.Errorf("with a corrupt defaults file the wall has %+v, want its built-in rectangle", w.CollisionRect)
+	if len(w.CollisionRects) != 1 || !slices.Equal(w.CollisionRects, builtinRects()[wall].Collision) {
+		t.Errorf("with a corrupt defaults file the wall has %+v, want its built-in rectangle", w.CollisionRects)
 	}
 }
 
@@ -176,7 +175,7 @@ func TestSaveWritesLevelAndDefaults(t *testing.T) {
 		t.Errorf("still marked unsaved after saving")
 	}
 	got := loadObjectDefaults(objectDefaultsPath)[le.obj.Resource]
-	if got.Collision == nil || *got.Collision != (rl.Rectangle{Width: 7, Height: 7}) {
+	if len(got.Collision) != 1 || got.Collision[0] != (rl.Rectangle{Width: 7, Height: 7}) {
 		t.Errorf("saved default = %+v, want the edited rectangle", got.Collision)
 	}
 }

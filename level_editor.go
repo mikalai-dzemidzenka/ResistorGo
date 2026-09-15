@@ -95,12 +95,14 @@ type LevelEditor struct {
 	gridH                  int32
 	objects                map[int]LevelLayer // layer - pos - object
 	objectsIndexed         []LevelObject
-	dirty                  bool // edited since the last save; only Ctrl+S in edit mode writes
+	solids                 []rl.Rectangle // every collision rectangle in world space, in the order collision visits them
+	dirty                  bool           // edited since the last save; only Ctrl+S in edit mode writes
 
 	defaults   map[string]ObjectRects // palette rectangles, from level_objects.json
 	tool       int                    // toolPlace or toolRect
 	sel        selection              // what rectangle editing acts on
 	activeRect int                    // rectCollision or rectLight
+	activeColl int                    // which collision rectangle, when activeRect is rectCollision
 	drag       rectDrag
 	editField  int     // which numeric field has the keyboard, -1 for none
 	fieldVals  []int32 // what the panel's numeric fields show
@@ -114,12 +116,12 @@ type LevelEditor struct {
 	lightDrag lightDrag
 }
 type LevelObject struct {
-	Resource      string        `json:"resource,omitempty"`
-	Layer         int           `json:"layer,omitempty"`
-	X             int32         `json:"x,omitempty"`
-	Y             int32         `json:"y,omitempty"`
-	CollisionRect *rl.Rectangle `json:"collisionRect,omitempty"`
-	LightRect     *rl.Rectangle `json:"lightRect,omitempty"`
+	Resource       string         `json:"resource,omitempty"`
+	Layer          int            `json:"layer,omitempty"`
+	X              int32          `json:"x,omitempty"`
+	Y              int32          `json:"y,omitempty"`
+	CollisionRects []rl.Rectangle // relative to the object's origin; saved by MarshalJSON
+	LightRect      *rl.Rectangle  `json:"lightRect,omitempty"`
 
 	// own is whether the object keeps rectangles of its own rather than
 	// following its texture's. It is unexported, so it is never saved: the
@@ -200,7 +202,7 @@ func (le *LevelEditor) Update(dt float32) {
 			le.setTool(nextTool(le.tool))
 		}
 		if rl.IsKeyPressed(rl.KeyC) {
-			le.setActiveRect(rectCollision)
+			le.pickCollision()
 		}
 		if rl.IsKeyPressed(rl.KeyL) {
 			le.setActiveRect(rectLight)
@@ -308,6 +310,31 @@ func (le *LevelEditor) setActiveRect(which int) {
 	le.activeRect = which
 	le.drag = rectDrag{}
 	le.editField = -1
+	le.clampActiveColl()
+}
+
+// pickCollision is C: the collision rectangles, or - when they are already
+// what is being edited - the next of them, round again after the last.
+func (le *LevelEditor) pickCollision() {
+	if le.activeRect != rectCollision {
+		le.setActiveRect(rectCollision)
+		return
+	}
+	if obj, ok := le.selectedObject(); ok && len(obj.CollisionRects) > 0 {
+		le.activeColl = (le.activeColl + 1) % len(obj.CollisionRects)
+	}
+	le.drag = rectDrag{}
+	le.editField = -1
+}
+
+// clampActiveColl keeps the active collision index inside the selection's
+// list, so a selection with fewer rectangles never points past its end.
+func (le *LevelEditor) clampActiveColl() {
+	n := 0
+	if obj, ok := le.selectedObject(); ok {
+		n = len(obj.CollisionRects)
+	}
+	le.activeColl = clamp(le.activeColl, 0, max(0, n-1))
 }
 
 // selectEntry makes palette entry i the object to place and the thing whose
@@ -323,6 +350,7 @@ func (le *LevelEditor) selectEntry(i int) {
 	le.sel = selection{proto: true}
 	le.drag = rectDrag{}
 	le.editField = -1
+	le.clampActiveColl()
 }
 
 func (le *LevelEditor) selectEntryByName(name string) bool {
@@ -349,6 +377,7 @@ func (le *LevelEditor) selectAt(cell Vector2i) bool {
 			le.sel = selection{layer: layers[i], pos: cell}
 			le.drag = rectDrag{}
 			le.editField = -1
+			le.clampActiveColl()
 			return true
 		}
 	}
@@ -395,6 +424,7 @@ func (le *LevelEditor) setSelectedRects(r ObjectRects) {
 	}
 	le.buildIndex()
 	le.dirty = true
+	le.clampActiveColl()
 }
 
 // propagate gives every placed object of a texture that follows it the
@@ -461,6 +491,7 @@ func (le *LevelEditor) followTexture() {
 	le.buildIndex()
 	le.drag = rectDrag{}
 	le.editField = -1
+	le.clampActiveColl()
 	if changed {
 		le.dirty = true
 	}
@@ -495,19 +526,39 @@ func (le *LevelEditor) pasteSelection() {
 	le.editField = -1
 }
 
-func (r ObjectRects) get(which int) *rl.Rectangle {
+// get is the light rectangle, or collision rectangle i; nil when there is no
+// such rectangle.
+func (r ObjectRects) get(which, i int) *rl.Rectangle {
 	if which == rectLight {
 		return r.Light
 	}
-	return r.Collision
+	if i < 0 || i >= len(r.Collision) {
+		return nil
+	}
+	c := r.Collision[i]
+	return &c
 }
 
-func (r *ObjectRects) set(which int, v *rl.Rectangle) {
+// set replaces that rectangle with v, or removes it when v is nil. A collision
+// index one past the end appends. The list is copied rather than written in
+// place, because the palette entry and the objects placed from it can share it.
+func (r *ObjectRects) set(which, i int, v *rl.Rectangle) {
 	if which == rectLight {
 		r.Light = v
-	} else {
-		r.Collision = v
+		return
 	}
+	coll := slices.Clone(r.Collision)
+	switch {
+	case v == nil:
+		if i >= 0 && i < len(coll) {
+			coll = slices.Delete(coll, i, i+1)
+		}
+	case i >= 0 && i < len(coll):
+		coll[i] = *v
+	default:
+		coll = append(coll, *v)
+	}
+	r.Collision = coll
 }
 
 // activeRect is the selected thing's rectangle being edited, nil when it has
@@ -518,7 +569,7 @@ func (le *LevelEditor) active() (ObjectRects, *rl.Rectangle, rl.Vector2, bool) {
 		return ObjectRects{}, nil, rl.Vector2{}, false
 	}
 	rects := obj.rects()
-	return rects, rects.get(le.activeRect), objOrigin(obj), true
+	return rects, rects.get(le.activeRect, le.activeColl), objOrigin(obj), true
 }
 
 // setActive gives the active rectangle a new value, if that changes anything.
@@ -527,37 +578,86 @@ func (le *LevelEditor) setActive(nr *rl.Rectangle) {
 	if !ok || (cur == nil && nr == nil) || (cur != nil && nr != nil && *cur == *nr) {
 		return
 	}
-	rects.set(le.activeRect, nr)
+	rects.set(le.activeRect, le.activeColl, nr)
 	le.setSelectedRects(rects)
 }
 
-// addActiveRect gives the selection the active rectangle when it has none: one
-// grid cell at its origin, somewhere visible to drag it from.
+// addActiveRect is N: another collision rectangle, or the light rectangle when
+// there is none. It starts as one grid cell at the origin, somewhere visible to
+// drag it from, and becomes the one being edited.
 func (le *LevelEditor) addActiveRect() {
-	if _, cur, _, ok := le.active(); ok && cur == nil {
-		le.setActive(&rl.Rectangle{Width: float32(le.gridW), Height: float32(le.gridH)})
+	rects, cur, _, ok := le.active()
+	if !ok {
+		return
+	}
+	cell := &rl.Rectangle{Width: float32(le.gridW), Height: float32(le.gridH)}
+	if le.activeRect == rectCollision {
+		le.activeColl = len(rects.Collision) // one past the end: set appends
+		le.setActive(cell)
+		return
+	}
+	if cur == nil {
+		le.setActive(cell)
 	}
 }
 
+// clearActiveRect is Delete: the rectangle being edited goes, and every other
+// stays. The collision rectangle before it becomes the one being edited.
 func (le *LevelEditor) clearActiveRect() {
+	i := le.activeColl
 	le.setActive(nil)
+	if le.activeRect == rectCollision {
+		le.activeColl = max(0, i-1)
+	}
+	le.clampActiveColl()
 	le.drag = rectDrag{}
 	le.editField = -1
 }
 
-// beginDrag takes hold of the active rectangle if p is on one of its handles.
+// rectRef names one of an object's rectangles: the light one, or collision
+// rectangle i.
+type rectRef struct{ which, i int }
+
+// rectOrder is the order a click tries the selection's rectangles in: the
+// active one first, so it wins where rectangles overlap, then every collision
+// rectangle in order, then the light one.
+func (le *LevelEditor) rectOrder(r ObjectRects) []rectRef {
+	refs := []rectRef{{le.activeRect, le.activeColl}}
+	for i := range r.Collision {
+		if le.activeRect != rectCollision || i != le.activeColl {
+			refs = append(refs, rectRef{rectCollision, i})
+		}
+	}
+	if le.activeRect != rectLight {
+		refs = append(refs, rectRef{rectLight, 0})
+	}
+	return refs
+}
+
+// beginDrag takes hold of whichever of the selection's rectangles p is on a
+// handle of, trying them in rectOrder, and makes it the one being edited.
 func (le *LevelEditor) beginDrag(p rl.Vector2, tol float32) bool {
-	_, cur, origin, ok := le.active()
-	if !ok || cur == nil {
+	obj, ok := le.selectedObject()
+	if !ok {
 		return false
 	}
-	wr := rectToWorld(*cur, origin)
-	h := rectHandleAt(wr, p, tol)
-	if h == handleNone {
-		return false
+	rects, origin := obj.rects(), objOrigin(obj)
+	for _, ref := range le.rectOrder(rects) {
+		r := rects.get(ref.which, ref.i)
+		if r == nil {
+			continue
+		}
+		wr := rectToWorld(*r, origin)
+		h := rectHandleAt(wr, p, tol)
+		if h == handleNone {
+			continue
+		}
+		le.activeRect, le.activeColl = ref.which, ref.i
+		le.editField = -1
+		le.drag = rectDrag{active: true, h: h, off: sub(handleAnchor(wr, h, p), p)}
+		return true
 	}
-	le.drag = rectDrag{active: true, h: h, off: sub(handleAnchor(wr, h, p), p)}
-	return true
+	return false
 }
 
 // dragTo moves what the drag has hold of to the cursor at p, in whole pixels.
@@ -589,6 +689,21 @@ func (le *LevelEditor) buildIndex() {
 		}
 		return cmp.Compare(obj2.X, obj1.X)
 	})
+
+	// Collision walks every rectangle of every object, in the objects' order
+	// and each object's own, placed in the level the way it always has been.
+	solids := make([]rl.Rectangle, 0, len(le.objectsIndexed))
+	for _, obj := range le.objectsIndexed {
+		for _, c := range obj.CollisionRects {
+			solids = append(solids, rl.Rectangle{
+				X:      float32(obj.X + int32(c.X)),
+				Y:      float32(obj.Y + int32(c.Y)),
+				Width:  c.Width,
+				Height: c.Height,
+			})
+		}
+	}
+	le.solids = solids
 }
 
 // rebuildPalette re-reads which block textures exist, keeping the rectangles
@@ -625,8 +740,8 @@ func (le *LevelEditor) Draw() {
 	}
 	if DevTools && Debug {
 		for _, obj := range le.objectsIndexed {
-			if obj.CollisionRect != nil {
-				rl.DrawRectangleLinesEx(rectToWorld(*obj.CollisionRect, objOrigin(obj)), 1, rl.SkyBlue)
+			for _, c := range obj.CollisionRects {
+				rl.DrawRectangleLinesEx(rectToWorld(c, objOrigin(obj)), 1, rl.SkyBlue)
 			}
 			if obj.LightRect != nil {
 				rl.DrawRectangleLinesEx(rectToWorld(*obj.LightRect, objOrigin(obj)), 1, rl.Yellow)
@@ -667,17 +782,20 @@ func (le *LevelEditor) drawSelection() {
 		return
 	}
 	rl.DrawRectangleLinesEx(le.objBounds(obj), 1, rl.White)
-	for _, which := range []int{rectCollision, rectLight} {
-		r := obj.rects().get(which)
+	rects := obj.rects()
+	refs := le.rectOrder(rects)
+	// the active one, first in the order, is drawn last, over the others
+	for i := len(refs) - 1; i >= 0; i-- {
+		r := rects.get(refs[i].which, refs[i].i)
 		if r == nil {
 			continue
 		}
 		wr := rectToWorld(*r, objOrigin(obj))
 		col := rl.SkyBlue
-		if which == rectLight {
+		if refs[i].which == rectLight {
 			col = rl.Yellow
 		}
-		if which != le.activeRect {
+		if i != 0 {
 			rl.DrawRectangleLinesEx(wr, 1, rl.Fade(col, 0.5))
 			continue
 		}
@@ -699,8 +817,8 @@ func (le *LevelEditor) DrawCursor() {
 	if tex, ok := resources[le.obj.Resource]; ok {
 		rl.DrawTexture(tex, le.obj.X, le.obj.Y, rl.NewColor(255, 255, 255, 127))
 	}
-	if le.obj.CollisionRect != nil {
-		rl.DrawRectangleLinesEx(rectToWorld(*le.obj.CollisionRect, objOrigin(le.obj)), 1, rl.SkyBlue)
+	for _, c := range le.obj.CollisionRects {
+		rl.DrawRectangleLinesEx(rectToWorld(c, objOrigin(le.obj)), 1, rl.SkyBlue)
 	}
 }
 
@@ -889,7 +1007,7 @@ const (
 	pickerX, pickerY = 25, 35
 	pickerCell       = 100
 	pickerCols       = 12
-	panelW, panelH   = 380, 290
+	panelW, panelH   = 380, 320
 )
 
 func pickerCellRect(i int) rl.Rectangle {
@@ -1010,7 +1128,10 @@ func (le *LevelEditor) drawPanel() {
 		le.setActiveRect(int(active))
 	}
 
-	_, cur, _, _ := le.active()
+	rects, cur, _, _ := le.active()
+	if le.activeRect == rectCollision && len(rects.Collision) > 0 {
+		rlg.Label(row(), fmt.Sprintf("Collision %d of %d (C: next, N: add)", le.activeColl+1, len(rects.Collision)))
+	}
 	if cur == nil {
 		rlg.Label(row(), "None - N to add")
 		return
@@ -1022,7 +1143,7 @@ func (le *LevelEditor) drawPanel() {
 		{"H", int32(cur.Height), 1, fieldLim},
 	})
 	le.setActive(&rl.Rectangle{X: float32(v[0]), Y: float32(v[1]), Width: float32(v[2]), Height: float32(v[3])})
-	rlg.Label(row(), "Drag to shape, Del clears")
+	rlg.Label(row(), "Drag to shape, Del removes")
 }
 
 // intField is one numeric field in the panel: its label, the value it shows

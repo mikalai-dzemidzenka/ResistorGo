@@ -2,6 +2,7 @@ package resistor
 
 import (
 	"path/filepath"
+	"slices"
 	"testing"
 
 	rl "github.com/gen2brain/raylib-go/raylib"
@@ -25,28 +26,28 @@ func TestBuildPaletteResolvesRects(t *testing.T) {
 	door := blocksDir + "/e1m1_door1.png"
 	bg := blocksDir + "/e1m1_bg1.png"
 	defaults := map[string]ObjectRects{
-		door: {Collision: &rl.Rectangle{X: 1, Y: 2, Width: 3, Height: 4}},
+		door: {Collision: []rl.Rectangle{{X: 1, Y: 2, Width: 3, Height: 4}}},
 	}
 	palette := buildPalette(defaults)
 	builtin := builtinRects()
 
 	w := paletteEntry(t, palette, wall)
-	if w.CollisionRect == nil || *w.CollisionRect != *builtin[wall].Collision ||
+	if len(w.CollisionRects) != 1 || !slices.Equal(w.CollisionRects, builtin[wall].Collision) ||
 		w.LightRect == nil || *w.LightRect != *builtin[wall].Light {
 		t.Errorf("wall did not keep its built-in rectangles: %+v", w)
 	}
-	if w.CollisionRect == builtin[wall].Collision {
+	if &w.CollisionRects[0] == &builtin[wall].Collision[0] {
 		t.Errorf("the palette shares its rectangle with the built-in table")
 	}
 	d := paletteEntry(t, palette, door)
-	if d.CollisionRect == nil || *d.CollisionRect != *defaults[door].Collision {
-		t.Errorf("door collision = %+v, want the defaults file's", d.CollisionRect)
+	if len(d.CollisionRects) != 1 || !slices.Equal(d.CollisionRects, defaults[door].Collision) {
+		t.Errorf("door collision = %+v, want the defaults file's", d.CollisionRects)
 	}
 	if d.LightRect != nil {
 		t.Errorf("door has a light rectangle the defaults file does not give it")
 	}
 	b := paletteEntry(t, palette, bg)
-	if b.CollisionRect != nil || b.LightRect != nil {
+	if len(b.CollisionRects) != 0 || b.LightRect != nil {
 		t.Errorf("a texture with no rectangles anywhere was given some: %+v", b)
 	}
 }
@@ -71,17 +72,17 @@ func TestEmptyPaletteIsUsable(t *testing.T) {
 // Placing copies the entry's rectangles, including their absence. The door and
 // platform have no light rectangle: placing one used to dereference it.
 func TestPlaceCopiesRectsIncludingNone(t *testing.T) {
-	entry := LevelObject{Resource: "x", CollisionRect: &rl.Rectangle{Width: 5, Height: 5}}
+	entry := LevelObject{Resource: "x", CollisionRects: []rl.Rectangle{{Width: 5, Height: 5}}}
 	le := newLevelEditor(39, 83, []LevelObject{entry}, nil)
 	le.place(Vector2i{X: 39})
 	obj := le.objects[0][Vector2i{X: 39}]
 	if obj.LightRect != nil {
 		t.Errorf("an entry with no light rectangle placed an object with one")
 	}
-	if obj.CollisionRect == nil || *obj.CollisionRect != *entry.CollisionRect {
-		t.Errorf("placed collision = %+v, want %+v", obj.CollisionRect, entry.CollisionRect)
+	if len(obj.CollisionRects) != 1 || !slices.Equal(obj.CollisionRects, entry.CollisionRects) {
+		t.Errorf("placed collision = %+v, want %+v", obj.CollisionRects, entry.CollisionRects)
 	}
-	if obj.CollisionRect == le.obj.CollisionRect {
+	if &obj.CollisionRects[0] == &le.obj.CollisionRects[0] {
 		t.Errorf("the placed object shares its rectangle with the palette entry")
 	}
 }
@@ -160,7 +161,7 @@ func TestAddAndClearRect(t *testing.T) {
 
 // Every rectangle edit is an unsaved edit, and one that changes nothing is not.
 func TestRectEditMarksDirty(t *testing.T) {
-	le := newLevelEditor(39, 83, []LevelObject{{Resource: "x", CollisionRect: &rl.Rectangle{Width: 10, Height: 10}}}, nil)
+	le := newLevelEditor(39, 83, []LevelObject{{Resource: "x", CollisionRects: []rl.Rectangle{{Width: 10, Height: 10}}}}, nil)
 	le.setActive(&rl.Rectangle{Width: 10, Height: 10})
 	if le.dirty {
 		t.Errorf("setting a rectangle to what it already was marked the level unsaved")
@@ -175,7 +176,7 @@ func TestRectEditMarksDirty(t *testing.T) {
 // placed after it; a tile's own edit applies to that tile only.
 func TestDefaultsAndTilesAreEditedSeparately(t *testing.T) {
 	orig := rl.Rectangle{Width: 10, Height: 10}
-	le := newLevelEditor(39, 83, []LevelObject{{Resource: "x", CollisionRect: &orig}}, nil)
+	le := newLevelEditor(39, 83, []LevelObject{{Resource: "x", CollisionRects: []rl.Rectangle{orig}}}, nil)
 	a, b, c := Vector2i{X: 39}, Vector2i{X: 78}, Vector2i{X: 117}
 	le.place(a)
 	le.place(b)
@@ -184,21 +185,21 @@ func TestDefaultsAndTilesAreEditedSeparately(t *testing.T) {
 	le.setActive(&changed) // the palette entry is selected
 	le.place(c)
 	for _, p := range []Vector2i{a, b, c} {
-		if got := *le.objects[0][p].CollisionRect; got != changed {
+		if got := le.objects[0][p].CollisionRects[0]; got != changed {
 			t.Errorf("the tile at %v has %+v after its texture changed, want %+v", p, got, changed)
 		}
 	}
-	if d, ok := le.defaults["x"]; !ok || *d.Collision != changed {
+	if d, ok := le.defaults["x"]; !ok || d.Collision[0] != changed {
 		t.Errorf("the changed default is not in the defaults to be saved: %+v", le.defaults)
 	}
 
 	le.selectAt(a)
 	one := rl.Rectangle{Width: 5, Height: 5}
 	le.setActive(&one)
-	if got := *le.objects[0][b].CollisionRect; got != changed {
+	if got := le.objects[0][b].CollisionRects[0]; got != changed {
 		t.Errorf("editing one tile changed another of the same texture: %+v", got)
 	}
-	if got := *le.levelObjects[0].CollisionRect; got != changed {
+	if got := le.levelObjects[0].CollisionRects[0]; got != changed {
 		t.Errorf("editing a tile changed the palette entry: %+v", got)
 	}
 }

@@ -713,20 +713,17 @@ func (a *Actor) updateVertSpeed(dt float32) {
 	a.Speed.Y = clamp(a.Speed.Y, MaxJumpSpeed, MaxFallSpeed)
 }
 
-// headBlocked reports whether an object currently contains the actor's head.
-// The climb checks in checkCollision need this up front: objectsIndexed is
-// sorted by descending X, so a neighbouring tile of a ceiling row is visited
+// headBlocked reports whether a collision rectangle contains the actor's head.
+// The climb checks in checkCollision need this up front: the solids follow
+// objectsIndexed, sorted by descending X, so a neighbouring tile of a ceiling row is visited
 // before the tile the head is actually inside of.
 func (a *Actor) headBlocked(pColCenterX float32) bool {
 	pColUpY := a.Pos.Y + a.CollisionBox.Y
-	for _, obj := range LE.objectsIndexed {
-		if obj.CollisionRect == nil {
-			continue
-		}
-		oColY := float32(obj.Y + int32(obj.CollisionRect.Y))
-		oColX := float32(obj.X + int32(obj.CollisionRect.X))
-		if oColX <= pColCenterX && oColX+obj.CollisionRect.Width >= pColCenterX &&
-			pColUpY >= oColY && pColUpY <= oColY+obj.CollisionRect.Height {
+	for _, c := range LE.solids {
+		oColY := c.Y
+		oColX := c.X
+		if oColX <= pColCenterX && oColX+c.Width >= pColCenterX &&
+			pColUpY >= oColY && pColUpY <= oColY+c.Height {
 			return true
 		}
 	}
@@ -739,14 +736,11 @@ func (a *Actor) checkCollision() {
 	pColCenterX := a.Pos.X + a.CollisionBox.X + a.CollisionBox.Width/2
 	pPosX := a.Pos.X
 	hitTop := a.headBlocked(pColCenterX)
-	for _, obj := range LE.objectsIndexed {
-		if obj.CollisionRect == nil {
-			continue // an object with no collision rectangle is not stood on
-		}
-		oColY := float32(obj.Y + int32(obj.CollisionRect.Y))
-		oColHeight := obj.CollisionRect.Height
-		oColX := float32(obj.X + int32(obj.CollisionRect.X))
-		oColWidth := obj.CollisionRect.Width
+	for _, c := range LE.solids {
+		oColY := c.Y
+		oColHeight := c.Height
+		oColX := c.X
+		oColWidth := c.Width
 
 		if pColCenterX > oColX && pColCenterX < oColX+oColWidth &&
 			pColDownY+1 > oColY && pColDownY < oColY+oColHeight {
