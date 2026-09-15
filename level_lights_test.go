@@ -104,17 +104,27 @@ func level1Bytes(t *testing.T) []byte {
 	return b
 }
 
-// The level carries the three lights the game always drew, and its
-// fingerprint is the one the loader before lights gave its tiles.
-func TestLevel1HasTheThreeLights(t *testing.T) {
-	le := NewLevelEditor(39, 83)
-	le.LoadLevel("level_1.json")
-	if !slices.Equal(le.lights, threeLights) {
-		t.Errorf("level_1.json lights = %+v, want %+v", le.lights, threeLights)
+// checkLevelLights checks a level file's lights: they survive a save unchanged,
+// and the fingerprint is the one the loader before lights gave its tiles. It
+// returns that fingerprint.
+func checkLevelLights(t *testing.T, name string, b []byte) uint64 {
+	t.Helper()
+	objects, lights, err := parseLevel(b)
+	if err != nil {
+		t.Fatalf("%s: %v", name, err)
+	}
+	le := newLevelEditor(39, 83, nil, nil)
+	le.objects, le.lights = objects, lights
+	saved, err := le.marshalFile()
+	if err != nil {
+		t.Fatalf("%s: %v", name, err)
+	}
+	if _, back, err := parseLevel(saved); err != nil || !slices.Equal(back, lights) {
+		t.Errorf("%s: lights after a save = %+v (%v), want %+v", name, back, err, lights)
 	}
 
 	var raw map[string]json.RawMessage
-	if err := json.Unmarshal(level1Bytes(t), &raw); err != nil {
+	if err := json.Unmarshal(b, &raw); err != nil {
 		t.Fatal(err)
 	}
 	delete(raw, lightsKey)
@@ -124,18 +134,48 @@ func TestLevel1HasTheThreeLights(t *testing.T) {
 		t.Fatal(err)
 	}
 	if le.Hash() != old.Hash() {
-		t.Errorf("the level's fingerprint changed when its lights were added")
+		t.Errorf("%s: the lights changed the level's fingerprint", name)
+	}
+	return le.Hash()
+}
+
+// The level has lights, they survive a save, and they stay out of its
+// fingerprint - whatever lights the level is given, and wherever they are.
+func TestLevel1Lights(t *testing.T) {
+	b := level1Bytes(t)
+	le := NewLevelEditor(39, 83)
+	le.LoadLevel("level_1.json")
+	if len(le.lights) == 0 {
+		t.Fatalf("level_1.json loaded with no lights")
+	}
+	hash := checkLevelLights(t, "level_1.json", b)
+
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(b, &raw); err != nil {
+		t.Fatal(err)
+	}
+	lights := slices.Clone(le.lights)
+	lights[0].X += 17
+	lights = append(lights, LevelLight{X: -3, Y: 9, Radius: 40, Color: [3]uint8{255, 0, 0}, Intensity: 0.5})
+	raw[lightsKey], _ = json.Marshal(lights)
+	edited, _ := json.Marshal(raw)
+	if checkLevelLights(t, "with a light moved and one added", edited) != hash {
+		t.Errorf("moving a light and adding one changed the level's fingerprint")
 	}
 }
 
 // The dedicated server loads the level through LoadLevel, and never draws it:
-// it gets the lights all the same, and agrees with a client on the fingerprint.
+// it gets the lights all the same, and agrees with a client on them and on the
+// fingerprint.
 func TestServerAndClientLoadTheSameLevel(t *testing.T) {
 	server, client := NewLevelEditor(39, 83), NewLevelEditor(39, 83)
 	server.LoadLevel("level_1.json")
 	client.LoadLevel("level_1.json")
-	if len(server.lights) != len(threeLights) || len(server.objectsIndexed) == 0 {
+	if len(server.lights) == 0 || len(server.objectsIndexed) == 0 {
 		t.Errorf("the server loaded %d lights and %d tiles", len(server.lights), len(server.objectsIndexed))
+	}
+	if !slices.Equal(server.lights, client.lights) {
+		t.Errorf("server and client loaded different lights")
 	}
 	if server.Hash() != client.Hash() {
 		t.Errorf("server and client disagree on the fingerprint")

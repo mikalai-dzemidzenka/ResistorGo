@@ -15,14 +15,21 @@ const (
 	MaxSpeed        = 320
 	PunchSpeed      = 50
 	AttackDash      = 4
+	StepHeight      = 4 // a rise no taller than this is walked onto; anything taller is a wall
 	// The run-jump leaves the ground on the third frame of its animation: the
 	// frame the fighter pushes off on. The two before it are the anticipation,
 	// drawn rather than spent in a state of its own.
 	RunJumpLaunchFrame = 2
 	Gravity            = 1500
 	MaxJumpSpeed       = -Gravity * 10
-	MaxFallSpeed       = 900
-	AttackZoomSpeed    = 2.0
+	// The run-jump leaves the ground harder than a standing one: the run is
+	// what buys the extra height, and the half-pool it costs is what the
+	// height is paid for with. Derived from the standing jump, so retuning
+	// that carries the run-jump along.
+	RunJumpLift     = 1.75
+	MaxRunJumpSpeed = MaxJumpSpeed * RunJumpLift
+	MaxFallSpeed    = 900
+	AttackZoomSpeed = 2.0
 
 	BackAttackSpeed   = 0.2
 	SecondAttackSpeed = 0.2
@@ -49,15 +56,27 @@ const (
 
 	// Energy is what a fighter spends to attack, counted in whole points.
 	// Every swing costs the same, a block at the attacker's height pays back,
-	// and time pays back once the fighter stops swinging.
-	MaxEnergy          = 200
-	EnergySwing        = 12 // sixteen swings from a full pool
+	// and time pays back once the fighter stops swinging - faster once nothing
+	// is swinging at it either.
+	MaxEnergy          = 300
+	EnergySwing        = 12 // twenty-five swings from a full pool
 	EnergyBlockRestore = 15 // more than a swing costs: one read pays for the answer
-	EnergyRegenTicks   = 2  // one point every 2 ticks, so 30 per second
-	EnergyCalmTicks    = 90 // 1.5s without a swing before it refills
-	// A running jump costs half the pool: two from full, and the third has to
-	// be earned. Derived from MaxEnergy, so retuning the pool carries it along.
-	EnergyRunJump = MaxEnergy / 2
+	// Refilling is slow enough to be felt: an empty pool takes this long to come
+	// back once the fighter is calm. The tick gap is derived from it, so
+	// retuning the pool cannot quietly retune the rate along with it.
+	EnergyRefillSeconds = 20
+	EnergyRegenTicks    = 60 * EnergyRefillSeconds / MaxEnergy // a point every 4 ticks, 15 per second
+	EnergyCalmTicks     = 90                                   // 1.5s without a swing before it refills
+	// A fighter nobody is trading with refills at twice the rate: the slow one
+	// is what a fighter still under attack gets, and getting out of range long
+	// enough for the attacks to stop is what buys the fast one.
+	EnergyFreeRefillSeconds = 10
+	EnergyFreeRegenTicks    = 60 * EnergyFreeRefillSeconds / MaxEnergy // a point every 2 ticks, 30 per second
+	EnergyUntouchedTicks    = 120                                      // 2s without an attack reaching it
+	// A running jump costs a third of the pool: three from full, and the fourth
+	// has to be earned. Derived from MaxEnergy, so retuning the pool carries it
+	// along.
+	EnergyRunJump = MaxEnergy / 3
 
 	StunEveryHits   = 3
 	StunKnockback   = 150
@@ -173,6 +192,7 @@ type Actor struct {
 	HitRun           uint8   // hits landed in a row; unlike HitCount a stun does not clear it
 	CalmTicks        uint16  // ticks since structure was last lost
 	EnergyCalm       uint16  // ticks since energy was last spent
+	EnergyUntouched  uint16  // ticks since an attack last reached it, hit or blocked
 	FlinchTicks      uint8   // ticks a hit that did not stun keeps the fighter flickering
 	SwingHit         bool    // this fighter's current swing has already landed
 	Dying            bool    // dead and waiting to be taken out of the world
@@ -196,15 +216,18 @@ type Input struct {
 
 func NewActor(pos rl.Vector2, isPlayer bool) *Actor {
 	return &Actor{
-		Pos:         pos,
-		Speed:       rl.Vector2{},
-		Acc:         DefaultAcc,
-		Friction:    DefaultFriction,
-		State:       StateIdle,
-		Structure:   MaxStructure,
-		Energy:      MaxEnergy,
-		Orientation: 1,
-		OnGround:    false,
+		Pos:       pos,
+		Speed:     rl.Vector2{},
+		Acc:       DefaultAcc,
+		Friction:  DefaultFriction,
+		State:     StateIdle,
+		Structure: MaxStructure,
+		Energy:    MaxEnergy,
+		// nothing has swung at it yet, so it refills at the free rate from the
+		// first tick rather than having to wait the pressure out
+		EnergyUntouched: EnergyUntouchedTicks,
+		Orientation:     1,
+		OnGround:        false,
 		CollisionBox: rl.Rectangle{
 			X:      14,
 			Y:      6,
@@ -393,9 +416,11 @@ func (a *Actor) Update(dt float32) {
 		}
 	}
 
+	fromX := a.Pos.X
 	a.Pos.X += a.Speed.X * dt
-	a.Pos.Y += a.Speed.Y * dt
 	a.Pos.X = float32(int(a.Pos.X))
+	a.blockSides(fromX)
+	a.Pos.Y += a.Speed.Y * dt
 	a.Pos.Y = float32(int(a.Pos.Y))
 }
 
@@ -675,7 +700,7 @@ func (a *Actor) updateHorSpeed(dt float32) {
 		} else {
 			a.Speed.X -= a.Acc * dt
 		}
-		a.Orientation = -1
+		a.face(-1)
 	}
 	if a.Input.Left && !(a.State == StateTurnover && prevOrientation == -1) && canMove {
 		movePressed = true
@@ -684,14 +709,14 @@ func (a *Actor) updateHorSpeed(dt float32) {
 		} else {
 			a.Speed.X += a.Acc * dt
 		}
-		a.Orientation = 1
+		a.face(1)
 	}
 	if a.State == StateIdle || a.State == StateAttack && a.AnimCurrentFrame == 0 {
 		if a.IsPlayer {
 			if a.MouseOnLeft() {
-				a.Orientation = -1
+				a.face(-1)
 			} else {
-				a.Orientation = 1
+				a.face(1)
 			}
 		}
 	}
@@ -779,6 +804,50 @@ func (a *Actor) checkCollision() {
 	}
 }
 
+// isWall reports whether solid c stands in the fighter's way sideways: some of
+// it is level with the body, from the head down to a step's height above the
+// feet. Anything lower is a step, walked onto rather than stopped at.
+func (a *Actor) isWall(c rl.Rectangle) bool {
+	head := a.Pos.Y + a.CollisionBox.Y
+	feet := head + a.CollisionBox.Height
+	return c.Y < feet-StepHeight && c.Y+c.Height > head
+}
+
+// blockSides cuts a sideways move short, from fromX to where the fighter now
+// is, at the first wall face its collision box crossed, and takes away any
+// speed carrying it into that wall. It stops the crossing rather than the
+// overlap, so no wall is too thin to stop a fighter at any speed it reaches,
+// and a fighter already inside a wall is never pushed out of it - only kept
+// from going deeper.
+func (a *Actor) blockSides(fromX float32) {
+	l, w := a.CollisionBox.X, a.CollisionBox.Width
+	fromL, toL := fromX+l, a.Pos.X+l
+	switch {
+	case toL > fromL:
+		right := toL + w
+		for _, c := range LE.solids {
+			if c.X > fromL && a.isWall(c) {
+				right = min(right, max(c.X, fromL+w))
+			}
+		}
+		if right < toL+w {
+			a.Pos.X = right - w - l
+			a.Speed.X = min(a.Speed.X, 0)
+		}
+	case toL < fromL:
+		left := toL
+		for _, c := range LE.solids {
+			if c.X+c.Width < fromL+w && a.isWall(c) {
+				left = max(left, min(c.X+c.Width, fromL))
+			}
+		}
+		if left > toL {
+			a.Pos.X = left - l
+			a.Speed.X = max(a.Speed.X, 0)
+		}
+	}
+}
+
 // nearest returns the closest other actor in the same world.
 func (a *Actor) nearest() *Actor {
 	var best *Actor
@@ -816,7 +885,7 @@ func botInput(a *Actor) Input {
 				in.Attack = true
 			}
 		}
-		a.Orientation = -1
+		a.face(-1)
 	}
 	if t.Pos.X > a.Pos.X {
 		if t.Pos.X-a.Pos.X > near {
@@ -826,7 +895,7 @@ func botInput(a *Actor) Input {
 				in.Attack = true
 			}
 		}
-		a.Orientation = 1
+		a.face(1)
 	}
 	return in
 }
@@ -904,7 +973,9 @@ func (a *Actor) enterAttackState() bool {
 	a.stopFlicker()
 	a.SwingHit = false
 	a.Events |= EvAttackStart
+	fromX := a.Pos.X
 	a.Pos.X += float32(a.Orientation) * AttackDash
+	a.blockSides(fromX)
 	switch a.Updown {
 	case 0:
 		a.SetAnim("resources/threefour/attack-low.png", AnimOptions{animDuration: 0.3, totalFrames: 8, once: true})
@@ -932,6 +1003,18 @@ func (a *Actor) restoreStructure(amount float32) {
 	a.Structure = min(a.Structure+amount, MaxStructure)
 }
 
+// face turns the fighter, and is the only way anything but a replayed or
+// replicated record does: a climb refuses the turn. The climb animation is what
+// carries the fighter over the ledge it grabbed, and one that turned halfway up
+// would mantle one way while facing the other. Every turn a player or a bot
+// asks for goes through here so the rule cannot be missed by a new caller.
+func (a *Actor) face(orientation int8) {
+	if a.State == StateClimb {
+		return
+	}
+	a.Orientation = orientation
+}
+
 // canSwing reports whether the fighter can pay for a swing.
 func (a *Actor) canSwing() bool { return a.Energy >= EnergySwing }
 
@@ -939,8 +1022,9 @@ func (a *Actor) canSwing() bool { return a.Energy >= EnergySwing }
 func (a *Actor) canRunJump() bool { return a.Energy >= EnergyRunJump }
 
 // spendEnergy pays cost out of the pool. The calm wait starts again: spending
-// is the only thing that holds energy back from refilling, whether it went on a
-// swing or on leaving the ground at a run.
+// is the only thing that stops the refill outright, whether it went on a swing
+// or on leaving the ground at a run. Being attacked only slows it, which is
+// regenEnergy's business.
 func (a *Actor) spendEnergy(cost int32) {
 	a.EnergyCalm = 0
 	a.Energy = max(a.Energy-cost, 0)
@@ -951,6 +1035,11 @@ func (a *Actor) spendEnergy(cost int32) {
 func (a *Actor) restoreEnergy(amount int32) {
 	a.Energy = min(a.Energy+amount, MaxEnergy)
 }
+
+// pressured marks the fighter as being attacked: an attack reached it, landed
+// or guarded. Energy refills at the slow rate until attacks have stopped
+// reaching it for the whole untouched wait.
+func (a *Actor) pressured() { a.EnergyUntouched = 0 }
 
 // regenStructure refills the pool once the fighter has been left alone long
 // enough. The hit count goes with it: a run of hits is over once its target has
@@ -972,21 +1061,30 @@ func (a *Actor) regenStructure() {
 	a.restoreStructure(StructureRegen * float32(FixedTimeStep))
 }
 
-// regenEnergy refills the pool once the fighter has stopped swinging. Only
-// spending holds it back: being hit, blocking and blocking-all all leave the
-// wait running.
+// regenEnergy refills the pool once the fighter has stopped swinging, at one of
+// two rates. Swinging is the only thing that stops the refill outright; being
+// attacked holds it to the slow rate, and it doubles once nothing has reached
+// the fighter - hit or blocked - for the untouched wait. A fighter that is
+// neither swinging nor being swung at is the one that gets its pool back fast.
 //
 // Unlike regenStructure this runs in a predicted world too. A client that spent
 // but did not refill would refuse swings the server allows, and the server's
-// swing would then arrive as an attack the player never saw start; both inputs
-// it is decided from, the tick counter and the wait, are replicated so a client
-// refills on the same tick the server does.
+// swing would then arrive as an attack the player never saw start; all three
+// inputs it is decided from, the tick counter and the two waits, are replicated
+// so a client refills on the same tick the server does.
 func (a *Actor) regenEnergy() {
+	if a.EnergyUntouched < EnergyUntouchedTicks {
+		a.EnergyUntouched++
+	}
 	if a.EnergyCalm < EnergyCalmTicks {
 		a.EnergyCalm++
 		return
 	}
-	if a.Energy < MaxEnergy && a.Ticks%EnergyRegenTicks == 0 {
+	gap := uint32(EnergyRegenTicks)
+	if a.EnergyUntouched >= EnergyUntouchedTicks {
+		gap = EnergyFreeRegenTicks
+	}
+	if a.Energy < MaxEnergy && a.Ticks%gap == 0 {
 		a.restoreEnergy(1)
 	}
 }
@@ -1007,6 +1105,7 @@ func (a *Actor) endHitRun() { a.HitRun = 0 }
 // kills. It is one of the two places structure is spent.
 func (a *Actor) takeHit(attacker *Actor) {
 	attacker.SwingHit = true
+	a.pressured()
 	cost := a.hitCost()
 	a.HitRun = min(a.HitRun+1, HitRunCapped)
 	if a.spendStructure(cost) {
@@ -1038,6 +1137,7 @@ func (a *Actor) takeHit(attacker *Actor) {
 // hit would have cost.
 func (a *Actor) confirmBlock(attacker *Actor) {
 	attacker.SwingHit = true
+	a.pressured()
 	a.endHitRun() // any attack stopped is the run broken, block-all included
 	if a.Updown == 3 {
 		if a.spendStructure(BlockAllStructure) {
@@ -1366,11 +1466,12 @@ func (a *Actor) enterRunJumpState() bool {
 }
 
 // launchRunJump is the push-off, on the frame the animation pushes off on. It
-// is the same upward speed a standing jump leaves at, and horizontal speed is
-// left alone, so the run's momentum is what carries it.
+// leaves the ground faster than a standing jump - the run-jump is the taller
+// of the two - and horizontal speed is left alone, so the run's momentum is
+// what carries it.
 func (a *Actor) launchRunJump(dt float32) {
 	a.OnGround = false
-	a.Speed.Y = MaxJumpSpeed * dt
+	a.Speed.Y = MaxRunJumpSpeed * dt
 }
 
 // land puts a fighter that has reached the ground back into what it was doing:

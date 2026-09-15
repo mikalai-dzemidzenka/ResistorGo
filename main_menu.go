@@ -237,7 +237,15 @@ func drawMenuUI() {
 			Cfg.MusicVolume = int(vol)
 			applyMusicVolume()
 		}
-		if rlg.Button(row(3), "Back") {
+		label(3, "HUD (F1)")
+		hud := !Cfg.HideHUD
+		hudText := "Off"
+		if hud {
+			hudText = "On"
+		}
+		rlg.Toggle(row(3), hudText, &hud)
+		Cfg.HideHUD = !hud
+		if rlg.Button(row(4), "Back") {
 			SaveSettings()
 			menuScreen = menuMain
 		}

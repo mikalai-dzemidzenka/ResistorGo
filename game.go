@@ -315,6 +315,9 @@ func runLevel(dt float32) {
 		leaveMatch("", menuMain)
 		return
 	}
+	if rl.IsKeyPressed(HUDKey) {
+		toggleHUD()
+	}
 
 	spectating := Cli != nil && Cli.Spectator
 	if !spectating && !matchHeld() {

@@ -33,3 +33,7 @@
 - [ ] 5.3 In `go run ./cmd`: place a red light and a dim white one, move and resize them, save, restart, and confirm they are back and lit as set — the `Color and intensity`, `Save` and `Quit without saving` scenarios.
 - [ ] 5.4 Place a row of lights far from the start, walk the camera to them and back, and confirm the light at the edge of the screen neither pops in nor out, and that the frame rate with them off screen matches the frame rate without them — the `At the edge of the screen` and `Many lights` scenarios.
 - [ ] 5.5 Host a match from a development build with a moved light and join it from the release build: the join is not refused — the `A changed light` scenario.
+
+## 6. Level tests that survive editing the level
+
+- [x] 6.1 `TestLevel1HasTheThreeLights` and `TestServerAndClientLoadTheSameLevel` pin what `level_1.json` holds (exactly three lights). Since `level_1.json` gained four more lights and a tile, both fail in both builds, so 5.1 no longer holds. Make them test behaviour rather than content. The level loads with at least one light, and its lights survive a save round trip unchanged. Its `Hash()` equals the fingerprint of the same file with `"lights"` removed. The server's load path keeps lights and tiles, and server and client agree on the fingerprint. Keep the tests of 1.3 and 1.5 as they are. Verify `go test ./...` and `go test -tags release ./...` pass with the edited `level_1.json`, and still pass after adding or moving a light in it.

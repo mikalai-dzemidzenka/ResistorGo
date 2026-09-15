@@ -211,17 +211,19 @@ func TestBlockRestoresEnergy(t *testing.T) {
 }
 
 // Energy refills once the fighter stops swinging, and swinging keeps it down.
+// Nobody is attacking this one, so it refills at the free rate.
 func TestEnergyRegen(t *testing.T) {
 	w := NewWorld(true)
 	a := w.Spawn(rl.Vector2{}, true)
 	a.Updown = 1
-	a.Energy = MaxEnergy - 60
+	perSecond := int32(60 / EnergyFreeRegenTicks) // points earned in a second of calm
+	a.Energy = MaxEnergy - 2*perSecond            // two seconds' worth spent
 	a.EnergyCalm = 0
 
 	// 1.5s of waiting, then 1s of refilling: half of what was spent is back
 	run(w, EnergyCalmTicks+60)
-	if want := int32(MaxEnergy - 30); a.Energy != want {
-		t.Errorf("after 2.5s of calm: %v energy, want %v - half the 60 spent", a.Energy, want)
+	if want := MaxEnergy - perSecond; a.Energy != want {
+		t.Errorf("after 2.5s of calm: %v energy, want %v - half the %v spent", a.Energy, want, 2*perSecond)
 	}
 
 	run(w, 60) // a second more finishes it
@@ -247,8 +249,9 @@ func TestEnergyRegen(t *testing.T) {
 	}
 }
 
-// An emptied pool affords a swing again two seconds after the last one: the
-// 1.5s wait, then long enough to earn a swing's worth back.
+// An emptied pool affords a swing again a fixed wait after the last one: the
+// 1.5s of calm, then long enough to earn a swing's worth back at the refill
+// rate. Derived, so retuning either one cannot leave the two disagreeing.
 func TestEmptyPoolAffordsASwingAgain(t *testing.T) {
 	w := NewWorld(true)
 	a := w.Spawn(rl.Vector2{}, true)
@@ -256,9 +259,14 @@ func TestEmptyPoolAffordsASwingAgain(t *testing.T) {
 	a.Energy = 0
 	a.EnergyCalm = 0
 
-	run(w, 120) // 2 seconds
+	earned := EnergySwing * EnergyFreeRegenTicks // ticks to earn one swing back
+	run(w, EnergyCalmTicks+earned-EnergyFreeRegenTicks)
+	if a.canSwing() {
+		t.Errorf("a swing was affordable a point early, at %v energy", a.Energy)
+	}
+	run(w, EnergyFreeRegenTicks) // the point that pays for it
 	if !a.canSwing() {
-		t.Errorf("2s after emptying the pool: %v energy, too little for a swing at %d", a.Energy, EnergySwing)
+		t.Errorf("%d ticks after emptying the pool: %v energy, too little for a swing at %d", EnergyCalmTicks+earned, a.Energy, EnergySwing)
 	}
 	a.State = StateIdle
 	if !a.enterAttackState() {
@@ -266,8 +274,9 @@ func TestEmptyPoolAffordsASwingAgain(t *testing.T) {
 	}
 }
 
-// Only spending holds the refill back: taking a hit and blocking leave the
-// wait running.
+// Only spending stops the refill: taking a hit and blocking leave the swing
+// wait running. They slow the rate instead, which is
+// TestEnergyRegenSlowsUnderAttack's business.
 func TestEnergyCalmOnlyResetsOnSpending(t *testing.T) {
 	w := NewWorld(true)
 	att := w.Spawn(rl.Vector2{}, true)
@@ -291,5 +300,62 @@ func TestEnergyCalmOnlyResetsOnSpending(t *testing.T) {
 	def.enterAttackState()
 	if def.EnergyCalm != 0 {
 		t.Errorf("a swing left the energy wait at %d, want it restarted", def.EnergyCalm)
+	}
+}
+
+// A fighter attacks are still reaching refills at the slow rate; once they have
+// stopped for the untouched wait it doubles. The fighter here never swings, so
+// the swing wait is out of the way and the rate is the only thing moving.
+//
+// Ticked by hand rather than through the world: a hit freezes both fighters for
+// the hit-stop, and those held ticks would blur the counts this is about.
+func TestEnergyRegenSlowsUnderAttack(t *testing.T) {
+	w := NewWorld(true)
+	att := w.Spawn(rl.Vector2{}, true)
+	def := w.Spawn(rl.Vector2{X: 20}, true)
+	att.Orientation, att.Updown = 1, 1
+	def.Energy, def.EnergyCalm = 100, EnergyCalmTicks // long past the swing wait
+
+	step := func(n int) int32 {
+		before := def.Energy
+		for range n {
+			def.Ticks++
+			def.regenEnergy()
+		}
+		return def.Energy - before
+	}
+
+	def.takeHit(att)
+	if def.EnergyUntouched != 0 {
+		t.Fatalf("a hit left the untouched wait at %d, want it restarted", def.EnergyUntouched)
+	}
+	if got, want := step(60), int32(60/EnergyRegenTicks); got != want {
+		t.Errorf("the second after a hit earned %v energy, want %v at the slow rate", got, want)
+	}
+
+	step(EnergyUntouchedTicks - 60) // the rest of the wait, with nothing reaching it
+	if got, want := step(60), int32(60/EnergyFreeRegenTicks); got != want {
+		t.Errorf("a second %d ticks past the last hit earned %v energy, want %v at the free rate", EnergyUntouchedTicks, got, want)
+	}
+
+	// a block is being attacked too, even the block-all that pays nothing back
+	def.Updown = 3
+	def.confirmBlock(att)
+	if def.EnergyUntouched != 0 {
+		t.Fatalf("a block-all left the untouched wait at %d, want it restarted", def.EnergyUntouched)
+	}
+	if got, want := step(60), int32(60/EnergyRegenTicks); got != want {
+		t.Errorf("the second after a block earned %v energy, want %v at the slow rate", got, want)
+	}
+}
+
+// A fighter nobody has swung at yet refills at the free rate from its first
+// tick: it starts the fight untouched, not pinned to the slow rate by a hit it
+// never took.
+func TestEnergyFreeRateFromSpawn(t *testing.T) {
+	w := NewWorld(true)
+	a := w.Spawn(rl.Vector2{}, true)
+	if a.EnergyUntouched != EnergyUntouchedTicks {
+		t.Errorf("a new fighter starts %d ticks into the untouched wait, want the whole %d", a.EnergyUntouched, EnergyUntouchedTicks)
 	}
 }
