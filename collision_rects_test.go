@@ -321,7 +321,7 @@ func TestEveryCollisionRectTravels(t *testing.T) {
 	// the level file carries all three
 	le.objects[0][b] = LevelObject{Resource: "y", X: 78, CollisionRects: three}
 	f, _ := le.marshalFile()
-	objects, _, err := parseLevel(f)
+	objects, _, _, err := parseLevel(f)
 	if err != nil || !slices.Equal(objects[0][b].CollisionRects, three) {
 		t.Errorf("saved and loaded %+v (%v)", objects[0][b].CollisionRects, err)
 	}

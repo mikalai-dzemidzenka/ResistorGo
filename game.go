@@ -372,7 +372,7 @@ func runLevel(dt float32) {
 	}
 	Cam.Update(dt)
 
-	computeLights(LE.lights, LE.LightOccluders(), Cam.View())
+	computeLights(LE.lights, LE.ambient, LE.LightOccluders(), Cam.View())
 	rl.BeginTextureMode(ScreenFullTexture)
 	{
 		rl.ClearBackground(rl.Black)
@@ -403,8 +403,7 @@ func runLevel(dt float32) {
 		}
 
 		rl.EndMode2D()
-		rl.DrawRectangle(0, 0, SW*WindowScale, SH*WindowScale, rl.NewColor(0, 0, 0, 50))
-		drawLightAccum()
+		compositeLights()
 		rl.BeginMode2D(Cam.View())
 
 		// the attack outline and the structure bars go on top of the lighting,

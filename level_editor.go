@@ -114,6 +114,7 @@ type LevelEditor struct {
 	lights    []LevelLight // the level's lights, saved with it
 	lightSel  int          // the selected light, -1 for none
 	lightDrag lightDrag
+	ambient   Ambient // what lights the level where its lights do not, saved with it
 }
 type LevelObject struct {
 	Resource       string         `json:"resource,omitempty"`
@@ -149,6 +150,7 @@ func newLevelEditor(gridW, gridH int32, palette []LevelObject, defaults map[stri
 		sel:          selection{proto: true},
 		editField:    -1,
 		lightSel:     -1,
+		ambient:      defaultAmbient,
 	}
 	le.selectEntry(0) // an empty palette leaves nothing selected, and nothing to place
 	return le
@@ -853,20 +855,20 @@ func (le *LevelEditor) LoadLevel(path string) {
 		rl.TraceLog(rl.LogError, "failed to load level: read file: %s", err.Error())
 		return
 	}
-	objects, lights, err := parseLevel(b)
+	objects, lights, ambient, err := parseLevel(b)
 	if err != nil {
 		rl.TraceLog(rl.LogError, "failed to load level: json unmarshal: %s", err.Error())
 		return
 	}
-	le.objects, le.lights, le.lightSel = objects, lights, -1
+	le.objects, le.lights, le.lightSel, le.ambient = objects, lights, -1, ambient
 
 	le.markOwnRects()
 	le.buildIndex()
 }
 
 // marshal returns the canonical JSON of the level's tiles (map keys are sorted
-// by encoding/json). It is the fingerprint's input, so the lights are not in
-// it; marshalFile is what is saved.
+// by encoding/json). It is the fingerprint's input, so neither the lights nor
+// the ambient is in it; marshalFile is what is saved.
 func (le *LevelEditor) marshal() ([]byte, error) {
 	m := make(map[int]any)
 	for lNum, layer := range le.objects {

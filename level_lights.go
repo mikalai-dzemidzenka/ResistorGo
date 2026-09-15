@@ -36,26 +36,66 @@ func (l LevelLight) color() rl.Color {
 	return rl.Color{R: l.Color[0], G: l.Color[1], B: l.Color[2], A: 255}
 }
 
+// Ambient is the light a level has everywhere its lights do not reach: the
+// colour of its dark at full brightness, and how much of that colour there is.
+// The two are kept apart so a level is authored as "what colour is the night"
+// and "how dark is it" rather than as three dim numbers.
+type Ambient struct {
+	Color    [3]uint8 `json:"color"`
+	Strength float32  `json:"strength"`
+}
+
+// defaultAmbient lights a level that carries no ambient of its own: a cool
+// night, deep enough for a light to tell against and light enough to read the
+// level by outside one.
+var defaultAmbient = Ambient{Color: [3]uint8{120, 140, 255}, Strength: 0.4}
+
+// ambientClear is the colour the light map starts from, before any light is
+// added into it: the ambient's colour weighted by its strength. Opaque, because
+// the composite multiplies alpha along with colour and nothing the scene is
+// drawn into may end up transparent.
+func ambientClear(a Ambient) rl.Color {
+	ch := func(v uint8) uint8 {
+		return uint8(clamp(roundf(float32(v)*a.Strength), 0, 255))
+	}
+	return rl.Color{R: ch(a.Color[0]), G: ch(a.Color[1]), B: ch(a.Color[2]), A: 255}
+}
+
 // The level file is an object keyed by layer number, plus one key for the
-// lights. It kept its shape when lights were added to it: a level with no
-// lights is exactly the file it always was.
-const lightsKey = "lights"
+// lights and one for the ambient. It kept its shape when lights were added to
+// it, and again when the ambient was: a level with neither is exactly the file
+// it always was.
+const (
+	lightsKey  = "lights"
+	ambientKey = "ambient"
+)
 
 // parseLevel reads a level file: every integer key is a layer of tiles, the
-// lights key is the lights, and anything else is skipped rather than failing
-// the whole level.
-func parseLevel(b []byte) (map[int]LevelLayer, []LevelLight, error) {
+// lights key is the lights, the ambient key is the ambient, and anything else
+// is skipped rather than failing the whole level. A file with no ambient key
+// gets the default one - a file that carries an ambient gets it as written, a
+// strength of zero included, which is a level that is black outside its lights.
+func parseLevel(b []byte) (map[int]LevelLayer, []LevelLight, Ambient, error) {
 	var raw map[string]json.RawMessage
 	if err := json.Unmarshal(b, &raw); err != nil {
-		return nil, nil, err
+		return nil, nil, defaultAmbient, err
 	}
 	objects := make(map[int]LevelLayer)
 	var lights []LevelLight
+	ambient := defaultAmbient
 	for k, v := range raw {
-		if k == lightsKey {
+		switch k {
+		case lightsKey:
 			if err := json.Unmarshal(v, &lights); err != nil {
-				return nil, nil, err
+				return nil, nil, defaultAmbient, err
 			}
+			continue
+		case ambientKey:
+			var a Ambient
+			if err := json.Unmarshal(v, &a); err != nil {
+				return nil, nil, defaultAmbient, err
+			}
+			ambient = a
 			continue
 		}
 		n, err := strconv.Atoi(k)
@@ -65,15 +105,15 @@ func parseLevel(b []byte) (map[int]LevelLayer, []LevelLight, error) {
 		}
 		var layer LevelLayer
 		if err := json.Unmarshal(v, &layer); err != nil {
-			return nil, nil, err
+			return nil, nil, defaultAmbient, err
 		}
 		objects[n] = layer
 	}
-	return objects, lights, nil
+	return objects, lights, ambient, nil
 }
 
 // marshalFile is the level file as saved: the tiles, as marshal gives them to
-// the fingerprint, and the lights beside them.
+// the fingerprint, with the lights and the ambient beside them.
 func (le *LevelEditor) marshalFile() ([]byte, error) {
 	m := make(map[string]any)
 	for n, layer := range le.objects {
@@ -82,6 +122,11 @@ func (le *LevelEditor) marshalFile() ([]byte, error) {
 	if len(le.lights) > 0 {
 		m[lightsKey] = le.lights
 	}
+	// Always written, even when it matches the default: a level that carries
+	// its own ambient goes on looking as it was authored when the default
+	// changes under it, and a file without the key is only ever one written
+	// before the level had an ambient at all.
+	m[ambientKey] = le.ambient
 	return json.Marshal(m)
 }
 
@@ -99,15 +144,18 @@ func viewRect(cam rl.Camera2D, w, h float32) rl.Rectangle {
 	return rl.Rectangle{X: a.X, Y: a.Y, Width: b.X - a.X, Height: b.Y - a.Y}
 }
 
-// computeLights adds up the light of every level light in view into
-// LightAccum, to be added to the scene in one draw by drawLightAccum. The
-// lights take turns with one set of shadow textures, so each is added up the
-// moment it is computed, before the next one overwrites them. Additive blending
-// saturates the same whether the lights are added to the scene one by one or
-// added up first, so this is what drawing each onto the scene would give.
-func computeLights(lights []LevelLight, occluders []rl.Rectangle, cam rl.Camera2D) {
+// computeLights builds the frame's light map in LightAccum: the level's ambient
+// light, with every level light in view added into it, for compositeLights to
+// light the scene with. The lights take turns with one set of shadow textures,
+// so each is added up the moment it is computed, before the next one overwrites
+// them. Additive blending saturates the same whether the lights are added one
+// by one or added up first, so this is what drawing each onto the map would
+// give.
+func computeLights(lights []LevelLight, ambient Ambient, occluders []rl.Rectangle, cam rl.Camera2D) {
 	rl.BeginTextureMode(LightAccum)
-	rl.ClearBackground(rl.Black) // opaque: drawLightAccum's blend weighs it by its alpha
+	// where no light reaches, the map is the ambient alone - and opaque, as
+	// compositeLights multiplies alpha along with colour
+	rl.ClearBackground(ambientClear(ambient))
 	rl.EndTextureMode()
 	view := viewRect(cam, float32(LightAccum.Texture.Width), float32(LightAccum.Texture.Height))
 	for _, l := range lights {
@@ -128,16 +176,34 @@ func computeLights(lights []LevelLight, occluders []rl.Rectangle, cam rl.Camera2
 	}
 }
 
-// drawLightAccum adds the level's light to the scene being drawn, in screen
-// space - computeLights already put each light where the camera shows it.
-func drawLightAccum() {
+// lightGlow is how much of the light map is added back over the modulated
+// scene. Multiplying alone leaves a light invisible over anything black - the
+// sky, an unlit tile - because nothing is there to be lit; this much of it
+// added on top keeps a light readable in the air, without washing the dark the
+// way the flat black overlay it replaced did.
+const lightGlow = 0.2
+
+// compositeLights lights the scene with the light map, in screen space -
+// computeLights already put every light where the camera shows it. The scene is
+// modulated by the map, so an unlit pixel is what the scene drew there times
+// the ambient and a shadow keeps the colour of whatever stands in it, and then
+// the map is added back at lightGlow for the glow. Whatever is drawn after this
+// - the outlines, the bars, the editor's overlay - is untouched by either.
+func compositeLights() {
 	w, h := float32(LightAccum.Texture.Width), float32(LightAccum.Texture.Height)
-	rl.BeginBlendMode(rl.BlendAdditive)
-	rl.DrawTexturePro(LightAccum.Texture,
-		rl.NewRectangle(0, 0, w, -h), // флип render-текстуры
-		rl.NewRectangle(0, 0, w, h),
-		rl.Vector2{}, 0, rl.White)
-	rl.EndBlendMode()
+	src := rl.NewRectangle(0, 0, w, -h) // флип render-текстуры
+	dst := rl.NewRectangle(0, 0, w, h)
+	for _, pass := range []struct {
+		blend rl.BlendMode
+		tint  rl.Color
+	}{
+		{rl.BlendMultiplied, rl.White},                   // scene * map
+		{rl.BlendAdditive, rl.Fade(rl.White, lightGlow)}, // + map * lightGlow
+	} {
+		rl.BeginBlendMode(pass.blend)
+		rl.DrawTexturePro(LightAccum.Texture, src, dst, rl.Vector2{}, 0, pass.tint)
+		rl.EndBlendMode()
+	}
 }
 
 // What a light drag has hold of.
@@ -231,6 +297,26 @@ func (le *LevelEditor) setLight(i int, l LevelLight) {
 	le.dirty = true
 }
 
+// setAmbient replaces the level's ambient light, if that changes anything.
+func (le *LevelEditor) setAmbient(a Ambient) {
+	if le.ambient == a {
+		return
+	}
+	le.ambient = a
+	le.dirty = true
+}
+
+// deselectLight lets go of the selected light without touching it. It is what a
+// right click on empty space does: with no light selected the panel edits the
+// level's ambient, and a left click on empty space places a light rather than
+// letting go of one, so the selection needs a way out of its own. Letting go is
+// not an edit, so it leaves the level as saved as it was.
+func (le *LevelEditor) deselectLight() {
+	le.lightSel = -1
+	le.lightDrag = lightDrag{}
+	le.editField = -1
+}
+
 // deleteLight removes light i, keeping the selection on the light it was on.
 func (le *LevelEditor) deleteLight(i int) {
 	if i < 0 || i >= len(le.lights) {
@@ -250,7 +336,8 @@ func (le *LevelEditor) deleteLight(i int) {
 
 // updateLightTool is the light tool's handling of the mouse, the cursor being
 // at world in the level: a left click on a light takes hold of it, on nothing
-// places one, and a right click on a light removes it.
+// places one, and a right click removes the light under it, or lets go of the
+// selected one when there is none.
 func (le *LevelEditor) updateLightTool(world rl.Vector2) {
 	if le.lightDrag.mode != lightDragNone {
 		if rl.IsMouseButtonDown(rl.MouseButtonLeft) {
@@ -268,6 +355,8 @@ func (le *LevelEditor) updateLightTool(world rl.Vector2) {
 	case rl.IsMouseButtonPressed(rl.MouseButtonRight):
 		if i, _ := le.lightAt(world, tol); i >= 0 {
 			le.deleteLight(i)
+		} else {
+			le.deselectLight()
 		}
 	case rl.IsMouseButtonPressed(rl.MouseButtonLeft):
 		if !le.beginLightDrag(world, tol) {
@@ -326,7 +415,24 @@ func (le *LevelEditor) drawLights() {
 // numbers, which set it exactly when typed into.
 func (le *LevelEditor) drawLightPanel(row func() rl.Rectangle) {
 	if le.lightSel < 0 || le.lightSel >= len(le.lights) {
+		// with no light selected the panel edits the level's ambient: what
+		// lights everything the lights do not reach
 		rlg.Label(row(), fmt.Sprintf("%d lights - LMB to place one", len(le.lights)))
+		rlg.Label(row(), "Ambient - the level's dark")
+		a := le.ambient
+		pct := int32(roundf(a.Strength * 100))
+		v := le.drawIntFields(row, []intField{
+			{"R", int32(a.Color[0]), 0, 255},
+			{"G", int32(a.Color[1]), 0, 255},
+			{"B", int32(a.Color[2]), 0, 255},
+			{"Amb%", pct, 0, 1000},
+		})
+		na := a
+		na.Color = [3]uint8{uint8(v[0]), uint8(v[1]), uint8(v[2])}
+		if v[3] != pct { // only a typed change, so rounding never rewrites the strength
+			na.Strength = float32(v[3]) / 100
+		}
+		le.setAmbient(na)
 		return
 	}
 	l := le.lights[le.lightSel]
@@ -348,5 +454,5 @@ func (le *LevelEditor) drawLightPanel(row func() rl.Rectangle) {
 	}
 	nl.Color = [3]uint8{uint8(v[4]), uint8(v[5]), uint8(v[6])}
 	le.setLight(le.lightSel, nl)
-	rlg.Label(row(), "Drag center/edge; Del, RMB remove")
+	rlg.Label(row(), "Drag center/edge; Del, RMB remove; RMB space deselects")
 }
