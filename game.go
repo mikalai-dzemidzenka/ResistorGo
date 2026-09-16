@@ -311,6 +311,7 @@ func runLevel(dt float32) {
 
 		ScreenFullTexture = rl.LoadRenderTexture(SW*WindowScale, SH*WindowScale)
 		LightAccum = rl.LoadRenderTexture(SW*WindowScale, SH*WindowScale)
+		cornerFade = newCornerFade()
 	}
 	if rl.IsKeyPressed(rl.KeyEscape) {
 		leaveMatch("", menuMain)
@@ -380,7 +381,7 @@ func runLevel(dt float32) {
 	}
 	Cam.Update(dt)
 
-	computeLights(LE.lights, LE.ambient, LE.LightOccluders(), Cam.View())
+	computeLights(LE.lights, LE.areas, LE.ambient, LE.LightOccluders(), Cam.View())
 	rl.BeginTextureMode(ScreenFullTexture)
 	{
 		rl.ClearBackground(rl.Black)

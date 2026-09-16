@@ -36,6 +36,128 @@ func (l LevelLight) color() rl.Color {
 	return rl.Color{R: l.Color[0], G: l.Color[1], B: l.Color[2], A: 255}
 }
 
+// LitArea is a rectangle of the level the light map holds at full brightness:
+// inside it neither the ambient dark nor a shadow a tile casts darkens what
+// stands there. Feather is how many pixels of the edge the brightness fades
+// over, so an area never reads as a bright straight line across the level; a
+// feather of zero is a hard edge. Whole level pixels, as the tiles and the
+// lights are.
+type LitArea struct {
+	X       int32 `json:"x"`
+	Y       int32 `json:"y"`
+	Width   int32 `json:"w"`
+	Height  int32 `json:"h"`
+	Feather int32 `json:"feather"`
+}
+
+// defaultArea is what an area placed with no area selected looks like.
+var defaultArea = LitArea{Width: 64, Height: 64, Feather: 16}
+
+func (a LitArea) rect() rl.Rectangle {
+	return rl.Rectangle{X: float32(a.X), Y: float32(a.Y), Width: float32(a.Width), Height: float32(a.Height)}
+}
+
+// feather is how wide an area's fade really is: its own feather, but never
+// more than half its shorter side, which would leave it dim in the middle
+// rather than bright. Worked out here rather than clamped in the data, so an
+// area nudged larger gets the feather it was authored with back.
+func (a LitArea) feather() int32 {
+	return clamp(a.Feather, 0, min(a.Width, a.Height)/2)
+}
+
+// gradRect is one piece of a lit area: a rectangle in world pixels and how much
+// light it adds at each of its corners, in the order DrawRectangleGradientEx
+// takes them. A corner piece is drawn from cornerFade instead, and its one lit
+// corner says which way round it goes.
+type gradRect struct {
+	rect        rl.Rectangle
+	topLeft     float32
+	bottomLeft  float32
+	bottomRight float32
+	topRight    float32
+	corner      bool
+}
+
+// cornerFade is the fade at a lit area's corner: two texels by two, lit at one
+// of them and clear at the other three, sampled between the texels' centers so
+// that one draw covers a whole corner. It is filtered, unlike everything else
+// the game draws, because the fade is the whole point of it; the clear texels
+// are white at zero alpha rather than blank, so that filtering fades the alpha
+// without dragging the colour towards black with it.
+var cornerFade rl.Texture2D
+
+func newCornerFade() rl.Texture2D {
+	img := rl.GenImageColor(2, 2, rl.Color{R: 255, G: 255, B: 255})
+	rl.ImageDrawPixel(img, 0, 0, rl.White)
+	tex := rl.LoadTextureFromImage(img)
+	rl.UnloadImage(img)
+	rl.SetTextureFilter(tex, rl.FilterBilinear)
+	rl.SetTextureWrap(tex, rl.WrapClamp)
+	return tex
+}
+
+// cornerFadeSource is the part of cornerFade a corner is drawn from: from the
+// lit texel's center to the far one's, so the light runs from full at the
+// piece's lit corner to nothing at the opposite one. Mirrored on either axis to
+// put the lit texel at the corner the piece carries its light in.
+func cornerFadeSource(p gradRect) rl.Rectangle {
+	src := rl.Rectangle{X: 0.5, Y: 0.5, Width: 1, Height: 1}
+	if p.topRight > 0 || p.bottomRight > 0 {
+		src.Width = -1
+	}
+	if p.bottomLeft > 0 || p.bottomRight > 0 {
+		src.Height = -1
+	}
+	return src
+}
+
+// areaPieces cuts a lit area into the rectangles it is drawn as: a core at full
+// light, four sides fading out across the feather, and four corners fading out
+// across both. They tile the area exactly - no overlap, so nothing is added
+// twice, and no gap - and a piece with nothing to it, as the core of an area
+// feathered to its own half is, is left out.
+//
+// The core and the sides are gradient rectangles; the corners are drawn from
+// cornerFade instead, and carry the light at their inner corner alone so that
+// addAreas can tell which way round each one goes. A gradient quad is
+// rasterised as two triangles split from its top left to its bottom right, and
+// a corner whose lit vertex is off that diagonal loses one whole triangle to
+// it - a hard wedge across the corner. A texture is sampled per pixel instead,
+// so every corner fades the same way.
+func areaPieces(a LitArea) []gradRect {
+	if a.Width <= 0 || a.Height <= 0 {
+		return nil
+	}
+	f := float32(a.feather())
+	x0, y0 := float32(a.X), float32(a.Y)
+	x1, y1 := x0+float32(a.Width), y0+float32(a.Height)
+	inW, inH := float32(a.Width)-2*f, float32(a.Height)-2*f
+	pieces := []gradRect{
+		{rect: rl.Rectangle{X: x0 + f, Y: y0 + f, Width: inW, Height: inH}, topLeft: 1, bottomLeft: 1, bottomRight: 1, topRight: 1},
+		{rect: rl.Rectangle{X: x0, Y: y0 + f, Width: f, Height: inH}, bottomRight: 1, topRight: 1},   // left
+		{rect: rl.Rectangle{X: x1 - f, Y: y0 + f, Width: f, Height: inH}, topLeft: 1, bottomLeft: 1}, // right
+		{rect: rl.Rectangle{X: x0 + f, Y: y0, Width: inW, Height: f}, bottomLeft: 1, bottomRight: 1}, // top
+		{rect: rl.Rectangle{X: x0 + f, Y: y1 - f, Width: inW, Height: f}, topLeft: 1, topRight: 1},   // bottom
+		{rect: rl.Rectangle{X: x0, Y: y0, Width: f, Height: f}, bottomRight: 1, corner: true},        // top left
+		{rect: rl.Rectangle{X: x1 - f, Y: y0, Width: f, Height: f}, bottomLeft: 1, corner: true},     // top right
+		{rect: rl.Rectangle{X: x0, Y: y1 - f, Width: f, Height: f}, topRight: 1, corner: true},       // bottom left
+		{rect: rl.Rectangle{X: x1 - f, Y: y1 - f, Width: f, Height: f}, topLeft: 1, corner: true},    // bottom right
+	}
+	kept := pieces[:0]
+	for _, p := range pieces {
+		if p.rect.Width > 0 && p.rect.Height > 0 {
+			kept = append(kept, p)
+		}
+	}
+	return kept
+}
+
+// areaVisible reports whether any of a lit area is in view. The fade is inside
+// the area's own rectangle, so the rectangle is the whole test.
+func areaVisible(a LitArea, view rl.Rectangle) bool {
+	return aabb(a.rect(), view)
+}
+
 // Ambient is the light a level has everywhere its lights do not reach: the
 // colour of its dark at full brightness, and how much of that colour there is.
 // The two are kept apart so a level is authored as "what colour is the night"
@@ -62,38 +184,49 @@ func ambientClear(a Ambient) rl.Color {
 }
 
 // The level file is an object keyed by layer number, plus one key for the
-// lights and one for the ambient. It kept its shape when lights were added to
-// it, and again when the ambient was: a level with neither is exactly the file
-// it always was.
+// lights, one for the lit areas and one for the ambient. It kept its shape
+// when lights were added to it, and again when the ambient and the areas were:
+// a level with none of them is exactly the file it always was.
 const (
 	lightsKey  = "lights"
+	areasKey   = "litAreas"
 	ambientKey = "ambient"
 )
 
 // parseLevel reads a level file: every integer key is a layer of tiles, the
-// lights key is the lights, the ambient key is the ambient, and anything else
-// is skipped rather than failing the whole level. A file with no ambient key
-// gets the default one - a file that carries an ambient gets it as written, a
-// strength of zero included, which is a level that is black outside its lights.
-func parseLevel(b []byte) (map[int]LevelLayer, []LevelLight, Ambient, error) {
+// lights key is the lights, the areas key is the lit areas, the ambient key is
+// the ambient, and anything else is skipped rather than failing the whole
+// level. A file with no ambient key gets the default one - a file that carries
+// an ambient gets it as written, a strength of zero included, which is a level
+// that is black outside its lights.
+func parseLevel(b []byte) (map[int]LevelLayer, []LevelLight, []LitArea, Ambient, error) {
+	fail := func(err error) (map[int]LevelLayer, []LevelLight, []LitArea, Ambient, error) {
+		return nil, nil, nil, defaultAmbient, err
+	}
 	var raw map[string]json.RawMessage
 	if err := json.Unmarshal(b, &raw); err != nil {
-		return nil, nil, defaultAmbient, err
+		return fail(err)
 	}
 	objects := make(map[int]LevelLayer)
 	var lights []LevelLight
+	var areas []LitArea
 	ambient := defaultAmbient
 	for k, v := range raw {
 		switch k {
 		case lightsKey:
 			if err := json.Unmarshal(v, &lights); err != nil {
-				return nil, nil, defaultAmbient, err
+				return fail(err)
+			}
+			continue
+		case areasKey:
+			if err := json.Unmarshal(v, &areas); err != nil {
+				return fail(err)
 			}
 			continue
 		case ambientKey:
 			var a Ambient
 			if err := json.Unmarshal(v, &a); err != nil {
-				return nil, nil, defaultAmbient, err
+				return fail(err)
 			}
 			ambient = a
 			continue
@@ -105,15 +238,15 @@ func parseLevel(b []byte) (map[int]LevelLayer, []LevelLight, Ambient, error) {
 		}
 		var layer LevelLayer
 		if err := json.Unmarshal(v, &layer); err != nil {
-			return nil, nil, defaultAmbient, err
+			return fail(err)
 		}
 		objects[n] = layer
 	}
-	return objects, lights, ambient, nil
+	return objects, lights, areas, ambient, nil
 }
 
 // marshalFile is the level file as saved: the tiles, as marshal gives them to
-// the fingerprint, with the lights and the ambient beside them.
+// the fingerprint, with the lights, the lit areas and the ambient beside them.
 func (le *LevelEditor) marshalFile() ([]byte, error) {
 	m := make(map[string]any)
 	for n, layer := range le.objects {
@@ -121,6 +254,9 @@ func (le *LevelEditor) marshalFile() ([]byte, error) {
 	}
 	if len(le.lights) > 0 {
 		m[lightsKey] = le.lights
+	}
+	if len(le.areas) > 0 {
+		m[areasKey] = le.areas
 	}
 	// Always written, even when it matches the default: a level that carries
 	// its own ambient goes on looking as it was authored when the default
@@ -145,19 +281,21 @@ func viewRect(cam rl.Camera2D, w, h float32) rl.Rectangle {
 }
 
 // computeLights builds the frame's light map in LightAccum: the level's ambient
-// light, with every level light in view added into it, for compositeLights to
-// light the scene with. The lights take turns with one set of shadow textures,
+// light, with every lit area and every level light in view added into it, for
+// compositeLights to light the scene with. The lights take turns with one set
+// of shadow textures,
 // so each is added up the moment it is computed, before the next one overwrites
 // them. Additive blending saturates the same whether the lights are added one
 // by one or added up first, so this is what drawing each onto the map would
 // give.
-func computeLights(lights []LevelLight, ambient Ambient, occluders []rl.Rectangle, cam rl.Camera2D) {
+func computeLights(lights []LevelLight, areas []LitArea, ambient Ambient, occluders []rl.Rectangle, cam rl.Camera2D) {
 	rl.BeginTextureMode(LightAccum)
 	// where no light reaches, the map is the ambient alone - and opaque, as
 	// compositeLights multiplies alpha along with colour
 	rl.ClearBackground(ambientClear(ambient))
 	rl.EndTextureMode()
 	view := viewRect(cam, float32(LightAccum.Texture.Width), float32(LightAccum.Texture.Height))
+	addAreas(areas, cam, view)
 	for _, l := range lights {
 		if !lightVisible(l, view) {
 			continue
@@ -174,6 +312,41 @@ func computeLights(lights []LevelLight, ambient Ambient, occluders []rl.Rectangl
 		rl.EndMode2D()
 		rl.EndTextureMode()
 	}
+}
+
+// addAreas lifts the light map to full brightness inside every lit area in
+// view. White added at the piece's own alpha, in the blend mode the lights use:
+// additive blending scales what it adds by alpha, so a piece that ramps from
+// full to nothing is a feathered edge, and adding can only brighten - a light
+// already brighter than the area inside it stays exactly as bright. Nothing
+// here depends on what was added before it, so the areas and the lights may be
+// added in any order.
+func addAreas(areas []LitArea, cam rl.Camera2D, view rl.Rectangle) {
+	if len(areas) == 0 {
+		return
+	}
+	rl.BeginTextureMode(LightAccum)
+	rl.BeginMode2D(cam)
+	rl.BeginBlendMode(rl.BlendAdditive)
+	for _, a := range areas {
+		if !areaVisible(a, view) {
+			continue
+		}
+		for _, p := range areaPieces(a) {
+			if p.corner {
+				rl.DrawTexturePro(cornerFade, cornerFadeSource(p), p.rect, rl.Vector2{}, 0, rl.White)
+				continue
+			}
+			rl.DrawRectangleGradientEx(p.rect,
+				rl.Fade(rl.White, p.topLeft),
+				rl.Fade(rl.White, p.bottomLeft),
+				rl.Fade(rl.White, p.bottomRight),
+				rl.Fade(rl.White, p.topRight))
+		}
+	}
+	rl.EndBlendMode()
+	rl.EndMode2D()
+	rl.EndTextureMode()
 }
 
 // lightGlow is how much of the light map is added back over the modulated
@@ -365,18 +538,198 @@ func (le *LevelEditor) updateLightTool(world rl.Vector2) {
 	}
 }
 
+// areaAt is the area a click at p takes hold of, and by which handle. Later
+// areas are tried before earlier ones, as they are drawn on top of them.
+func (le *LevelEditor) areaAt(p rl.Vector2, tol float32) (int, handle) {
+	for i := len(le.areas) - 1; i >= 0; i-- {
+		if h := rectHandleAt(le.areas[i].rect(), p, tol); h != handleNone {
+			return i, h
+		}
+	}
+	return -1, handleNone
+}
+
+// placeArea puts an area centred on p and selects it. It takes the size and
+// feather of the area selected before it, so a row of matching areas is a row
+// of clicks.
+func (le *LevelEditor) placeArea(p rl.Vector2) {
+	a := defaultArea
+	if le.areaSel >= 0 && le.areaSel < len(le.areas) {
+		a = le.areas[le.areaSel]
+	}
+	a.X = int32(roundf(p.X)) - a.Width/2
+	a.Y = int32(roundf(p.Y)) - a.Height/2
+	le.areas = append(le.areas, a)
+	le.areaSel = len(le.areas) - 1
+	le.areaDrag = rectDrag{}
+	le.editField = -1
+	le.dirty = true
+}
+
+// beginAreaDrag takes hold of the area under p, by whichever handle, selecting
+// it. The handles are the rect tool's, so an area is moved by its body and
+// resized by an edge or a corner exactly as an object's rectangles are.
+func (le *LevelEditor) beginAreaDrag(p rl.Vector2, tol float32) bool {
+	i, h := le.areaAt(p, tol)
+	if i < 0 {
+		return false
+	}
+	le.areaSel = i
+	le.editField = -1
+	le.areaDrag = rectDrag{active: true, h: h, off: sub(handleAnchor(le.areas[i].rect(), h, p), p)}
+	return true
+}
+
+// dragArea moves what the drag has hold of to the cursor at p, in whole pixels.
+// dragRect keeps the rectangle a pixel wide at the least and never lets it turn
+// inside out.
+func (le *LevelEditor) dragArea(p rl.Vector2) {
+	if le.areaSel < 0 || le.areaSel >= len(le.areas) || !le.areaDrag.active {
+		le.areaDrag = rectDrag{}
+		return
+	}
+	to := roundVec2(rl.Vector2{X: p.X + le.areaDrag.off.X, Y: p.Y + le.areaDrag.off.Y})
+	a := le.areas[le.areaSel]
+	r := dragRect(a.rect(), le.areaDrag.h, to)
+	a.X, a.Y = int32(roundf(r.X)), int32(roundf(r.Y))
+	a.Width, a.Height = int32(roundf(r.Width)), int32(roundf(r.Height))
+	le.setArea(le.areaSel, a)
+}
+
+// setArea replaces area i, if that changes anything.
+func (le *LevelEditor) setArea(i int, a LitArea) {
+	if i < 0 || i >= len(le.areas) || le.areas[i] == a {
+		return
+	}
+	le.areas[i] = a
+	le.dirty = true
+}
+
+// deselectArea lets go of the selected area without touching it, as
+// deselectLight does for a light: a right click on empty space. Letting go is
+// not an edit, so it leaves the level as saved as it was.
+func (le *LevelEditor) deselectArea() {
+	le.areaSel = -1
+	le.areaDrag = rectDrag{}
+	le.editField = -1
+}
+
+// deleteArea removes area i, keeping the selection on the area it was on.
+func (le *LevelEditor) deleteArea(i int) {
+	if i < 0 || i >= len(le.areas) {
+		return
+	}
+	le.areas = append(le.areas[:i], le.areas[i+1:]...)
+	switch {
+	case le.areaSel == i:
+		le.areaSel = -1
+	case le.areaSel > i:
+		le.areaSel--
+	}
+	le.areaDrag = rectDrag{}
+	le.editField = -1
+	le.dirty = true
+}
+
+// updateAreaTool is the area tool's handling of the mouse, the cursor being at
+// world in the level: a left click on an area takes hold of it, on nothing
+// places one, and a right click removes the area under it, or lets go of the
+// selected one when there is none.
+func (le *LevelEditor) updateAreaTool(world rl.Vector2) {
+	if le.areaDrag.active {
+		if rl.IsMouseButtonDown(rl.MouseButtonLeft) {
+			le.dragArea(world)
+		} else {
+			le.areaDrag = rectDrag{}
+		}
+		return
+	}
+	if le.overGui(MousePos) {
+		return
+	}
+	tol := grabTolerance(Cam.PixelSize())
+	switch {
+	case rl.IsMouseButtonPressed(rl.MouseButtonRight):
+		if i, _ := le.areaAt(world, tol); i >= 0 {
+			le.deleteArea(i)
+		} else {
+			le.deselectArea()
+		}
+	case rl.IsMouseButtonPressed(rl.MouseButtonLeft):
+		if !le.beginAreaDrag(world, tol) {
+			le.placeArea(world)
+		}
+	}
+}
+
 // markerBacking is the dark edge under the light markers' center cross and
-// radius handle.
+// radius handle, and under the lit areas' outlines.
 var markerBacking = rl.Fade(rl.Black, 0.8)
 
-// DrawOverlay draws what the editor puts over the lit scene: the light
-// markers, while the light tool is out. They go over the lighting rather than
-// under it with the tiles, because a light is brightest at the very center its
-// marker is on, and its own glow would wash the marker out.
+// DrawOverlay draws what the editor puts over the lit scene: the light markers
+// while the light tool is out, and the lit areas while the area tool is. They
+// go over the lighting rather than under it with the tiles, because a light is
+// brightest at the very center its marker is on and an area is full brightness
+// throughout, and either would wash an outline drawn under it out.
 func (le *LevelEditor) DrawOverlay() {
-	if DevTools && Editing && le.tool == toolLight {
-		le.drawLights()
+	if !DevTools || !Editing {
+		return
 	}
+	switch le.tool {
+	case toolLight:
+		le.drawLights()
+	case toolArea:
+		le.drawAreas()
+	}
+}
+
+// drawAreas marks every lit area while the area tool is out: the rectangle it
+// lights and, inside it, the rectangle its feather fades in from, so how soft
+// the edge is can be seen as well as read. The selected area is white, the
+// others faded. Filled shapes a level pixel wide, not GL lines: a line is one
+// screen pixel at any zoom, and the palette pass, sampling the frame in blocks
+// of the zoom, would keep only scattered dots of it. Each outline sits on a
+// dark backing, which is what makes it tell against the full brightness inside
+// the area.
+func (le *LevelEditor) drawAreas() {
+	for i, a := range le.areas {
+		col := rl.Fade(rl.SkyBlue, 0.7)
+		if i == le.areaSel {
+			col = rl.White
+		}
+		r := a.rect()
+		rl.DrawRectangleLinesEx(rl.Rectangle{X: r.X - 1, Y: r.Y - 1, Width: r.Width + 2, Height: r.Height + 2}, 1, markerBacking)
+		rl.DrawRectangleLinesEx(r, 1, col)
+		if f := float32(a.feather()); f > 0 {
+			in := rl.Rectangle{X: r.X + f, Y: r.Y + f, Width: r.Width - 2*f, Height: r.Height - 2*f}
+			if in.Width > 0 && in.Height > 0 {
+				rl.DrawRectangleLinesEx(in, 1, rl.Fade(col, 0.5))
+			}
+		}
+	}
+}
+
+// drawAreaPanel is the area tool's part of the panel: the selected area's
+// numbers, which set it exactly when typed into.
+func (le *LevelEditor) drawAreaPanel(row func() rl.Rectangle) {
+	if le.areaSel < 0 || le.areaSel >= len(le.areas) {
+		rlg.Label(row(), fmt.Sprintf("%d lit areas - LMB to place one", len(le.areas)))
+		rlg.Label(row(), "An area is lit whatever shadows it")
+		return
+	}
+	a := le.areas[le.areaSel]
+	rlg.Label(row(), fmt.Sprintf("Area %d of %d", le.areaSel+1, len(le.areas)))
+	v := le.drawIntFields(row, []intField{
+		{"X", a.X, -fieldLim, fieldLim},
+		{"Y", a.Y, -fieldLim, fieldLim},
+		{"W", a.Width, 1, fieldLim},
+		{"H", a.Height, 1, fieldLim},
+		{"Fade", a.Feather, 0, fieldLim},
+	})
+	na := a
+	na.X, na.Y, na.Width, na.Height, na.Feather = v[0], v[1], v[2], v[3], v[4]
+	le.setArea(le.areaSel, na)
+	rlg.Label(row(), "Drag body/edges; Del, RMB remove; RMB space deselects")
 }
 
 // drawLights marks every light while the light tool is out: the circle its

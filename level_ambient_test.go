@@ -37,7 +37,7 @@ func TestLevelFileAmbientRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, _, ambient, err := parseLevel(b)
+	_, _, _, ambient, err := parseLevel(b)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,7 +50,7 @@ func TestLevelFileAmbientRoundTrip(t *testing.T) {
 // saved carries its ambient - the one it was authored with, not whatever the
 // default has become since.
 func TestLevelFileWithoutAmbient(t *testing.T) {
-	_, _, ambient, err := parseLevel([]byte(`{"0":{"39,0":{"resource":"a","x":39}}}`))
+	_, _, _, ambient, err := parseLevel([]byte(`{"0":{"39,0":{"resource":"a","x":39}}}`))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,7 +66,7 @@ func TestLevelFileWithoutAmbient(t *testing.T) {
 	if _, ok := raw[ambientKey]; !ok {
 		t.Errorf("a level lit by the default ambient was saved without an ambient key: %s", b)
 	}
-	if _, _, back, err := parseLevel(b); err != nil || back != le.ambient {
+	if _, _, _, back, err := parseLevel(b); err != nil || back != le.ambient {
 		t.Errorf("the saved ambient came back as %+v (%v), want %+v", back, err, le.ambient)
 	}
 }
@@ -88,7 +88,7 @@ func withoutAmbient(b []byte, a Ambient) string {
 // A level that carries an ambient gets it as written - a strength of zero is a
 // level that is black outside its lights, not a level with no ambient at all.
 func TestLevelFileAmbientZeroStrength(t *testing.T) {
-	_, _, ambient, err := parseLevel([]byte(`{"0":null,"ambient":{"color":[10,20,30],"strength":0}}`))
+	_, _, _, ambient, err := parseLevel([]byte(`{"0":null,"ambient":{"color":[10,20,30],"strength":0}}`))
 	if err != nil {
 		t.Fatal(err)
 	}

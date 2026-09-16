@@ -87,7 +87,7 @@ func TestLoadLevelKeepsFingerprint(t *testing.T) {
 		t.Fatal(err)
 	}
 	plain := newLevelEditor(39, 83, nil, nil)
-	objects, _, _, err := parseLevel(b)
+	objects, _, _, _, err := parseLevel(b)
 	if err != nil {
 		t.Fatal(err)
 	}

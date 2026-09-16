@@ -18,21 +18,21 @@
 
 - [x] 3.1 Add `toolLight` and make `Q` cycle place → rect → light → place, with `setTool` clearing the light drag too. Verify a test of the cycle.
 - [x] 3.2 Add `lightSel`, `lightDrag`, and the pure operations `lightAt`, `placeLight`, `dragLight` and `deleteLight`, each setting `dirty`. Verify tests: `lightAt` prefers the radius handle, then the center, then nothing; `placeLight` inherits the selected light's radius, color and intensity, or the defaults; moving keeps the radius and resizing keeps the center; dragging the handle past the center gives radius 1; deleting the selected light clears the selection; each marks the editor unsaved.
-- [ ] 3.3 Wire the light tool into `Update`: left click on nothing places, on a light selects and starts a drag, the drag follows the unrounded world cursor rounded to whole pixels at `grabTolerance(zoom)`, release ends it; right click on a light deletes it; Delete deletes the selection; all behind `overGui`. Verify by hand, and that the place and rect tools still do exactly what they did — the `Tools keep to their own` scenario.
+- [x] 3.3 Wire the light tool into `Update`: left click on nothing places, on a light selects and starts a drag, the drag follows the unrounded world cursor rounded to whole pixels at `grabTolerance(zoom)`, release ends it; right click on a light deletes it; Delete deletes the selection; all behind `overGui`. Verify by hand, and that the place and rect tools still do exactly what they did — the `Tools keep to their own` scenario. (Built: `updateLightTool`. The check by hand or by eye is `add-lit-areas` 6.4.)
 - [x] 3.4 Draw the markers in edit mode with the light tool: circle, center cross and radius handle, the selected light in white and the others in their color at half alpha; none outside the light tool. Verify by eye — the `Markers` scenario.
 
 ## 4. The panel
 
-- [ ] 4.1 Generalise `drawRectFields` and `nextEditField` to a slice of fields, move `TestNextEditField` to the slice form, and keep the rect tool on four fields. Verify the tests pass and, by eye, that the rect tool's fields behave as before.
-- [ ] 4.2 Give the light tool its panel: which light is selected (or "LMB to place a light"), fields for X, Y, radius, R, G, B and intensity in percent, clamped to radius ≥ 1, color 0–255 and intensity 0–1000 %, and a help line. Verify by eye that typing a value sets it exactly and nothing overlaps at 1280×720 and 1920×1080 — the `Exact values` scenario.
+- [x] 4.1 Generalise `drawRectFields` and `nextEditField` to a slice of fields, move `TestNextEditField` to the slice form, and keep the rect tool on four fields. Verify the tests pass and, by eye, that the rect tool's fields behave as before. (Built: `drawIntFields` and `nextEditField` over a slice; `TestNextEditField`. The check by hand or by eye is `add-lit-areas` 6.3.)
+- [x] 4.2 Give the light tool its panel: which light is selected (or "LMB to place a light"), fields for X, Y, radius, R, G, B and intensity in percent, clamped to radius ≥ 1, color 0–255 and intensity 0–1000 %, and a help line. Verify by eye that typing a value sets it exactly and nothing overlaps at 1280×720 and 1920×1080 — the `Exact values` scenario. (Built: `drawLightPanel`. The check by hand or by eye is `add-lit-areas` 6.4 and 6.7.)
 
 ## 5. Verify against the spec
 
 - [x] 5.1 Run `go test ./...` and `go test -tags release ./...` and confirm both pass.
 - [x] 5.2 Build with `./build.ps1` to a scratch `-Out`, and with `./build.ps1 -Linux`, and confirm both pack.
-- [ ] 5.3 In `go run ./cmd`: place a red light and a dim white one, move and resize them, save, restart, and confirm they are back and lit as set — the `Color and intensity`, `Save` and `Quit without saving` scenarios.
-- [ ] 5.4 Place a row of lights far from the start, walk the camera to them and back, and confirm the light at the edge of the screen neither pops in nor out, and that the frame rate with them off screen matches the frame rate without them — the `At the edge of the screen` and `Many lights` scenarios.
-- [ ] 5.5 Host a match from a development build with a moved light and join it from the release build: the join is not refused — the `A changed light` scenario.
+- [ ] 5.3 In `go run ./cmd`: place a red light and a dim white one, move and resize them, save, restart, and confirm they are back and lit as set — the `Color and intensity`, `Save` and `Quit without saving` scenarios. Covered by `add-lit-areas` 6.8.
+- [ ] 5.4 Place a row of lights far from the start, walk the camera to them and back, and confirm the light at the edge of the screen neither pops in nor out, and that the frame rate with them off screen matches the frame rate without them — the `At the edge of the screen` and `Many lights` scenarios. Covered by `add-lit-areas` 6.9.
+- [ ] 5.5 Host a match from a development build with a moved light and join it from the release build: the join is not refused — the `A changed light` scenario. Covered by `add-lit-areas` 6.10.
 
 ## 6. Level tests that survive editing the level
 

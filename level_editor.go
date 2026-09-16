@@ -47,17 +47,20 @@ func (ll *LevelLayer) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-// The editor's three tools. The place tool is the editor as it always was; the
-// rect tool only selects and shapes rectangles, and the light tool only places
-// and shapes lights, so one click never acts as two tools at once.
+// The editor's four tools. The place tool is the editor as it always was; the
+// rect tool only selects and shapes rectangles, the light tool only places and
+// shapes lights, and the area tool only places and shapes lit areas, so one
+// click never acts as two tools at once. The two lighting tools are neighbours,
+// as the two lighting tasks are.
 const (
 	toolPlace = iota
 	toolRect
 	toolLight
+	toolArea
 	toolCount
 )
 
-// nextTool is the tool Q switches to: place, rect, light, and round again.
+// nextTool is the tool Q switches to: place, rect, light, area, and round again.
 func nextTool(t int) int { return (t + 1) % toolCount }
 
 // Which of an object's two rectangles the rect tool is shaping.
@@ -115,6 +118,10 @@ type LevelEditor struct {
 	lightSel  int          // the selected light, -1 for none
 	lightDrag lightDrag
 	ambient   Ambient // what lights the level where its lights do not, saved with it
+
+	areas    []LitArea // the level's lit areas, saved with it
+	areaSel  int       // the selected area, -1 for none
+	areaDrag rectDrag  // the area tool holds an area by the rect tool's handles
 }
 type LevelObject struct {
 	Resource       string         `json:"resource,omitempty"`
@@ -151,6 +158,7 @@ func newLevelEditor(gridW, gridH int32, palette []LevelObject, defaults map[stri
 		editField:    -1,
 		lightSel:     -1,
 		ambient:      defaultAmbient,
+		areaSel:      -1,
 	}
 	le.selectEntry(0) // an empty palette leaves nothing selected, and nothing to place
 	return le
@@ -222,6 +230,9 @@ func (le *LevelEditor) Update(dt float32) {
 	if le.editField < 0 && le.tool == toolLight && rl.IsKeyPressed(rl.KeyDelete) {
 		le.deleteLight(le.lightSel)
 	}
+	if le.editField < 0 && le.tool == toolArea && rl.IsKeyPressed(rl.KeyDelete) {
+		le.deleteArea(le.areaSel)
+	}
 	// The rect tool parks the prototype where it was, so its rectangles can be
 	// dragged without the object running off after the cursor.
 	if le.tool == toolPlace {
@@ -263,6 +274,8 @@ func (le *LevelEditor) Update(dt float32) {
 		}
 	case toolLight:
 		le.updateLightTool(rl.GetScreenToWorld2D(MousePos, Cam.View()))
+	case toolArea:
+		le.updateAreaTool(rl.GetScreenToWorld2D(MousePos, Cam.View()))
 	}
 }
 
@@ -305,6 +318,7 @@ func (le *LevelEditor) setTool(tool int) {
 	le.tool = tool
 	le.drag = rectDrag{}
 	le.lightDrag = lightDrag{}
+	le.areaDrag = rectDrag{}
 	le.editField = -1
 }
 
@@ -855,12 +869,13 @@ func (le *LevelEditor) LoadLevel(path string) {
 		rl.TraceLog(rl.LogError, "failed to load level: read file: %s", err.Error())
 		return
 	}
-	objects, lights, ambient, err := parseLevel(b)
+	objects, lights, areas, ambient, err := parseLevel(b)
 	if err != nil {
 		rl.TraceLog(rl.LogError, "failed to load level: json unmarshal: %s", err.Error())
 		return
 	}
 	le.objects, le.lights, le.lightSel, le.ambient = objects, lights, -1, ambient
+	le.areas, le.areaSel = areas, -1
 
 	le.markOwnRects()
 	le.buildIndex()
@@ -1090,8 +1105,12 @@ func (le *LevelEditor) drawPanel() {
 	case toolRect:
 		rlg.Label(row(), "Tool: rect   (Q: light tool)")
 	case toolLight:
-		rlg.Label(row(), "Tool: light   (Q: place tool)")
+		rlg.Label(row(), "Tool: light   (Q: area tool)")
 		le.drawLightPanel(row)
+		return
+	case toolArea:
+		rlg.Label(row(), "Tool: area   (Q: place tool)")
+		le.drawAreaPanel(row)
 		return
 	}
 

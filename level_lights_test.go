@@ -33,7 +33,7 @@ func TestLevelFileRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	objects, lights, _, err := parseLevel(b)
+	objects, lights, _, _, err := parseLevel(b)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -63,14 +63,14 @@ func TestLevelFileWithoutLights(t *testing.T) {
 	if tiles != string(plain) {
 		t.Errorf("a level without lights is not the file it always was:\n%s\n%s", tiles, plain)
 	}
-	objects, lights, _, err := parseLevel(b)
+	objects, lights, _, _, err := parseLevel(b)
 	if err != nil || len(lights) != 0 || len(objects[0]) != 2 {
 		t.Errorf("loaded %d layers, %d lights, err %v", len(objects), len(lights), err)
 	}
 }
 
 func TestLevelFileSkipsUnknownKeys(t *testing.T) {
-	objects, lights, _, err := parseLevel([]byte(`{"0":{"39,0":{"resource":"a","x":39}},"notes":"hi"}`))
+	objects, lights, _, _, err := parseLevel([]byte(`{"0":{"39,0":{"resource":"a","x":39}},"notes":"hi"}`))
 	if err != nil {
 		t.Fatalf("an unknown key failed the level: %v", err)
 	}
@@ -110,7 +110,7 @@ func level1Bytes(t *testing.T) []byte {
 // returns that fingerprint.
 func checkLevelLights(t *testing.T, name string, b []byte) uint64 {
 	t.Helper()
-	objects, lights, _, err := parseLevel(b)
+	objects, lights, _, _, err := parseLevel(b)
 	if err != nil {
 		t.Fatalf("%s: %v", name, err)
 	}
@@ -120,7 +120,7 @@ func checkLevelLights(t *testing.T, name string, b []byte) uint64 {
 	if err != nil {
 		t.Fatalf("%s: %v", name, err)
 	}
-	if _, back, _, err := parseLevel(saved); err != nil || !slices.Equal(back, lights) {
+	if _, back, _, _, err := parseLevel(saved); err != nil || !slices.Equal(back, lights) {
 		t.Errorf("%s: lights after a save = %+v (%v), want %+v", name, back, err, lights)
 	}
 
@@ -225,10 +225,10 @@ func TestViewRect(t *testing.T) {
 
 func TestToolCycle(t *testing.T) {
 	got := []int{toolPlace}
-	for range 3 {
+	for range 4 {
 		got = append(got, nextTool(got[len(got)-1]))
 	}
-	if want := []int{toolPlace, toolRect, toolLight, toolPlace}; !slices.Equal(got, want) {
+	if want := []int{toolPlace, toolRect, toolLight, toolArea, toolPlace}; !slices.Equal(got, want) {
 		t.Errorf("Q cycles %v, want %v", got, want)
 	}
 	le := newLevelEditor(39, 83, nil, nil)
@@ -342,7 +342,7 @@ func TestSaveWritesLights(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, lights, _, err := parseLevel(b)
+	_, lights, _, _, err := parseLevel(b)
 	if err != nil || len(lights) != 1 || lights[0].X != 5 {
 		t.Errorf("saved lights = %+v, err %v", lights, err)
 	}
