@@ -359,3 +359,64 @@ func TestEnergyFreeRateFromSpawn(t *testing.T) {
 		t.Errorf("a new fighter starts %d ticks into the untouched wait, want the whole %d", a.EnergyUntouched, EnergyUntouchedTicks)
 	}
 }
+
+// The two refill rates, in points per second rather than tick gaps, so a
+// retune of the pool or the refill times cannot move them unnoticed.
+func TestEnergyRegenRates(t *testing.T) {
+	w := NewWorld(true)
+	a := w.Spawn(rl.Vector2{}, true)
+	a.Energy, a.EnergyCalm = 0, EnergyCalmTicks
+
+	second := func() int32 {
+		before := a.Energy
+		for range 60 {
+			a.Ticks++
+			a.regenEnergy()
+		}
+		return a.Energy - before
+	}
+
+	if got := second(); got != 60 {
+		t.Errorf("left alone: %v energy a second, want 60", got)
+	}
+	a.pressured()
+	if got := second(); got != 30 {
+		t.Errorf("under attack: %v energy a second, want 30", got)
+	}
+}
+
+// A kill fills the killer's pool, whichever way the killing attack got
+// through, and leaves its refill waits where they were. A hit that does not
+// kill pays the attacker nothing.
+func TestKillFillsKillersPool(t *testing.T) {
+	_, att, def := swing(t, 1)
+	att.Energy, att.EnergyCalm, att.EnergyUntouched = 20, 7, 9
+	def.Structure = 100
+	def.takeHit(att)
+	if def.State == StateDeath || att.Energy != 20 {
+		t.Fatalf("a hit that left the defender standing gave the attacker %v energy, want 20", att.Energy)
+	}
+
+	def.Structure = 0.01
+	def.takeHit(att)
+	if def.State != StateDeath {
+		t.Fatalf("the hit did not kill: defender in state %v", def.State)
+	}
+	if att.Energy != MaxEnergy {
+		t.Errorf("a landed kill left the attacker at %v energy, want %v", att.Energy, int32(MaxEnergy))
+	}
+	if att.EnergyCalm != 7 || att.EnergyUntouched != 9 {
+		t.Errorf("the kill moved the attacker's waits to %d and %d, want 7 and 9", att.EnergyCalm, att.EnergyUntouched)
+	}
+
+	_, att, def = swing(t, 3) // guarding everything
+	att.Energy = 0
+	def.Structure = BlockAllStructure / 2
+	def.confirmBlock(att)
+	if def.State != StateDeath {
+		t.Fatalf("the block-all did not break: defender in state %v", def.State)
+	}
+	if att.Energy != MaxEnergy {
+		t.Errorf("breaking a block-all left the attacker at %v energy, want %v", att.Energy, int32(MaxEnergy))
+	}
+}

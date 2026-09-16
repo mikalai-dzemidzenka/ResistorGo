@@ -56,6 +56,7 @@ var (
 		energy: 1,
 		GUIZ:   2,
 	}
+	cursorOwner   *Actor // the local fighter whose energy Cur was last given
 	WhiteShader   rl.Shader
 	OutlineShader rl.Shader
 	NetMode       = NetOffline
@@ -352,7 +353,10 @@ func runLevel(dt float32) {
 	if local != nil {
 		energy = float32(local.Energy) / MaxEnergy
 	}
-	Cur.Update(dt, energy)
+	// a new fighter or a rewound frame is not energy won back
+	live := local != nil && local == cursorOwner && !TimeShowsHistory()
+	cursorOwner = local
+	Cur.Update(dt, energy, live)
 	for _, actor := range w.Actors {
 		if !actor.Remote {
 			actor.Interp(alpha)

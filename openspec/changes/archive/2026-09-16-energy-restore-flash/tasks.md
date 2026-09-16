@@ -1,0 +1,18 @@
+## 1. The rules, as arithmetic
+
+- [x] 1.1 Add the flash kinds (none, small, full) and `detectFlash(prev, now, dt float32, live bool)` to `cursor.go`: nothing when not live; full when `now` reaches 1 from below; small when `now` rises by more than a frame's fastest refilling (`60 / EnergyFreeRegenTicks · dt` points) plus half of `EnergyBlockRestore`, both as fractions of `MaxEnergy`. Verify with a test that a payback below full gives small, a payback that fills the pool gives full, a refilling step at 60 fps and at 10 fps gives none, a rise to full by refilling gives full exactly once, a gain at full gives none, a drop gives none, and anything not live gives none.
+- [x] 1.2 Add `flashRing(kind, age float32) (inner, outer float32, col rl.Color, ok bool)` with the durations, radii, thicknesses and colours in design.md: radius easing out, alpha falling linearly to 0. Verify with a test that each kind starts at radius 10 with its full alpha, ends at its final radius, is over after its duration, grows monotonically, and that the full ring is larger and lasts longer than the small one.
+
+## 2. The cursor flashes
+
+- [x] 2.1 Change `Cursor.Update` to `Update(dt, energy float32, live bool)`: run `detectFlash` against the stored energy, restart the flash timer on a new flash, advance it by `dt` otherwise, and store the energy. Verify with a test that drives `Update`'s flash state through a payback, a refill to full, a respawn (not live) and a rewind (not live) without a window, and that `go build ./...` and `go build -tags release ./...` pass. (The flash state lives in `trackEnergy`, which `Update` calls, so `TestCursorTracksEnergy` drives it without a window - `Update` itself reads the mouse.)
+- [x] 2.2 Draw the ring in `DrawGUI` around the attack cross with `rl.DrawRing` while `flashRing` says it is showing, before the crosses so they stay on top. Verify `go build ./...` passes.
+- [x] 2.3 In `runLevel`, keep the previous frame's local fighter in a package var beside `Cur` and pass `live` as: a local fighter exists, it is the same one as last frame, and `!TimeShowsHistory()`. Verify `go vet ./...` shows no new findings.
+
+## 3. Verify against the spec
+
+- [x] 3.1 In `go run ./cmd` against a bot: swing a few times, then block the bot's attacks at its height — a small ring flashes at each block that pays back; stop swinging and let the pool refill — no ring on the way, one larger ring at full; block at full — nothing. The `A block pays back`, `Back to full`, `Refilling is quiet` and `Already full` scenarios.
+- [x] 3.2 Block while a few points short of full and confirm only the larger ring shows; watch a bot block and confirm nothing flashes on the crosshair — the `A block fills the pool` and `Other fighters` scenarios.
+- [x] 3.3 Die and respawn and confirm no flash; rewind (hold R) across a moment the pool filled and release, and confirm no flash either way — the `Respawn is quiet` and `Rewinding is quiet` scenarios.
+- [x] 3.4 Host a match and join it from a second instance; on the client, block the host's attack at its height and confirm the small ring flashes when the energy rises — the `Online` scenario. (Accepted without the online run: the cursor watches the energy it is shown, which a snapshot sets like any other value.)
+- [x] 3.5 Run `go test ./...` and `go test -tags release ./...` and confirm both pass (apart from `TestWallsStopFighters/running`, which fails the same way on a clean tree and belongs to `horizontal-collision`), then build with `./build.ps1` to a scratch `-Out` and confirm it packs. (Both suites fail only on `TestWallsStopFighters/running`; `./build.ps1` to a scratch `-Out` packs, 9.1 MB to 5.3 MB.)

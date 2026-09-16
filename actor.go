@@ -64,14 +64,14 @@ const (
 	// Refilling is slow enough to be felt: an empty pool takes this long to come
 	// back once the fighter is calm. The tick gap is derived from it, so
 	// retuning the pool cannot quietly retune the rate along with it.
-	EnergyRefillSeconds = 20
-	EnergyRegenTicks    = 60 * EnergyRefillSeconds / MaxEnergy // a point every 4 ticks, 15 per second
+	EnergyRefillSeconds = 10
+	EnergyRegenTicks    = 60 * EnergyRefillSeconds / MaxEnergy // a point every 2 ticks, 30 per second
 	EnergyCalmTicks     = 90                                   // 1.5s without a swing before it refills
 	// A fighter nobody is trading with refills at twice the rate: the slow one
 	// is what a fighter still under attack gets, and getting out of range long
 	// enough for the attacks to stop is what buys the fast one.
-	EnergyFreeRefillSeconds = 10
-	EnergyFreeRegenTicks    = 60 * EnergyFreeRefillSeconds / MaxEnergy // a point every 2 ticks, 30 per second
+	EnergyFreeRefillSeconds = 5
+	EnergyFreeRegenTicks    = 60 * EnergyFreeRefillSeconds / MaxEnergy // a point every tick, 60 per second
 	EnergyUntouchedTicks    = 120                                      // 2s without an attack reaching it
 	// A running jump costs a third of the pool: three from full, and the fourth
 	// has to be earned. Derived from MaxEnergy, so retuning the pool carries it
@@ -1210,6 +1210,7 @@ func (a *Actor) enterDeathState(attacker *Actor) {
 	a.AttackQueued, a.BufAttack, a.BufJump = false, false, false
 	if attacker != nil {
 		attacker.FreezeTicks = HitStopTicks
+		attacker.restoreEnergy(MaxEnergy) // a kill puts the winner straight back in the fight
 	}
 	a.SetAnim("resources/threefour/death_fall.png", AnimOptions{animDuration: 0.6, totalFrames: 9, once: true})
 }

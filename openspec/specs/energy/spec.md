@@ -75,19 +75,35 @@ A block that holds until the swing's hit frame with a guard at the attacker's he
 - **THEN** that fighter's energy does not change
 
 ### Requirement: Energy regenerates after a pause
-When a fighter has not spent energy for 1.5 seconds, its energy SHALL refill at 15 per second up to capacity. Spending energy SHALL restart that wait. Blocking, being hit, and restoring energy SHALL NOT restart it.
+When a fighter has not spent energy for 1.5 seconds, its energy SHALL refill up to capacity at one of two rates: 30 per second while attacks are still reaching it, and 60 per second once no attack has reached it for 2 seconds. An attack reaches a fighter when it lands on it or is blocked by it, block-all included. A fighter that has not been attacked since it entered the world SHALL refill at the faster rate. Spending energy SHALL restart the 1.5-second wait. Being hit or blocking SHALL restart the 2-second wait but SHALL NOT restart the 1.5-second one, and restoring energy SHALL restart neither.
 
 #### Scenario: Recovering between exchanges
-- **WHEN** a fighter that has spent 60 energy is left alone for 5.5 seconds
-- **THEN** its energy has refilled by 60 and it is back at full
+- **WHEN** a fighter that has spent 60 energy is not attacked and does not swing for 2.5 seconds
+- **THEN** its energy has refilled by 60 and it is back where it was before spending
+
+#### Scenario: Part way back
+- **WHEN** a fighter that has spent 60 energy is not attacked and does not swing for 2 seconds
+- **THEN** its energy has refilled by 30, half of what it spent
+
+#### Scenario: Refilling under attack
+- **WHEN** a fighter that has not swung for 1.5 seconds is attacked at least once every 2 seconds
+- **THEN** its energy refills at 30 per second, half the rate of a fighter left alone
+
+#### Scenario: A swing is soon affordable again
+- **WHEN** a fighter with no energy left is not attacked and does not swing for 2 seconds
+- **THEN** it can swing again
 
 #### Scenario: A combo denies recovery
 - **WHEN** a fighter swings once per second
-- **THEN** its energy never regenerates between those swings and it runs out after sixteen
+- **THEN** its energy never regenerates between those swings and it runs out
 
 #### Scenario: Being hit does not stop recovery
 - **WHEN** a fighter that has not swung for 1.5 seconds is hit
-- **THEN** its energy keeps refilling
+- **THEN** its energy keeps refilling, at 30 per second
+
+#### Scenario: Fresh fighters refill fast
+- **WHEN** a fighter that has not been attacked since it spawned swings and then waits 1.5 seconds
+- **THEN** its energy refills at 60 per second from the first tick of refilling
 
 ### Requirement: Energy is settled by the authority
 The server's energy SHALL be the truth: every fighter's energy in a snapshot SHALL replace what a client is showing for it, and a disagreement SHALL always be resolved the server's way.
@@ -181,3 +197,65 @@ The attack crosshair SHALL follow the mouse at a speed set by the local fighter'
 #### Scenario: Nothing new on the wire
 - **WHEN** a tired player plays against a server
 - **THEN** the server receives the same kind of input it always has — the height the attack crosshair chose — and neither the protocol nor a server that predates this change needs to know about the slowdown
+
+### Requirement: The attack crosshair flashes when energy is won back
+When the local fighter's energy rises by at least half a block's payback between one frame and the next, a short, small ring SHALL flash outward from the attack crosshair and fade. When the local fighter's energy reaches full from below, a larger, brighter, longer ring SHALL flash instead; a gain that does both SHALL show only the full flash. A new flash SHALL replace one still showing. Refilling by regeneration SHALL NOT flash on its way up. No flash SHALL start when the fighter the energy belongs to is not the one it belonged to on the previous frame — a respawn included — nor while the frame on screen is a recorded one from time manipulation. The flash SHALL be drawn with the crosshair, over the finished frame, SHALL follow the crosshair while it shows, and SHALL be shown only for the local player's own fighter. It SHALL look the same whether the energy was restored by the local simulation or by a snapshot from the server.
+
+#### Scenario: A block pays back
+- **WHEN** the local fighter, below full, blocks an attack at the attacker's height and the payback does not fill its pool
+- **THEN** a small ring flashes from the attack crosshair and fades within a fraction of a second
+
+#### Scenario: Back to full
+- **WHEN** the local fighter's energy refills to full after a pause
+- **THEN** a larger ring flashes from the attack crosshair, once, at the moment the pool is full
+
+#### Scenario: A block fills the pool
+- **WHEN** a block's payback brings the local fighter's energy to full
+- **THEN** only the larger ring flashes
+
+#### Scenario: Refilling is quiet
+- **WHEN** the local fighter's energy is refilling and not yet full
+- **THEN** no ring flashes
+
+#### Scenario: Already full
+- **WHEN** the local fighter at full energy blocks an attack at the attacker's height
+- **THEN** no ring flashes
+
+#### Scenario: Respawn is quiet
+- **WHEN** the local fighter dies and respawns at full energy
+- **THEN** no ring flashes
+
+#### Scenario: Rewinding is quiet
+- **WHEN** the player rewinds time across a moment the pool came back to full
+- **THEN** no ring flashes while the recorded frames are shown, nor when live play resumes at the energy the fighter had
+
+#### Scenario: Online
+- **WHEN** a client's fighter blocks an attack at the attacker's height and the payback arrives in a snapshot
+- **THEN** the small ring flashes when the snapshot raises the energy, exactly as it would offline
+
+#### Scenario: Other fighters
+- **WHEN** a bot or another player's fighter blocks and its energy is restored
+- **THEN** nothing flashes on the local player's crosshair
+
+### Requirement: A kill fills the killer's pool
+When a fighter dies from an attack, the fighter whose attack killed it SHALL be set to full energy at that moment. This SHALL hold whether the killing attack landed or broke through a block-all, and for bots and players alike. An attack that does not kill SHALL NOT change the attacker's energy. The refill SHALL NOT restart or finish either regeneration wait. As with a block's payback, the refill SHALL be the authority's alone and SHALL reach a client only in a snapshot.
+
+#### Scenario: A landed kill
+- **WHEN** a fighter with 20 energy lands the hit that breaks its opponent's structure
+- **THEN** the fighter is at full energy as its opponent falls
+
+#### Scenario: Through a block-all
+- **WHEN** a fighter's attack is blocked by an opponent guarding all heights, and paying for that block breaks the opponent's structure
+- **THEN** the attacking fighter is at full energy
+
+#### Scenario: A hit that does not kill
+- **WHEN** a fighter lands a hit that leaves its opponent standing
+- **THEN** the fighter's energy is unchanged by the hit
+
+#### Scenario: Bots are rewarded too
+- **WHEN** a bot kills a player
+- **THEN** the bot is at full energy
+
+#### Scenario: Online
+- **WHEN** a client's fighter kills an opponent while its energy is low
+- **THEN** its energy becomes full when the snapshot carrying the kill arrives, and the crosshair shows its full-pool flash
