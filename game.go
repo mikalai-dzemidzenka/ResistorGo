@@ -52,9 +52,9 @@ var (
 	sharedLight          *ZimaLight         // one set of shadow textures, taken in turn by every light
 	LightAccum           rl.RenderTexture2D // every light in view, added up
 	Cur                  *Cursor            = &Cursor{
-		AtkSpeed: CursorAttackSpeed,
-		AtkPos:   rl.Vector2{SW * WindowScale / 2, SH * WindowScale / 2},
-		GUIZ:     2,
+		AtkPos: rl.Vector2{SW * WindowScale / 2, SH * WindowScale / 2},
+		energy: 1,
+		GUIZ:   2,
 	}
 	WhiteShader   rl.Shader
 	OutlineShader rl.Shader
@@ -348,7 +348,11 @@ func runLevel(dt float32) {
 
 	alpha := float32(Accumulator / FixedTimeStep)
 
-	Cur.Update(dt)
+	energy := float32(1) // with no fighter of our own, the cross is as if rested
+	if local != nil {
+		energy = float32(local.Energy) / MaxEnergy
+	}
+	Cur.Update(dt, energy)
 	for _, actor := range w.Actors {
 		if !actor.Remote {
 			actor.Interp(alpha)
