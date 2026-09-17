@@ -35,7 +35,7 @@ func realPNG(t *testing.T) []byte {
 func TestObjectDefaultsRoundTrip(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "level_objects.json")
 	want := map[string]ObjectRects{
-		"both":  {Collision: []rl.Rectangle{{X: 1, Y: 2, Width: 3, Height: 4}}, Light: &rl.Rectangle{X: 5, Y: 6, Width: 7, Height: 8}},
+		"both":  {Collision: []rl.Rectangle{{X: 1, Y: 2, Width: 3, Height: 4}}, Light: []rl.Rectangle{{X: 5, Y: 6, Width: 7, Height: 8}}},
 		"no-lt": {Collision: []rl.Rectangle{{X: -1, Width: 1, Height: 1}}},
 		"three": {Collision: []rl.Rectangle{{Width: 1, Height: 1}, {X: 2, Width: 1, Height: 1}, {X: 4, Width: 1, Height: 1}}},
 		"none":  {},

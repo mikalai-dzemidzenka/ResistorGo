@@ -188,12 +188,12 @@ func LoadLevelObjects() []LevelObject {
 				Width:  40,
 				Height: 20,
 			}},
-			LightRect: &rl.Rectangle{
+			LightRects: []rl.Rectangle{{
 				X:      22,
 				Y:      90,
 				Width:  40,
 				Height: 15,
-			},
+			}},
 		}, {
 			Resource: "resources/blocks/e1m1_door1.png",
 			Layer:    0,

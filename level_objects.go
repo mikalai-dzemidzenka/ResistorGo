@@ -15,50 +15,34 @@ import (
 // and a release build has no editor.
 const objectDefaultsPath = "level_objects.json"
 
-// ObjectRects is an object's rectangles: the ones fighters collide with - any
-// number, in order - and the one that casts a shadow. No collision rectangles,
-// or no light rectangle, is how a texture says it should not be stood on, or
-// should not cast a shadow.
+// ObjectRects is an object's rectangles: the ones fighters collide with and the
+// ones that cast a shadow, any number of each, in order. No collision
+// rectangles, or no light rectangles, is how a texture says it should not be
+// stood on, or should not cast a shadow.
 type ObjectRects struct {
 	Collision []rl.Rectangle
-	Light     *rl.Rectangle
+	Light     []rl.Rectangle
 }
 
-// clone copies the rectangles themselves, not the pointers to them, so a tile
-// placed from a palette entry does not share them with the entry.
+// clone copies the lists themselves, so a tile placed from a palette entry does
+// not share them with the entry.
 func (o ObjectRects) clone() ObjectRects {
-	return ObjectRects{Collision: slices.Clone(o.Collision), Light: cloneRect(o.Light)}
+	return ObjectRects{Collision: slices.Clone(o.Collision), Light: slices.Clone(o.Light)}
 }
 
 // sameRects reports whether two objects have the same rectangles: the same
-// collision rectangles in the same order, and the same light rectangle - a
-// missing one matching only a missing one.
+// collision rectangles and the same light rectangles, each in the same order.
 func sameRects(a, b ObjectRects) bool {
-	return slices.Equal(a.Collision, b.Collision) && sameRect(a.Light, b.Light)
-}
-
-func sameRect(a, b *rl.Rectangle) bool {
-	if a == nil || b == nil {
-		return a == b
-	}
-	return *a == *b
-}
-
-func cloneRect(r *rl.Rectangle) *rl.Rectangle {
-	if r == nil {
-		return nil
-	}
-	c := *r
-	return &c
+	return slices.Equal(a.Collision, b.Collision) && slices.Equal(a.Light, b.Light)
 }
 
 func (o LevelObject) rects() ObjectRects {
-	return ObjectRects{Collision: o.CollisionRects, Light: o.LightRect}
+	return ObjectRects{Collision: o.CollisionRects, Light: o.LightRects}
 }
 
 func (o *LevelObject) setRects(r ObjectRects) {
 	o.CollisionRects = r.Collision
-	o.LightRect = r.Light
+	o.LightRects = r.Light
 }
 
 // loadObjectDefaults reads the palette's rectangles. Anything missing or
@@ -132,11 +116,11 @@ func buildPalette(defaults map[string]ObjectRects) []LevelObject {
 	return palette
 }
 
-// On disk one collision rectangle is "collisionRect", exactly as it was before
-// objects could have several, so a level or defaults file with no more than one
-// per object keeps its bytes and its fingerprint. Two or more are
-// "collisionRects", and none is neither.
-func collisionToWire(rs []rl.Rectangle) (*rl.Rectangle, []rl.Rectangle) {
+// On disk one rectangle of a kind is "collisionRect" or "lightRect", exactly as
+// it was before objects could have several, so a level or defaults file with no
+// more than one of each per object keeps its bytes and its fingerprint. Two or
+// more are "collisionRects" or "lightRects", and none is neither.
+func rectsToWire(rs []rl.Rectangle) (*rl.Rectangle, []rl.Rectangle) {
 	switch len(rs) {
 	case 0:
 		return nil, nil
@@ -147,10 +131,12 @@ func collisionToWire(rs []rl.Rectangle) (*rl.Rectangle, []rl.Rectangle) {
 	return nil, rs
 }
 
-func collisionFromWire(one *rl.Rectangle, many []rl.Rectangle) []rl.Rectangle {
+// rectsFromWire is the list a kind's two keys give; key is the kind's
+// one-rectangle key, for the warning.
+func rectsFromWire(one *rl.Rectangle, many []rl.Rectangle, key string) []rl.Rectangle {
 	if many != nil {
 		if one != nil {
-			rl.TraceLog(rl.LogWarning, "level: both collisionRect and collisionRects; keeping collisionRects")
+			rl.TraceLog(rl.LogWarning, "level: both %[1]s and %[1]ss; keeping %[1]ss", key)
 		}
 		return many
 	}
@@ -170,11 +156,13 @@ type levelObjectWire struct {
 	CollisionRect  *rl.Rectangle  `json:"collisionRect,omitempty"`
 	CollisionRects []rl.Rectangle `json:"collisionRects,omitempty"`
 	LightRect      *rl.Rectangle  `json:"lightRect,omitempty"`
+	LightRects     []rl.Rectangle `json:"lightRects,omitempty"`
 }
 
 func (o LevelObject) MarshalJSON() ([]byte, error) {
-	w := levelObjectWire{Resource: o.Resource, Layer: o.Layer, X: o.X, Y: o.Y, LightRect: o.LightRect}
-	w.CollisionRect, w.CollisionRects = collisionToWire(o.CollisionRects)
+	w := levelObjectWire{Resource: o.Resource, Layer: o.Layer, X: o.X, Y: o.Y}
+	w.CollisionRect, w.CollisionRects = rectsToWire(o.CollisionRects)
+	w.LightRect, w.LightRects = rectsToWire(o.LightRects)
 	return json.Marshal(w)
 }
 
@@ -188,8 +176,8 @@ func (o *LevelObject) UnmarshalJSON(b []byte) error {
 		Layer:          w.Layer,
 		X:              w.X,
 		Y:              w.Y,
-		CollisionRects: collisionFromWire(w.CollisionRect, w.CollisionRects),
-		LightRect:      w.LightRect,
+		CollisionRects: rectsFromWire(w.CollisionRect, w.CollisionRects, "collisionRect"),
+		LightRects:     rectsFromWire(w.LightRect, w.LightRects, "lightRect"),
 	}
 	return nil
 }
@@ -199,11 +187,13 @@ type objectRectsWire struct {
 	CollisionRect  *rl.Rectangle  `json:"collisionRect,omitempty"`
 	CollisionRects []rl.Rectangle `json:"collisionRects,omitempty"`
 	LightRect      *rl.Rectangle  `json:"lightRect,omitempty"`
+	LightRects     []rl.Rectangle `json:"lightRects,omitempty"`
 }
 
 func (o ObjectRects) MarshalJSON() ([]byte, error) {
-	w := objectRectsWire{LightRect: o.Light}
-	w.CollisionRect, w.CollisionRects = collisionToWire(o.Collision)
+	var w objectRectsWire
+	w.CollisionRect, w.CollisionRects = rectsToWire(o.Collision)
+	w.LightRect, w.LightRects = rectsToWire(o.Light)
 	return json.Marshal(w)
 }
 
@@ -212,6 +202,9 @@ func (o *ObjectRects) UnmarshalJSON(b []byte) error {
 	if err := json.Unmarshal(b, &w); err != nil {
 		return err
 	}
-	*o = ObjectRects{Collision: collisionFromWire(w.CollisionRect, w.CollisionRects), Light: w.LightRect}
+	*o = ObjectRects{
+		Collision: rectsFromWire(w.CollisionRect, w.CollisionRects, "collisionRect"),
+		Light:     rectsFromWire(w.LightRect, w.LightRects, "lightRect"),
+	}
 	return nil
 }

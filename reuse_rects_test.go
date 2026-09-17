@@ -22,9 +22,9 @@ func TestSameRects(t *testing.T) {
 	}{
 		{"both empty", ObjectRects{}, ObjectRects{}, true},
 		{"one missing", ObjectRects{Collision: []rl.Rectangle{*a}}, ObjectRects{}, false},
-		{"equal by value", ObjectRects{Collision: []rl.Rectangle{*a}, Light: b}, ObjectRects{Collision: []rl.Rectangle{*a2}, Light: b}, true},
+		{"equal by value", ObjectRects{Collision: []rl.Rectangle{*a}, Light: []rl.Rectangle{*b}}, ObjectRects{Collision: []rl.Rectangle{*a2}, Light: []rl.Rectangle{*b}}, true},
 		{"differing", ObjectRects{Collision: []rl.Rectangle{*a}}, ObjectRects{Collision: []rl.Rectangle{*b}}, false},
-		{"light missing on one", ObjectRects{Collision: []rl.Rectangle{*a}, Light: b}, ObjectRects{Collision: []rl.Rectangle{*a2}}, false},
+		{"light missing on one", ObjectRects{Collision: []rl.Rectangle{*a}, Light: []rl.Rectangle{*b}}, ObjectRects{Collision: []rl.Rectangle{*a2}}, false},
 		{"the same list", ObjectRects{Collision: []rl.Rectangle{*a, *b}}, ObjectRects{Collision: []rl.Rectangle{*a2, *b}}, true},
 		{"order matters", ObjectRects{Collision: []rl.Rectangle{*a, *b}}, ObjectRects{Collision: []rl.Rectangle{*b, *a}}, false},
 		{"one more", ObjectRects{Collision: []rl.Rectangle{*a}}, ObjectRects{Collision: []rl.Rectangle{*a, *b}}, false},
@@ -212,7 +212,7 @@ func TestFollowTexture(t *testing.T) {
 
 func TestCopyPaste(t *testing.T) {
 	src := LevelObject{Resource: "a", CollisionRects: coll(10, 10)} // no light
-	dst := LevelObject{Resource: "b", CollisionRects: coll(1, 1), LightRect: rectp(2, 2)}
+	dst := LevelObject{Resource: "b", CollisionRects: coll(1, 1), LightRects: coll(2, 2)}
 	le := newLevelEditor(39, 83, []LevelObject{src, dst}, nil)
 
 	le.pasteSelection()
@@ -232,10 +232,10 @@ func TestCopyPaste(t *testing.T) {
 	if len(b.CollisionRects) != 1 || b.CollisionRects[0] != *rectp(10, 10) {
 		t.Errorf("pasted collision = %+v, want the source's", b.CollisionRects)
 	}
-	if b.LightRect != nil {
+	if len(b.LightRects) != 0 {
 		t.Errorf("the source had no light rectangle, but the target kept one")
 	}
-	if got := le.objects[0][tile]; got.own || got.CollisionRects[0] != *rectp(10, 10) || got.LightRect != nil {
+	if got := le.objects[0][tile]; got.own || got.CollisionRects[0] != *rectp(10, 10) || len(got.LightRects) != 0 {
 		t.Errorf("a following tile of the pasted-onto texture did not take the paste: %+v", got)
 	}
 

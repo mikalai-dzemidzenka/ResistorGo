@@ -33,7 +33,7 @@ func TestBuildPaletteResolvesRects(t *testing.T) {
 
 	w := paletteEntry(t, palette, wall)
 	if len(w.CollisionRects) != 1 || !slices.Equal(w.CollisionRects, builtin[wall].Collision) ||
-		w.LightRect == nil || *w.LightRect != *builtin[wall].Light {
+		len(w.LightRects) != 1 || !slices.Equal(w.LightRects, builtin[wall].Light) {
 		t.Errorf("wall did not keep its built-in rectangles: %+v", w)
 	}
 	if &w.CollisionRects[0] == &builtin[wall].Collision[0] {
@@ -43,11 +43,11 @@ func TestBuildPaletteResolvesRects(t *testing.T) {
 	if len(d.CollisionRects) != 1 || !slices.Equal(d.CollisionRects, defaults[door].Collision) {
 		t.Errorf("door collision = %+v, want the defaults file's", d.CollisionRects)
 	}
-	if d.LightRect != nil {
+	if len(d.LightRects) != 0 {
 		t.Errorf("door has a light rectangle the defaults file does not give it")
 	}
 	b := paletteEntry(t, palette, bg)
-	if len(b.CollisionRects) != 0 || b.LightRect != nil {
+	if len(b.CollisionRects) != 0 || len(b.LightRects) != 0 {
 		t.Errorf("a texture with no rectangles anywhere was given some: %+v", b)
 	}
 }
@@ -76,7 +76,7 @@ func TestPlaceCopiesRectsIncludingNone(t *testing.T) {
 	le := newLevelEditor(39, 83, []LevelObject{entry}, nil)
 	le.place(Vector2i{X: 39})
 	obj := le.objects[0][Vector2i{X: 39}]
-	if obj.LightRect != nil {
+	if len(obj.LightRects) != 0 {
 		t.Errorf("an entry with no light rectangle placed an object with one")
 	}
 	if len(obj.CollisionRects) != 1 || !slices.Equal(obj.CollisionRects, entry.CollisionRects) {
@@ -139,8 +139,8 @@ func TestAddAndClearRect(t *testing.T) {
 
 	le.addActiveRect()
 	obj, _ := le.selectedObject()
-	if obj.LightRect == nil || *obj.LightRect != (rl.Rectangle{Width: 39, Height: 83}) {
-		t.Fatalf("added light rectangle = %+v, want one 39x83 cell at the origin", obj.LightRect)
+	if len(obj.LightRects) != 1 || obj.LightRects[0] != (rl.Rectangle{Width: 39, Height: 83}) {
+		t.Fatalf("added light rectangles = %+v, want one 39x83 cell at the origin", obj.LightRects)
 	}
 	if !le.dirty {
 		t.Errorf("adding a rectangle is not an unsaved edit")
@@ -151,8 +151,8 @@ func TestAddAndClearRect(t *testing.T) {
 
 	le.clearActiveRect()
 	obj, _ = le.selectedObject()
-	if obj.LightRect != nil {
-		t.Errorf("cleared light rectangle is still %+v", obj.LightRect)
+	if len(obj.LightRects) != 0 {
+		t.Errorf("cleared light rectangle is still %+v", obj.LightRects)
 	}
 	if len(le.LightOccluders()) != 0 {
 		t.Errorf("a tile with no light rectangle still casts a shadow")

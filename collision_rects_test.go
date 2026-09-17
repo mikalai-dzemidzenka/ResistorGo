@@ -36,7 +36,7 @@ func TestCollisionRectsOnDisk(t *testing.T) {
 		{"three", three, false, true},
 	}
 	for _, c := range cases {
-		obj := LevelObject{Resource: "r", X: 39, CollisionRects: c.rects, LightRect: &rl.Rectangle{Width: 2, Height: 2}}
+		obj := LevelObject{Resource: "r", X: 39, CollisionRects: c.rects, LightRects: []rl.Rectangle{{Width: 2, Height: 2}}}
 		b, err := json.Marshal(obj)
 		if err != nil {
 			t.Fatal(err)
@@ -51,7 +51,7 @@ func TestCollisionRectsOnDisk(t *testing.T) {
 		if err := json.Unmarshal(b, &back); err != nil {
 			t.Fatal(err)
 		}
-		if !slices.Equal(back.CollisionRects, c.rects) || back.X != 39 || back.LightRect == nil {
+		if !slices.Equal(back.CollisionRects, c.rects) || back.X != 39 || len(back.LightRects) != 1 {
 			t.Errorf("%s: round trip gave %+v", c.name, back)
 		}
 
@@ -72,6 +72,77 @@ func TestCollisionRectsOnDisk(t *testing.T) {
 	}
 }
 
+// Light rectangles go to disk the way collision rectangles do: one as
+// "lightRect", several as "lightRects", none as neither.
+func TestLightRectsOnDisk(t *testing.T) {
+	three := []rl.Rectangle{rect(1, 2, 3, 4), rect(5, 6, 7, 8), rect(-9, 0, 1, 1)}
+	cases := []struct {
+		name      string
+		rects     []rl.Rectangle
+		one, many bool
+	}{
+		{"none", nil, false, false},
+		{"one", three[:1], true, false},
+		{"three", three, false, true},
+	}
+	for _, c := range cases {
+		obj := LevelObject{Resource: "r", X: 39, CollisionRects: three[:1], LightRects: c.rects}
+		b, err := json.Marshal(obj)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := strings.Contains(string(b), `"lightRect":`); got != c.one {
+			t.Errorf("%s: lightRect written %t, want %t: %s", c.name, got, c.one, b)
+		}
+		if got := strings.Contains(string(b), `"lightRects":`); got != c.many {
+			t.Errorf("%s: lightRects written %t, want %t: %s", c.name, got, c.many, b)
+		}
+		var back LevelObject
+		if err := json.Unmarshal(b, &back); err != nil {
+			t.Fatal(err)
+		}
+		if !slices.Equal(back.LightRects, c.rects) || !slices.Equal(back.CollisionRects, three[:1]) {
+			t.Errorf("%s: round trip gave %+v", c.name, back)
+		}
+
+		r := ObjectRects{Collision: three[:1], Light: c.rects}
+		b, _ = json.Marshal(r)
+		if got := strings.Contains(string(b), `"lightRects":`); got != c.many {
+			t.Errorf("%s: defaults lightRects written %t, want %t: %s", c.name, got, c.many, b)
+		}
+		var rb ObjectRects
+		if err := json.Unmarshal(b, &rb); err != nil || !sameRects(r, rb) {
+			t.Errorf("%s: defaults round trip gave %+v (%v) from %s", c.name, rb, err, b)
+		}
+	}
+
+	const bothKeys = `{"lightRect":{"X":1,"Y":1,"Width":1,"Height":1},"lightRects":[{"X":2,"Y":2,"Width":2,"Height":2},{"X":3,"Y":3,"Width":3,"Height":3}]}`
+	var both LevelObject
+	if err := json.Unmarshal([]byte(bothKeys), &both); err != nil {
+		t.Fatal(err)
+	}
+	if len(both.LightRects) != 2 || both.LightRects[0].X != 2 {
+		t.Errorf("with both keys the list should win, got %+v", both.LightRects)
+	}
+	var bothDefaults ObjectRects
+	if err := json.Unmarshal([]byte(bothKeys), &bothDefaults); err != nil {
+		t.Fatal(err)
+	}
+	if len(bothDefaults.Light) != 2 || bothDefaults.Light[0].X != 2 {
+		t.Errorf("with both keys the defaults' list should win, got %+v", bothDefaults.Light)
+	}
+}
+
+// Only the kind with several rectangles is written as a list.
+func TestOnlyTheLightRectsBecomeAList(t *testing.T) {
+	obj := LevelObject{Resource: "a", CollisionRects: []rl.Rectangle{rect(1, 1, 1, 1)}, LightRects: []rl.Rectangle{rect(2, 2, 2, 2), rect(3, 3, 3, 3)}}
+	b, _ := json.Marshal(obj)
+	want := `{"resource":"a","collisionRect":{"X":1,"Y":1,"Width":1,"Height":1},"lightRects":[{"X":2,"Y":2,"Width":2,"Height":2},{"X":3,"Y":3,"Width":3,"Height":3}]}`
+	if string(b) != want {
+		t.Errorf("written as %s, want %s", b, want)
+	}
+}
+
 // One rectangle is written exactly as before objects could have several.
 func TestOneCollisionRectKeepsItsBytes(t *testing.T) {
 	r, l := rect(15, 86, 40, 20), rect(22, 90, 40, 15)
@@ -79,7 +150,7 @@ func TestOneCollisionRectKeepsItsBytes(t *testing.T) {
 		obj LevelObject
 		old legacyLevelObject
 	}{
-		{LevelObject{Resource: "a", X: -117, Y: 83, CollisionRects: []rl.Rectangle{r}, LightRect: &l},
+		{LevelObject{Resource: "a", X: -117, Y: 83, CollisionRects: []rl.Rectangle{r}, LightRects: []rl.Rectangle{l}},
 			legacyLevelObject{Resource: "a", X: -117, Y: 83, CollisionRect: &r, LightRect: &l}},
 		{LevelObject{Resource: "b", Layer: 2}, legacyLevelObject{Resource: "b", Layer: 2}},
 	}
@@ -107,7 +178,7 @@ func TestLevel1KeepsItsBytes(t *testing.T) {
 	}
 	for _, layer := range le.objects {
 		for _, obj := range layer {
-			if len(obj.CollisionRects) > 1 {
+			if len(obj.CollisionRects) > 1 || len(obj.LightRects) > 1 {
 				return // the old format cannot hold this level
 			}
 		}
@@ -213,17 +284,17 @@ func threeRects() (*LevelEditor, Vector2i) {
 
 func TestActiveCollisionRectIndex(t *testing.T) {
 	le, pos := threeRects()
-	le.activeColl = 1
+	le.activeIdx = 1
 	le.setActive(nil)
 	if got := le.objects[0][pos].CollisionRects; !slices.Equal(got, []rl.Rectangle{rect(0, 0, 10, 10), rect(40, 0, 10, 10)}) {
 		t.Errorf("removing the second left %+v", got)
 	}
 
-	le.activeColl = 2
+	le.activeIdx = 2
 	le.objects[0][Vector2i{X: 78}] = LevelObject{Resource: "x", X: 78, CollisionRects: []rl.Rectangle{rect(0, 0, 5, 5)}}
 	le.selectAt(Vector2i{X: 78})
-	if le.activeColl != 0 {
-		t.Errorf("a selection with one rectangle left the index at %d", le.activeColl)
+	if le.activeIdx != 0 {
+		t.Errorf("a selection with one rectangle left the index at %d", le.activeIdx)
 	}
 	if _, cur, _, ok := le.active(); !ok || cur == nil || *cur != rect(0, 0, 5, 5) {
 		t.Errorf("the active rectangle is %+v", cur)
@@ -236,8 +307,8 @@ func TestClickPicksACollisionRect(t *testing.T) {
 	if !le.beginDrag(rl.Vector2{X: 84, Y: 5}, 1) {
 		t.Fatal("a click on the third rectangle took hold of nothing")
 	}
-	if le.activeRect != rectCollision || le.activeColl != 2 {
-		t.Errorf("active = %d/%d, want collision 2", le.activeRect, le.activeColl)
+	if le.activeRect != rectCollision || le.activeIdx != 2 {
+		t.Errorf("active = %d/%d, want collision 2", le.activeRect, le.activeIdx)
 	}
 	le.dragTo(rl.Vector2{X: 86, Y: 5})
 	got := le.objects[0][pos].CollisionRects
@@ -247,39 +318,39 @@ func TestClickPicksACollisionRect(t *testing.T) {
 
 	// two rectangles on the same spot: the one already active wins the click
 	le.objects[0][pos] = LevelObject{Resource: "x", X: 39, CollisionRects: []rl.Rectangle{rect(0, 0, 10, 10), rect(0, 0, 10, 10)}}
-	le.drag, le.activeColl = rectDrag{}, 1
-	if !le.beginDrag(rl.Vector2{X: 44, Y: 5}, 1) || le.activeColl != 1 {
-		t.Errorf("on an overlap the click went to %d, want the active 1", le.activeColl)
+	le.drag, le.activeIdx = rectDrag{}, 1
+	if !le.beginDrag(rl.Vector2{X: 44, Y: 5}, 1) || le.activeIdx != 1 {
+		t.Errorf("on an overlap the click went to %d, want the active 1", le.activeIdx)
 	}
 }
 
 func TestStepAddRemoveCollisionRects(t *testing.T) {
 	le, pos := threeRects()
 	le.setActiveRect(rectLight)
-	le.pickCollision()
-	if le.activeRect != rectCollision || le.activeColl != 0 {
-		t.Fatalf("C from light gave %d/%d", le.activeRect, le.activeColl)
+	le.pickKind(rectCollision)
+	if le.activeRect != rectCollision || le.activeIdx != 0 {
+		t.Fatalf("C from light gave %d/%d", le.activeRect, le.activeIdx)
 	}
 	var steps []int
 	for range 3 {
-		le.pickCollision()
-		steps = append(steps, le.activeColl)
+		le.pickKind(rectCollision)
+		steps = append(steps, le.activeIdx)
 	}
 	if !slices.Equal(steps, []int{1, 2, 0}) {
 		t.Errorf("C stepped through %v, want 1 2 0", steps)
 	}
 
-	le.activeColl = 1
+	le.activeIdx = 1
 	le.clearActiveRect()
 	got := le.objects[0][pos].CollisionRects
-	if !slices.Equal(got, []rl.Rectangle{rect(0, 0, 10, 10), rect(40, 0, 10, 10)}) || le.activeColl != 0 {
-		t.Errorf("removing the second of three left %+v, active %d", got, le.activeColl)
+	if !slices.Equal(got, []rl.Rectangle{rect(0, 0, 10, 10), rect(40, 0, 10, 10)}) || le.activeIdx != 0 {
+		t.Errorf("removing the second of three left %+v, active %d", got, le.activeIdx)
 	}
 
 	le.addActiveRect()
 	got = le.objects[0][pos].CollisionRects
-	if len(got) != 3 || got[2] != rect(0, 0, 39, 83) || got[0] != rect(0, 0, 10, 10) || le.activeColl != 2 {
-		t.Errorf("adding one gave %+v, active %d; want a grid cell at the origin, active", got, le.activeColl)
+	if len(got) != 3 || got[2] != rect(0, 0, 39, 83) || got[0] != rect(0, 0, 10, 10) || le.activeIdx != 2 {
+		t.Errorf("adding one gave %+v, active %d; want a grid cell at the origin, active", got, le.activeIdx)
 	}
 	if !le.objects[0][pos].own || !le.dirty {
 		t.Errorf("adding a rectangle to a tile is not a hand edit")
