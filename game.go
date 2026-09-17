@@ -59,6 +59,7 @@ var (
 	cursorOwner   *Actor // the local fighter whose energy Cur was last given
 	WhiteShader   rl.Shader
 	OutlineShader rl.Shader
+	RimShader     rl.Shader
 	NetMode       = NetOffline
 	quit          bool
 	drawList      []*Actor
@@ -302,6 +303,7 @@ func runLevel(dt float32) {
 		levelInit = true
 		WhiteShader = rl.LoadShaderFromMemory("", fsWhite)
 		OutlineShader = rl.LoadShaderFromMemory("", fsOutline)
+		loadRimShader()
 		LE.LoadLevel("level_1.json")
 
 		Sh = loadShaders()
@@ -381,7 +383,8 @@ func runLevel(dt float32) {
 	}
 	Cam.Update(dt)
 
-	computeLights(LE.lights, LE.areas, LE.ambient, LE.LightOccluders(), Cam.View())
+	occluders := LE.LightOccluders()
+	computeLights(LE.lights, LE.areas, LE.ambient, occluders, Cam.View())
 	rl.BeginTextureMode(ScreenFullTexture)
 	{
 		rl.ClearBackground(rl.Black)
@@ -414,6 +417,14 @@ func runLevel(dt float32) {
 		rl.EndMode2D()
 		compositeLights()
 		rl.BeginMode2D(Cam.View())
+
+		// the rim is light added on top of the lit scene, so the ambient dark
+		// cannot dim it; the overlays below go over it
+		rl.BeginBlendMode(rl.BlendAdditive)
+		for _, a := range drawList {
+			drawRim(a, LE.lights, occluders)
+		}
+		rl.EndBlendMode()
 
 		// the attack outline and the structure bars go on top of the lighting,
 		// so it cannot tint them; the outline first, under the bars

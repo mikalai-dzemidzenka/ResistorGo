@@ -485,13 +485,8 @@ func (a *Actor) Draw() {
 		return
 	}
 	if TimeShowsHistory() {
-		data := a.RewindData[rewindSlot(rewindCursor)]
-		rl.DrawTextureRec(resources[data.Anim], rl.Rectangle{
-			X:      float32(data.AnimFrame) * 48,
-			Y:      0,
-			Width:  48 * float32(a.Orientation),
-			Height: 48,
-		}, a.drawPos(), rl.White)
+		tex, src, pos := a.spriteDraw()
+		rl.DrawTextureRec(tex, src, pos, rl.White)
 	} else {
 		if a.AnimOnce {
 			a.DrawAnimOnce()
@@ -603,10 +598,20 @@ func (a *Actor) DrawFrame() {
 }
 
 // spriteDraw is the texture, source rectangle and position this fighter's
-// sprite is drawn with on this frame. The outline pass draws the same sprite a
-// second time, so the two must read it from one place or they would drift and
-// the outline would trace a pose the fighter is not in.
+// sprite is drawn with on this frame. The outline and rim passes draw the same
+// sprite a second time, so they must read it from one place or they would drift
+// and trace a pose the fighter is not in. While time shows history it is the
+// recorded frame.
 func (a *Actor) spriteDraw() (rl.Texture2D, rl.Rectangle, rl.Vector2) {
+	if TimeShowsHistory() {
+		data := a.RewindData[rewindSlot(rewindCursor)]
+		return resources[data.Anim], rl.Rectangle{
+			X:      float32(data.AnimFrame) * 48,
+			Y:      0,
+			Width:  48 * float32(a.Orientation),
+			Height: 48,
+		}, a.drawPos()
+	}
 	tex := resources[a.Anim]
 	pos := a.drawPos()
 	height := float32(48)
@@ -620,6 +625,50 @@ func (a *Actor) spriteDraw() (rl.Texture2D, rl.Rectangle, rl.Vector2) {
 		Width:  48 * float32(a.Orientation),
 		Height: height,
 	}, pos
+}
+
+// topAnim is the animation drawn over this fighter's body on this frame, if it
+// has one. The walk is drawn in two layers: the body walks and the arms are a
+// second sheet chosen by the stance, so the fighter holds its guard while it
+// moves. Block-all has no arms of its own and is drawn as the body alone.
+//
+// TODO the walk's rule lives here rather than in the state machine; when
+// AnimTop is set where the animation is, this falls away and AnimTop stays.
+func (a *Actor) topAnim() (string, bool) {
+	if a.AnimTop != nil {
+		return *a.AnimTop, true
+	}
+	if !strings.HasSuffix(a.Anim, "walk.png") {
+		return "", false
+	}
+	switch a.Updown {
+	case 0:
+		return "resources/threefour/walk-bot.png", true
+	case 1:
+		return "resources/threefour/walk-mid.png", true
+	case 2:
+		return "resources/threefour/walk-top.png", true
+	}
+	return "", false
+}
+
+// topDraw is the second sprite drawn over this fighter's body on this frame: the
+// same frame of the top layer's sheet, at the same place as the body. The
+// drawing and the rim both take it from here, so the rim cannot trace a
+// silhouette the fighter is not showing. ok is false when the fighter has no
+// top layer, and while time shows history - a recorded frame holds the body
+// animation alone.
+func (a *Actor) topDraw() (tex rl.Texture2D, src rl.Rectangle, pos rl.Vector2, ok bool) {
+	anim, has := a.topAnim()
+	if !has || TimeShowsHistory() {
+		return tex, src, pos, false
+	}
+	tex, ok = resources[anim]
+	if !ok {
+		return tex, src, pos, false
+	}
+	_, src, pos = a.spriteDraw()
+	return tex, src, pos, true
 }
 
 func (a *Actor) DrawAnimOnce() {
@@ -652,40 +701,8 @@ func (a *Actor) DrawAnim() {
 		Height: 48,
 	}, a.drawPos(), rl.White)
 
-	// TODO
-	if strings.HasSuffix(a.Anim, "walk.png") {
-		switch a.Updown {
-		case 0:
-			rl.DrawTextureRec(resources["resources/threefour/walk-bot.png"], rl.Rectangle{
-				X:      float32(a.AnimCurrentFrame) * 48,
-				Y:      0,
-				Width:  48 * float32(a.Orientation),
-				Height: float32(tex.Height),
-			}, rl.Vector2{
-				X: a.drawPos().X,
-				Y: a.drawPos().Y + float32(a.AnimYOffset),
-			}, rl.White)
-		case 1:
-			rl.DrawTextureRec(resources["resources/threefour/walk-mid.png"], rl.Rectangle{
-				X:      float32(a.AnimCurrentFrame) * 48,
-				Y:      0,
-				Width:  48 * float32(a.Orientation),
-				Height: float32(tex.Height),
-			}, rl.Vector2{
-				X: a.drawPos().X,
-				Y: a.drawPos().Y + float32(a.AnimYOffset),
-			}, rl.White)
-		case 2:
-			rl.DrawTextureRec(resources["resources/threefour/walk-top.png"], rl.Rectangle{
-				X:      float32(a.AnimCurrentFrame) * 48,
-				Y:      0,
-				Width:  48 * float32(a.Orientation),
-				Height: float32(tex.Height),
-			}, rl.Vector2{
-				X: a.drawPos().X,
-				Y: a.drawPos().Y + float32(a.AnimYOffset),
-			}, rl.White)
-		}
+	if top, src, pos, ok := a.topDraw(); ok {
+		rl.DrawTextureRec(top, src, pos, rl.White)
 	}
 }
 
