@@ -92,8 +92,8 @@ func TestOneCollisionRectKeepsItsBytes(t *testing.T) {
 	}
 }
 
-// The level, whose tiles have one collision rectangle each, loads and saves to
-// its own bytes, and keeps the fingerprint the old format gave it.
+// The level loads and saves to its own bytes and, while its tiles have no more
+// than one collision rectangle each, keeps the fingerprint the old format gave it.
 func TestLevel1KeepsItsBytes(t *testing.T) {
 	b := level1Bytes(t)
 	le := NewLevelEditor(39, 83)
@@ -104,6 +104,13 @@ func TestLevel1KeepsItsBytes(t *testing.T) {
 	}
 	if string(got) != string(b) {
 		t.Errorf("saving the level unedited changed it (%d bytes, was %d)", len(got), len(b))
+	}
+	for _, layer := range le.objects {
+		for _, obj := range layer {
+			if len(obj.CollisionRects) > 1 {
+				return // the old format cannot hold this level
+			}
+		}
 	}
 
 	var raw map[string]json.RawMessage

@@ -129,7 +129,8 @@ func checkLevelLights(t *testing.T, name string, b []byte) uint64 {
 		t.Fatal(err)
 	}
 	delete(raw, lightsKey)
-	delete(raw, ambientKey) // the loader before either knew only the tiles
+	delete(raw, ambientKey)
+	delete(raw, areasKey) // the loader before any of them knew only the tiles
 	stripped, _ := json.Marshal(raw)
 	old := newLevelEditor(39, 83, nil, nil)
 	if err := json.Unmarshal(stripped, &old.objects); err != nil { // the loader before lights
