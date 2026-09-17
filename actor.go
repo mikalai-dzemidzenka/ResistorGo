@@ -836,6 +836,20 @@ func (a *Actor) isWall(c rl.Rectangle) bool {
 // overlap, so no wall is too thin to stop a fighter at any speed it reaches,
 // and a fighter already inside a wall is never pushed out of it - only kept
 // from going deeper.
+// stopRun takes a fighter out of the run when a wall has stopped it: a run with
+// nowhere to go is not a run, and the key held against the wall walks in place
+// instead of running in place. It is the same end the run comes to when it
+// slows to a stop of its own accord.
+//
+// Only a fighter on the ground. One steering into a wall in the air is stopped
+// beside it and goes on rising or falling, which is a jump or a fall's business,
+// not the run's.
+func (a *Actor) stopRun() {
+	if a.State == StateRun && a.OnGround {
+		a.enterIdleState()
+	}
+}
+
 func (a *Actor) blockSides(fromX float32) {
 	l, w := a.CollisionBox.X, a.CollisionBox.Width
 	fromL, toL := fromX+l, a.Pos.X+l
@@ -850,6 +864,7 @@ func (a *Actor) blockSides(fromX float32) {
 		if right < toL+w {
 			a.Pos.X = right - w - l
 			a.Speed.X = min(a.Speed.X, 0)
+			a.stopRun()
 		}
 	case toL < fromL:
 		left := toL
@@ -861,6 +876,7 @@ func (a *Actor) blockSides(fromX float32) {
 		if left > toL {
 			a.Pos.X = left - l
 			a.Speed.X = max(a.Speed.X, 0)
+			a.stopRun()
 		}
 	}
 }
