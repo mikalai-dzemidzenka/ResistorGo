@@ -261,3 +261,46 @@ func TestShowEnergyBar(t *testing.T) {
 		t.Error("the energy bar did not come back when time manipulation was left")
 	}
 }
+
+// The HUD setting hides both bars at once and lets them back afterwards.
+func TestHideHUDSetting(t *testing.T) {
+	defer func() { Cfg.HideHUD = false }()
+	a := NewActor(ZeroVec2, true)
+	a.Structure, a.Energy = MaxStructure-1, MaxEnergy-EnergySwing
+	if !showStructureBar(a) || !showEnergyBar(a) {
+		t.Fatal("with the HUD on a hurt fighter that has swung shows no bars")
+	}
+	Cfg.HideHUD = true
+	if showStructureBar(a) {
+		t.Error("the structure bar is drawn with the HUD turned off")
+	}
+	if showEnergyBar(a) {
+		t.Error("the energy bar is drawn with the HUD turned off")
+	}
+	Cfg.HideHUD = false
+	if !showStructureBar(a) || !showEnergyBar(a) {
+		t.Error("the bars did not come back when the HUD was turned on again")
+	}
+}
+
+// The in-match hotkey flips the same setting and keeps it: a match has no
+// options screen to save on the way out of.
+func TestToggleHUDSaves(t *testing.T) {
+	defer func() { Cfg = DefaultSettings() }()
+	inTempDir(t, func() {
+		Cfg = DefaultSettings()
+		toggleHUD()
+		if !Cfg.HideHUD {
+			t.Fatal("the hotkey did not turn the HUD off")
+		}
+		Cfg = DefaultSettings()
+		LoadSettings()
+		if !Cfg.HideHUD {
+			t.Error("the hotkey's choice did not survive a save and load")
+		}
+		toggleHUD()
+		if Cfg.HideHUD {
+			t.Error("the hotkey did not turn the HUD back on")
+		}
+	})
+}

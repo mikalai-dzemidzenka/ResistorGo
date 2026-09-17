@@ -22,10 +22,13 @@ type Settings struct {
 	Fullscreen  bool `json:"fullscreen"`
 	WindowSize  int  `json:"windowSize"` // index into windowSizes
 	MusicVolume int  `json:"musicVolume"`
+	// HideHUD turns off the in-scene HUD over the fighters - the structure bar,
+	// its stun pips and the energy bar - for an unobstructed view of the fight.
+	HideHUD bool `json:"hideHud"`
 }
 
 func DefaultSettings() Settings {
-	return Settings{Fullscreen: false, WindowSize: 0, MusicVolume: 70}
+	return Settings{Fullscreen: false, WindowSize: 0, MusicVolume: 70, HideHUD: false}
 }
 
 var Cfg = DefaultSettings()

@@ -14,7 +14,8 @@ func sampleRec(id uint16) ActorRec {
 		ID: id, X: 12, Y: -34, SX: 1.5, SY: -900,
 		State: uint8(StateAttack), Flags: fOrientLeft | fAnimOnce | fAttackQueued | fBufAttack | fBufJump,
 		Updown: 2, PrevUpdown: 1, Anim: 17, AnimFrame: 3, AnimTotal: 8, AnimYOffset: -48,
-		AnimDurMs: 300, Ticks: 123456, AnimStart: 123400, AttackCount: 2, FreezeTicks: 5, Structure: 73, Energy: 45, AttackerID: 7,
+		AnimDurMs: 300, Ticks: 123456, AnimStart: 123400, AttackCount: 2, FreezeTicks: 5, Structure: 73,
+		Energy: 45, EnergyCalm: 30, EnergyUntouched: 77, AttackerID: 7,
 	}
 }
 
@@ -163,11 +164,36 @@ func TestEnergyReplicates(t *testing.T) {
 
 	// a value past the cap is clamped rather than dropping the snapshot
 	r := recOf(a)
-	r.Energy = 250
+	r.Energy = MaxEnergy + 50
 	b := NewActor(ZeroVec2, true)
 	r.apply(b, w)
 	if b.Energy != MaxEnergy {
 		t.Errorf("an over-cap record gave %v energy, want it clamped to %v", b.Energy, int32(MaxEnergy))
+	}
+}
+
+// Both refill waits cross the wire. They have to: a client decides its own
+// refill from them, and one that disagreed with the server about either would
+// refuse swings the server allows.
+func TestEnergyWaitsReplicate(t *testing.T) {
+	w := NewWorld(true)
+	a := w.Spawn(ZeroVec2, true)
+	for _, c := range [][2]uint16{{0, 0}, {45, 90}, {EnergyCalmTicks, EnergyUntouchedTicks}} {
+		a.EnergyCalm, a.EnergyUntouched = c[0], c[1]
+		b := NewActor(ZeroVec2, true)
+		recOf(a).apply(b, w)
+		if b.EnergyCalm != c[0] || b.EnergyUntouched != c[1] {
+			t.Errorf("waits %d/%d arrived as %d/%d", c[0], c[1], b.EnergyCalm, b.EnergyUntouched)
+		}
+	}
+
+	// past the waits is clamped rather than dropping the snapshot
+	r := recOf(a)
+	r.EnergyCalm, r.EnergyUntouched = 255, 255
+	b := NewActor(ZeroVec2, true)
+	r.apply(b, w)
+	if b.EnergyCalm != EnergyCalmTicks || b.EnergyUntouched != EnergyUntouchedTicks {
+		t.Errorf("an over-long record gave waits %d/%d, want them clamped to %d/%d", b.EnergyCalm, b.EnergyUntouched, EnergyCalmTicks, EnergyUntouchedTicks)
 	}
 }
 

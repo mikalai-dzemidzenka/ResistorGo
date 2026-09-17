@@ -30,18 +30,35 @@ var (
 	energyBarFill     = rl.NewColor(0, 228, 48, 255) // green, so it is never read as part of the red bar above
 )
 
+// HUDKey toggles the HUD from inside a match, so it can be dropped for a clean
+// view of a fight without leaving for the options screen.
+const HUDKey = rl.KeyF1
+
+// toggleHUD flips the HUD setting and writes it out. A match has no Back button
+// to save on the way out of, so the toggle saves itself and the choice is the
+// same one the options screen shows the next time it is opened.
+func toggleHUD() {
+	Cfg.HideHUD = !Cfg.HideHUD
+	SaveSettings()
+}
+
+// showHUD reports whether the HUD over the fighters is drawn at all. The
+// options screen and HUDKey turn it off, and that covers every part of it: the
+// bars, the stun pips and the flash a refused swing shows.
+func showHUD() bool { return !Cfg.HideHUD }
+
 // showStructureBar reports whether a fighter's bar is drawn: only while it has
 // lost structure, never while it is dying, and never over a recorded frame,
 // which does not hold structure.
 func showStructureBar(a *Actor) bool {
-	return a.Structure < MaxStructure && a.State != StateDeath && !TimeShowsHistory()
+	return showHUD() && a.Structure < MaxStructure && a.State != StateDeath && !TimeShowsHistory()
 }
 
 // showEnergyBar reports whether a fighter's energy bar is drawn. Energy has its
 // own rule rather than the structure bar's: a fighter that has swung shows one
 // at full structure, and one at full energy shows none however hurt it is.
 func showEnergyBar(a *Actor) bool {
-	return a.Energy < MaxEnergy && a.State != StateDeath && !TimeShowsHistory()
+	return showHUD() && a.Energy < MaxEnergy && a.State != StateDeath && !TimeShowsHistory()
 }
 
 // structureBarRects is the bar laid out in whole world pixels.
@@ -93,7 +110,7 @@ func structureBarLayout(a *Actor) structureBarRects {
 // each when there is anything to show. The two bars appear independently.
 func (a *Actor) drawStructureBar() {
 	bar, energy := showStructureBar(a), showEnergyBar(a)
-	denied := a.DenyUntil > GameTimeSec && a.State != StateDeath && !TimeShowsHistory()
+	denied := showHUD() && a.DenyUntil > GameTimeSec && a.State != StateDeath && !TimeShowsHistory()
 	if !bar && !energy && !denied {
 		return
 	}

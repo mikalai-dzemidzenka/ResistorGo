@@ -1,0 +1,210 @@
+package resistor
+
+import (
+	"encoding/json"
+	"os"
+	"slices"
+
+	rl "github.com/gen2brain/raylib-go/raylib"
+)
+
+// objectDefaultsPath holds the rectangles the editor's palette entries are born
+// with, keyed by texture path. It sits beside the level rather than inside it:
+// the level's fingerprint is a network contract, and the editor's defaults have
+// no business changing it. It is not embedded either - only the editor reads it,
+// and a release build has no editor.
+const objectDefaultsPath = "level_objects.json"
+
+// ObjectRects is an object's rectangles: the ones fighters collide with and the
+// ones that cast a shadow, any number of each, in order. No collision
+// rectangles, or no light rectangles, is how a texture says it should not be
+// stood on, or should not cast a shadow.
+type ObjectRects struct {
+	Collision []rl.Rectangle
+	Light     []rl.Rectangle
+}
+
+// clone copies the lists themselves, so a tile placed from a palette entry does
+// not share them with the entry.
+func (o ObjectRects) clone() ObjectRects {
+	return ObjectRects{Collision: slices.Clone(o.Collision), Light: slices.Clone(o.Light)}
+}
+
+// sameRects reports whether two objects have the same rectangles: the same
+// collision rectangles and the same light rectangles, each in the same order.
+func sameRects(a, b ObjectRects) bool {
+	return slices.Equal(a.Collision, b.Collision) && slices.Equal(a.Light, b.Light)
+}
+
+func (o LevelObject) rects() ObjectRects {
+	return ObjectRects{Collision: o.CollisionRects, Light: o.LightRects}
+}
+
+func (o *LevelObject) setRects(r ObjectRects) {
+	o.CollisionRects = r.Collision
+	o.LightRects = r.Light
+}
+
+// loadObjectDefaults reads the palette's rectangles. Anything missing or
+// malformed falls back to the rectangles built into the game: bad editor data
+// must never stop the editor from opening.
+func loadObjectDefaults(path string) map[string]ObjectRects {
+	if !DevTools {
+		return nil // a release build has no editor to have a palette for
+	}
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+	m := make(map[string]ObjectRects)
+	if err := json.Unmarshal(b, &m); err != nil {
+		rl.TraceLog(rl.LogError, "failed to load object defaults: json unmarshal: %s", err.Error())
+		return nil
+	}
+	return m
+}
+
+// saveObjectDefaults writes the palette's rectangles. Like the level, it is
+// written only by a development build, and only when asked. Nothing edited
+// writes nothing, so saving a level does not litter the repo with an empty file.
+// It reports whether the defaults are safely on disk.
+func saveObjectDefaults(path string, defaults map[string]ObjectRects) bool {
+	if !DevTools {
+		return false
+	}
+	if len(defaults) == 0 {
+		return true
+	}
+	b, err := json.MarshalIndent(defaults, "", "  ")
+	if err != nil {
+		rl.TraceLog(rl.LogError, "failed to save object defaults: marshal: %s", err.Error())
+		return false
+	}
+	if err := os.WriteFile(path, b, 0o644); err != nil {
+		rl.TraceLog(rl.LogError, "failed to save object defaults: write file: %s", err.Error())
+		return false
+	}
+	return true
+}
+
+// builtinRects are the rectangles compiled into the game, by texture path. They
+// are what a texture starts with when the defaults file says nothing about it.
+func builtinRects() map[string]ObjectRects {
+	m := make(map[string]ObjectRects)
+	for _, obj := range LoadLevelObjects() {
+		m[obj.Resource] = obj.rects()
+	}
+	return m
+}
+
+// buildPalette is every placeable block texture, each with the rectangles it is
+// born with: the defaults file first, then what is built into the game, then
+// none at all. It loads no textures, so it is safe before there is a window.
+func buildPalette(defaults map[string]ObjectRects) []LevelObject {
+	builtin := builtinRects()
+	paths := blockTextures()
+	palette := make([]LevelObject, 0, len(paths))
+	for _, p := range paths {
+		rects, ok := defaults[p]
+		if !ok {
+			rects = builtin[p]
+		}
+		obj := LevelObject{Resource: p}
+		obj.setRects(rects.clone())
+		palette = append(palette, obj)
+	}
+	return palette
+}
+
+// On disk one rectangle of a kind is "collisionRect" or "lightRect", exactly as
+// it was before objects could have several, so a level or defaults file with no
+// more than one of each per object keeps its bytes and its fingerprint. Two or
+// more are "collisionRects" or "lightRects", and none is neither.
+func rectsToWire(rs []rl.Rectangle) (*rl.Rectangle, []rl.Rectangle) {
+	switch len(rs) {
+	case 0:
+		return nil, nil
+	case 1:
+		r := rs[0]
+		return &r, nil
+	}
+	return nil, rs
+}
+
+// rectsFromWire is the list a kind's two keys give; key is the kind's
+// one-rectangle key, for the warning.
+func rectsFromWire(one *rl.Rectangle, many []rl.Rectangle, key string) []rl.Rectangle {
+	if many != nil {
+		if one != nil {
+			rl.TraceLog(rl.LogWarning, "level: both %[1]s and %[1]ss; keeping %[1]ss", key)
+		}
+		return many
+	}
+	if one != nil {
+		return []rl.Rectangle{*one}
+	}
+	return nil
+}
+
+// levelObjectWire is a LevelObject as the level file holds it, in the order its
+// fields have always been written.
+type levelObjectWire struct {
+	Resource       string         `json:"resource,omitempty"`
+	Layer          int            `json:"layer,omitempty"`
+	X              int32          `json:"x,omitempty"`
+	Y              int32          `json:"y,omitempty"`
+	CollisionRect  *rl.Rectangle  `json:"collisionRect,omitempty"`
+	CollisionRects []rl.Rectangle `json:"collisionRects,omitempty"`
+	LightRect      *rl.Rectangle  `json:"lightRect,omitempty"`
+	LightRects     []rl.Rectangle `json:"lightRects,omitempty"`
+}
+
+func (o LevelObject) MarshalJSON() ([]byte, error) {
+	w := levelObjectWire{Resource: o.Resource, Layer: o.Layer, X: o.X, Y: o.Y}
+	w.CollisionRect, w.CollisionRects = rectsToWire(o.CollisionRects)
+	w.LightRect, w.LightRects = rectsToWire(o.LightRects)
+	return json.Marshal(w)
+}
+
+func (o *LevelObject) UnmarshalJSON(b []byte) error {
+	var w levelObjectWire
+	if err := json.Unmarshal(b, &w); err != nil {
+		return err
+	}
+	*o = LevelObject{
+		Resource:       w.Resource,
+		Layer:          w.Layer,
+		X:              w.X,
+		Y:              w.Y,
+		CollisionRects: rectsFromWire(w.CollisionRect, w.CollisionRects, "collisionRect"),
+		LightRects:     rectsFromWire(w.LightRect, w.LightRects, "lightRect"),
+	}
+	return nil
+}
+
+// objectRectsWire is an ObjectRects as the texture defaults file holds it.
+type objectRectsWire struct {
+	CollisionRect  *rl.Rectangle  `json:"collisionRect,omitempty"`
+	CollisionRects []rl.Rectangle `json:"collisionRects,omitempty"`
+	LightRect      *rl.Rectangle  `json:"lightRect,omitempty"`
+	LightRects     []rl.Rectangle `json:"lightRects,omitempty"`
+}
+
+func (o ObjectRects) MarshalJSON() ([]byte, error) {
+	var w objectRectsWire
+	w.CollisionRect, w.CollisionRects = rectsToWire(o.Collision)
+	w.LightRect, w.LightRects = rectsToWire(o.Light)
+	return json.Marshal(w)
+}
+
+func (o *ObjectRects) UnmarshalJSON(b []byte) error {
+	var w objectRectsWire
+	if err := json.Unmarshal(b, &w); err != nil {
+		return err
+	}
+	*o = ObjectRects{
+		Collision: rectsFromWire(w.CollisionRect, w.CollisionRects, "collisionRect"),
+		Light:     rectsFromWire(w.LightRect, w.LightRects, "lightRect"),
+	}
+	return nil
+}

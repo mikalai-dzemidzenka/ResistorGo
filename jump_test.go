@@ -94,8 +94,8 @@ func TestRunJumpPushesOffOnItsFrame(t *testing.T) {
 	}
 }
 
-// The standing jump is untouched: it still winds up first, and both jumps
-// leave the ground at the same speed.
+// The standing jump still winds up first, and it is the shorter of the two:
+// the run-jump leaves the ground harder for the run and the energy it costs.
 func TestStandingJumpUnchanged(t *testing.T) {
 	w := NewWorld(true)
 	stand := ground(w, 10)
@@ -137,8 +137,43 @@ func TestStandingJumpUnchanged(t *testing.T) {
 	if stand.State != StateJump {
 		t.Fatalf("the wind-up never finished: state %d", stand.State)
 	}
-	if stand.Speed.Y != runner.Speed.Y {
-		t.Errorf("take-off speeds differ: standing %v, run-jump %v", stand.Speed.Y, runner.Speed.Y)
+	if runner.Speed.Y >= stand.Speed.Y {
+		t.Errorf("the run-jump left at %v, no harder than the standing jump's %v", runner.Speed.Y, stand.Speed.Y)
+	}
+	if want := stand.Speed.Y * RunJumpLift; runner.Speed.Y != want {
+		t.Errorf("the run-jump left at %v, want %v - the standing jump lifted by %v", runner.Speed.Y, want, float32(RunJumpLift))
+	}
+}
+
+// The extra push-off speed is extra height: a run-jump clears more ground than
+// a standing one, measured at the apex rather than at take-off.
+func TestRunJumpReachesHigher(t *testing.T) {
+	step := float32(FixedTimeStep)
+	apex := func(start func(a *Actor)) float32 {
+		w := NewWorld(true)
+		a := ground(w, 10)
+		start(a)
+		a.Input.Jump = true
+		top := a.Pos.Y
+		for range 120 {
+			a.Update(step)
+			a.Input.Jump = false
+			if a.Pos.Y < top {
+				top = a.Pos.Y
+			}
+			if a.OnGround && a.State != StateJumpStart && a.State != StateRunJump {
+				break
+			}
+		}
+		return a.Pos.Y - top // how far up it got, from where it stood
+	}
+	stand := apex(func(a *Actor) { a.State = StateIdle })
+	run := apex(func(a *Actor) { a.State, a.Speed.X = StateRun, RunReach })
+	if stand <= 0 {
+		t.Fatalf("the standing jump reached %v, want it off the ground", stand)
+	}
+	if run <= stand {
+		t.Errorf("the run-jump topped out %v above the ground, no higher than the standing jump's %v", run, stand)
 	}
 }
 
@@ -371,8 +406,52 @@ func TestFallCatchesALedge(t *testing.T) {
 	}
 }
 
-// A run-jump costs half the pool: two from full, and the third is refused.
-func TestRunJumpCostsHalfThePool(t *testing.T) {
+// A climb is committed to the ledge it grabbed: holding the other direction
+// does not turn a fighter halfway up, and neither does a bot spotting a target
+// behind it. A climb that turned would mantle one way while facing the other.
+func TestClimbRefusesToTurn(t *testing.T) {
+	tiles(Vector2i{X: 96}) // a tile at x 96..144, top at y 0
+	a := jumper(90, 16)    // just left of it, head level with its top
+	step := float32(FixedTimeStep)
+
+	a.Update(step)
+	if a.State != StateClimb {
+		t.Fatalf("the ledge was not grabbed: state %d", a.State)
+	}
+
+	a.Input = Input{Right: true} // the key that faces the other way, held throughout
+	for range 90 {
+		a.Update(step)
+		if a.State != StateClimb {
+			break
+		}
+		if a.Orientation != 1 {
+			t.Fatalf("holding the other direction turned the climb to face %d", a.Orientation)
+		}
+	}
+
+	// the rule belongs to the state, not to the player's keys: a bot that
+	// wants to face a target the other way is refused the same turn
+	w := NewWorld(true)
+	bot := w.Spawn(rl.Vector2{X: 100}, false)
+	w.Spawn(rl.Vector2{}, true) // its nearest, well to the left
+	bot.State, bot.Orientation = StateClimb, 1
+	botInput(bot)
+	if bot.Orientation != 1 {
+		t.Errorf("a bot turned to face %d mid-climb", bot.Orientation)
+	}
+
+	// and off the ledge the same bot turns as it always did
+	bot.State = StateIdle
+	botInput(bot)
+	if bot.Orientation != -1 {
+		t.Errorf("out of the climb the bot faces %d, want it turned to its target", bot.Orientation)
+	}
+}
+
+// A run-jump costs a third of the pool: three from full, and the fourth is
+// refused.
+func TestRunJumpCostsAThirdOfThePool(t *testing.T) {
 	w := NewWorld(true)
 	a := ground(w, 10)
 	a.State, a.Speed.X = StateRun, RunReach
@@ -388,14 +467,17 @@ func TestRunJumpCostsHalfThePool(t *testing.T) {
 	if !jump() || a.Energy != MaxEnergy-EnergyRunJump {
 		t.Errorf("the first run-jump left %v energy, want %v", a.Energy, MaxEnergy-EnergyRunJump)
 	}
+	if !jump() || a.Energy != MaxEnergy-2*EnergyRunJump {
+		t.Errorf("the second run-jump left %v energy, want %v", a.Energy, MaxEnergy-2*EnergyRunJump)
+	}
 	if !jump() || a.Energy != 0 {
-		t.Errorf("the second run-jump left %v energy, want 0", a.Energy)
+		t.Errorf("the third run-jump left %v energy, want 0", a.Energy)
 	}
 	if jump() {
-		t.Errorf("a third run-jump came out at %v energy", a.Energy)
+		t.Errorf("a fourth run-jump came out at %v energy", a.Energy)
 	}
-	if want := int32(MaxEnergy / 2); EnergyRunJump != want {
-		t.Errorf("a run-jump costs %d, want half the pool (%d)", int32(EnergyRunJump), want)
+	if want := int32(MaxEnergy / 3); EnergyRunJump != want {
+		t.Errorf("a run-jump costs %d, want a third of the pool (%d)", int32(EnergyRunJump), want)
 	}
 }
 
