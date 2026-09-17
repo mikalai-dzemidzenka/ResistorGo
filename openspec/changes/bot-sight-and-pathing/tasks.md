@@ -50,6 +50,13 @@
 - [x] 6c.2 Judge a gap by the running jump alone: it must be affordable, and the speed predicted at the edge must be a run. Where the far side is within a run-up jump but the room is not there, back away from the edge by `botRunUp` (derived from `RunReach`, `DefaultAcc` and the run-jump wind-up) and come at it again; verify `TestBotBacksOffToTakeARunAtAGap`
 - [x] 6c.3 Never back off into a second hole; verify `TestBotDoesNotBackOffIntoAnotherGap`
 
+## 6d. Losing the player at a wall
+
+- [x] 6d.1 Draw the sight cone, the line to what a bot sees and the spot it is searching, in debug mode; after `compositeLights` so the light map cannot dim the wash, and only where the sight is real (the authority, never a client's predicted world)
+- [x] 6d.2 Found in play with the overlay on: following a fighter that hops a ledge, the bot lost sight at the wall's foot — the spot last seen is then the ground it already stands on, so the search arrived instantly, lingered and gave up, leaving it blind against the wall for good. A stalled search now takes the top of a climbable wall in front of it as the next place to look; verify `TestABotLooksOverTheWallItLostSomeoneBehind`
+- [x] 6d.3 Nothing within a body's width counts as behind, so two fighters on the same spot are not blind to each other; verify `TestFightersOnTopOfEachOtherAreNotBlind`
+- [x] 6d.4 Read the ground ahead while airborne too, and hard-brake by turning when there is not even room to coast; verify `TestBotLandingOnAShortStripDoesNotRunOffIt` and `TestBotHardBrakesWhenCoastingWouldNotStopIt`
+
 ## 7. Verify in play
 
 - [x] 7.1 Run the full suite with `go test ./...` and confirm every existing test — combat, energy, structure, net, spectator, menu — still passes

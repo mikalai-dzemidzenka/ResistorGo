@@ -433,6 +433,16 @@ func runLevel(dt float32) {
 		}
 		rl.EndBlendMode()
 
+		// A bot's sight is drawn here rather than with the other debug boxes,
+		// which are inside the lit scene: the cone is a faint wash, and
+		// multiplied by the light map it would disappear into any dark corner -
+		// exactly where knowing what the bot can see matters most.
+		if DevTools && Debug {
+			for _, a := range drawList {
+				a.drawSight()
+			}
+		}
+
 		// the attack outline and the structure bars go on top of the lighting,
 		// so it cannot tint them; the outline first, under the bars
 		for _, a := range drawList {

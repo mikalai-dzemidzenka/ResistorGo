@@ -254,3 +254,32 @@ func TestBotDoesNotBackOffIntoAnotherGap(t *testing.T) {
 		}
 	}
 }
+
+// A bot coming down off a ledge has to read the ground it is landing on. It
+// used to steer freely in the air, so one that dropped onto a short strip with
+// a hole past it landed at a run with no room left to stop, and went straight in.
+func TestBotLandingOnAShortStripDoesNotRunOffIt(t *testing.T) {
+	// a high ledge to x=288, a strip 96px long one tile below it, then nothing
+	level := append(row(-480, 0, 16), row(288, 96, 2)...)
+	bot := loneBot(t, level, rl.Vector2{X: 100, Y: -48})
+	goal := rl.Vector2{X: 600}
+	for range 900 {
+		bot.Input = bot.walk(Input{Updown: bot.Updown}, goal)
+		bot.Update(float32(FixedTimeStep))
+		if bot.Pos.Y > 200 {
+			t.Fatalf("the bot ran off the strip it landed on: x=%v y=%v", bot.Pos.X, bot.Pos.Y)
+		}
+	}
+}
+
+// When there is not even room to coast to a halt, it turns and pushes the other
+// way: a fighter that turns loses two thirds of its speed on the spot, which is
+// the only brake strong enough to matter.
+func TestBotHardBrakesWhenCoastingWouldNotStopIt(t *testing.T) {
+	bot := loneBot(t, row(-480, 48, 16), rl.Vector2{X: 200}) // floor ends at 288
+	bot.Update(float32(FixedTimeStep))
+	bot.Speed.X = MaxSpeed // at full tilt, a stride from the edge
+	if s := botStep(bot, rl.Vector2{X: 600}); s.dir != -1 {
+		t.Errorf("at full speed by the edge the bot answers %+v, want it braking the other way", s)
+	}
+}

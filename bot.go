@@ -307,16 +307,17 @@ func lineBlocked(p, q rl.Vector2) bool {
 // the line between them. Every test is cheaper than the one after it, so the
 // sweep of the level is only reached by a fighter that is worth sweeping for.
 //
-// A fighter at exactly the same X as the bot counts as in front of it rather
-// than behind: only what is strictly behind is out of view, so two fighters
-// passing through one another do not blink out for the tick they share a column.
+// Nothing within a body's width is behind the bot, whichever way it faces. Two
+// fighters at that distance are touching - one is standing on the other - and a
+// bot that called that "behind me" would be blind to the fighter it is trading
+// blows with every time the two of them crossed over.
 func (a *Actor) canSee(b *Actor) bool {
 	if b == nil || b == a {
 		return false
 	}
 	from, to := a.eye(), b.eye()
 	dx, dy := to.X-from.X, to.Y-from.Y
-	if dx*float32(a.Orientation) < 0 {
+	if dx*float32(a.Orientation) < 0 && abs(dx) > a.CollisionBox.Width {
 		return false
 	}
 	if dx*dx+dy*dy > SightRange*SightRange {
@@ -404,6 +405,69 @@ func (a *Actor) brake() float32 {
 	return a.Speed.X * a.Speed.X / (2 * a.Friction)
 }
 
+// overWall is where a fighter would stand on top of the wall the bot is up
+// against, and whether there is one it could get onto. It is what the bot tries
+// when a search runs out of ground: the answer to "it was here a moment ago and
+// now it is not" is usually that it went up.
+func (a *Actor) overWall() (rl.Vector2, bool) {
+	dir := a.Orientation
+	top, dist, ok := a.wallAhead(dir, botLook)
+	if !ok || dist > botAdjacent || !a.clears(RunJumpRise, a.feet()-top) {
+		return rl.Vector2{}, false
+	}
+	// past the face of the wall, standing on it
+	x := a.front(dir) + dist*float32(dir)
+	if dir > 0 {
+		x += 4
+	} else {
+		x -= 32
+	}
+	return rl.Vector2{X: x, Y: top - 48}, true
+}
+
+// holdShortOf is how a bot stops at a hole it has no way across, gap pixels
+// ahead of it.
+//
+// Not pressing forward is usually enough: friction takes back very nearly what
+// the acceleration gave, so the bot coasts to rest a stride short of the edge.
+// Where there is less room than it takes to coast, coasting ends up over the
+// edge, and the only thing left is to turn and push the other way - which
+// brakes far harder, a fighter that turns losing two thirds of its speed on the
+// spot. That costs the bot sight of whatever it was after, which is the cheaper
+// of the two prices.
+//
+// The standoff is a fixed distance and not a braking distance: a threshold that
+// moves with the speed has an equilibrium in it, and the bot found it, pressing
+// and releasing on alternate ticks while going nowhere, because at that speed
+// the step it takes is smaller than the pixel the position is truncated to.
+func (a *Actor) holdShortOf(dir int8, gap float32) step {
+	switch {
+	case gap < a.brake():
+		return step{dir: -dir}
+	case gap <= max(a.brake()+botAdjacent, botStandoff):
+		return step{stop: true}
+	}
+	return step{dir: dir}
+}
+
+// brakeForHole reports whether the ground ahead runs out with nothing beyond it
+// the bot could land on, and what to do about it. It is the danger half of the
+// hole reading with none of the jumping: what a bot still in the air needs,
+// where the jump is already spent and only the landing is still in question.
+func (a *Actor) brakeForHole(dir int8) (step, bool) {
+	edge, ok := a.edgeAhead(dir, botLook+a.brake(), botDrop)
+	if !ok {
+		return step{}, false
+	}
+	// A gap it could cross is no danger: mid-jump over one, the far side is
+	// where it means to be.
+	if _, across := a.landingBeyond(dir, edge, a.reachAt(MaxSpeed, RunJumpAirTicks), botDrop); across {
+		return step{}, false
+	}
+	s := a.holdShortOf(dir, (edge-a.front(dir))*float32(dir))
+	return s, s.dir != dir
+}
+
 // roomBehind reports whether the ground behind the bot runs on far enough to
 // take a run-up on. Backing off into a second hole would trade one gap it
 // cannot cross for one it falls into.
@@ -438,7 +502,14 @@ func botStep(a *Actor, goal rl.Vector2) step {
 		return step{stop: true} // already there
 	}
 	if !a.OnGround {
-		return step{dir: dir} // in the air: steer, and let the arc finish
+		// The arc is set, but the ground it comes down on is not read yet. A
+		// fighter that lands at a run with a hole in front of it has no room
+		// left to stop, so the ground ahead is looked at from up here too -
+		// only to brake, never to jump, the jump being already spent.
+		if s, danger := a.brakeForHole(dir); danger {
+			return s
+		}
+		return step{dir: dir} // otherwise steer, and let the arc finish
 	}
 
 	// A wall is dealt with before a hole: it is the nearer of the two whenever
@@ -499,25 +570,54 @@ func botStep(a *Actor, goal rl.Vector2) step {
 			return step{dir: -dir}
 
 		default:
-			// Nothing to land on, or no way to get up the speed. Stop pressing
-			// forward while there is still room to coast to a halt, which
-			// brings the bot to rest at the edge rather than over it - friction
-			// takes back very nearly what the acceleration gave, so it comes to
-			// rest a stride short of it.
-			//
-			// The standoff is a fixed distance and not a braking distance: a
-			// threshold that moved with the speed has an equilibrium in it, and
-			// the bot found it, pressing and releasing on alternate ticks while
-			// going nowhere, because at that speed the step it takes is smaller
-			// than the pixel the position is truncated to.
-			if gap <= max(a.brake()+botAdjacent, botStandoff) {
-				return step{stop: true}
-			}
-			return step{dir: dir}
+			// Nothing to land on, or no way to get up the speed.
+			return a.holdShortOf(dir, gap)
 		}
 	}
 
 	return step{dir: dir}
+}
+
+// Colours of the sight overlay, dim enough to read the level through.
+var (
+	sightConeColor   = rl.Color{R: 120, G: 200, B: 255, A: 40}  // what it could see
+	sightBlindColor  = rl.Color{R: 120, G: 200, B: 255, A: 90}  // the edge of the cone
+	sightTargetColor = rl.Color{R: 120, G: 255, B: 140, A: 220} // the line to what it sees
+	sightMemoryColor = rl.Color{R: 255, G: 200, B: 90, A: 200}  // the spot it is searching
+)
+
+// drawSight draws what a bot can see, for debug mode: the cone it looks down,
+// a line to the fighter it has picked out of it, and the spot it is walking to
+// when it has lost one.
+//
+// Only where the sight is real. A bot on a client never runs any of this - the
+// server does, and the client is only told where the bot went - so drawing a
+// cone there would be drawing a guess.
+func (a *Actor) drawSight() {
+	if a.IsPlayer || a.W == nil || !a.W.Authority || a.State == StateDeath {
+		return
+	}
+	eye := a.eye()
+	half := float32(math.Atan(SightSlope) * 180 / math.Pi)
+	mid := float32(0) // raylib measures from +X, clockwise, with Y down
+	if a.Orientation < 0 {
+		mid = 180
+	}
+	rl.DrawCircleSector(eye, SightRange, mid-half, mid+half, 24, sightConeColor)
+	rl.DrawCircleSectorLines(eye, SightRange, mid-half, mid+half, 24, sightBlindColor)
+
+	if t := a.seen(); t != nil {
+		rl.DrawLineV(eye, t.eye(), sightTargetColor)
+		rl.DrawCircleLinesV(t.eye(), 4, sightTargetColor)
+		return
+	}
+	if a.Bot.searching {
+		spot := rl.Vector2{X: a.Bot.lastSeen.X + 21, Y: a.Bot.lastSeen.Y + 27} // its eye, had it stood there
+		rl.DrawLineV(eye, spot, sightMemoryColor)
+		rl.DrawCircleLinesV(spot, 3, sightMemoryColor)
+		rl.DrawLineV(rl.Vector2{X: spot.X - 4, Y: spot.Y - 4}, rl.Vector2{X: spot.X + 4, Y: spot.Y + 4}, sightMemoryColor)
+		rl.DrawLineV(rl.Vector2{X: spot.X - 4, Y: spot.Y + 4}, rl.Vector2{X: spot.X + 4, Y: spot.Y - 4}, sightMemoryColor)
+	}
 }
 
 // alerted tells a bot where an attack came from. A blow is the one thing that
@@ -596,6 +696,16 @@ func botInput(a *Actor) Input {
 		// would not turn for it could be hit from behind all day.
 		if dx := a.Bot.lastSeen.X - a.Pos.X; abs(dx) > 1 {
 			a.face(facing(dx))
+		}
+		// Nothing here, and a wall right in front: try the top of it before
+		// giving up. A fighter that hops a ledge is lost at the moment the wall
+		// comes between the two of them, which leaves the spot it was last seen
+		// at on the ground the bot is already standing on - so the search ends
+		// the tick it starts, with the quarry standing directly overhead and a
+		// wall the bot is pressed against hiding it for good.
+		if spot, ok := a.overWall(); ok {
+			a.Bot.lastSeen = spot
+			return a.walkStep(in, botStep(a, spot))
 		}
 		// Arrived, or no way to get there. Either way the walking is over:
 		// what is left is a moment standing and looking around, and the

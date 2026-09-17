@@ -8,7 +8,7 @@ What a computer-controlled fighter does on its own: how it reacts to the fight a
 A bot SHALL choose the fighter it reacts to from those it can see, and only from those. Seeing another fighter SHALL require all three of:
 
 - **Range** — the other fighter is within the bot's sight range.
-- **Direction** — the other fighter lies within a fixed angle either side of the direction the bot is facing. A fighter behind the bot SHALL NOT be seen, and neither SHALL one far enough above or below that it falls outside that angle.
+- **Direction** — the other fighter lies within a fixed angle either side of the direction the bot is facing. A fighter behind the bot SHALL NOT be seen, and neither SHALL one far enough above or below that it falls outside that angle. Nothing within a body's width SHALL count as behind: two fighters that close are touching, and neither is hidden from the other by which way it happens to face.
 - **A clear line** — no solid part of the level lies on the straight line between the two fighters. A fighter on the far side of a wall, a floor or a ceiling SHALL NOT be seen, however close it is and however squarely the bot faces it.
 
 When more than one fighter is seen, the bot SHALL react to the nearest of them. Sight SHALL be judged afresh every tick, so a fighter stepping behind cover is lost the moment the cover is between them, and one stepping out is seen again the moment it is not.
@@ -34,6 +34,10 @@ Sight SHALL be a bot's alone. A fighter under human control SHALL never have wha
 #### Scenario: A fighter far enough above is outside the cone
 - **WHEN** a fighter stands within range but steeply above or below the bot, outside the angle either side of the way the bot faces
 - **THEN** the bot does not react to it
+
+#### Scenario: Standing on top of one another
+- **WHEN** two fighters are within a body's width of each other, facing opposite ways
+- **THEN** the bot sees the one it is touching, rather than counting it as behind
 
 #### Scenario: The nearest of several
 - **WHEN** a bot can see two fighters at once
@@ -94,6 +98,8 @@ A fighter under human control SHALL NOT be steered by any of this.
 ### Requirement: A bot searches where it last saw someone
 A bot that loses sight of the fighter it was reacting to SHALL remember the position that fighter was last seen at and go there. It SHALL move toward that position by the same rules it uses to move anywhere, stopping where the level stops it. On arriving — or once it has spent its patience trying to arrive, whichever comes first — the bot SHALL wait there briefly and then give up, returning to the resting behaviour of a bot that sees no one.
 
+A search that runs out of ground at a wall the bot could get onto SHALL carry on over that wall: the bot SHALL take the top of it as the place to look next, rather than giving up at its foot. A fighter that climbs out of view is lost at the moment the wall comes between the two of them, which leaves the spot it was last seen at on the ground the bot is already standing on — and a bot pressed against a wall can see nothing above it, so giving up there would leave it blind to a fighter directly overhead for as long as both stood still.
+
 A search SHALL end immediately if the bot sees any fighter while it is under way; the bot SHALL react to what it now sees rather than to where something used to be. A bot SHALL search for one remembered position at a time: losing sight again replaces the remembered position rather than queueing another search.
 
 A searching bot SHALL NOT swing. It is going somewhere, not fighting.
@@ -110,6 +116,10 @@ A searching bot SHALL NOT swing. It is going somewhere, not fighting.
 - **WHEN** the level stops a bot from ever reaching the spot it is searching for
 - **THEN** the bot gives up after its patience is spent rather than pressing on indefinitely
 
+#### Scenario: It looks over the wall it lost someone behind
+- **WHEN** a bot following a fighter loses sight of it at the foot of a wall it could climb
+- **THEN** it climbs that wall and looks from up there, rather than standing at the bottom of it until its patience runs out
+
 #### Scenario: Sight cancels the search
 - **WHEN** a bot part-way through a search sees a fighter
 - **THEN** the search ends there and the bot reacts to the fighter it can see
@@ -125,7 +135,9 @@ A bot moving toward something SHALL read the level immediately in front of it an
 - A **wall it can clear** SHALL be jumped: a running jump when the bot is running and can afford one, a standing jump otherwise. Where the jump brings the bot to a ledge it can take hold of, it SHALL climb it as any fighter does.
 - A **wall it cannot clear** SHALL stop the bot. It SHALL NOT stand pressed into the wall walking on the spot.
 - A **gap it can cross** — one with ground on the far side within a running jump — SHALL be jumped. A gap SHALL be crossed by the running jump alone: the standing jump SHALL NOT be used for one. Where the bot is too close to the edge to reach a run before it, and the far side is within a running jump made at speed, the bot SHALL back away from the edge far enough to take a run at it and then cross — unless backing away would take it into another gap, in which case it SHALL stop as it would at any gap it cannot cross.
-- A **gap it cannot cross** SHALL stop the bot at the near edge. A bot SHALL NOT walk off a ledge into a gap it has no way out of.
+- A **gap it cannot cross** SHALL stop the bot at the near edge. A bot SHALL NOT walk off a ledge into a gap it has no way out of. Where there is not even the room to coast to a halt, the bot SHALL turn and push the other way to brake, losing sight of whatever it was after rather than its footing.
+
+The ground ahead SHALL be read while the bot is in the air as well as on its feet, so that one coming down off a ledge onto a short strip does not land at a run with no room left to stop. Nothing airborne SHALL be decided beyond braking: the jump is already spent.
 
 A bot SHALL jump only to get somewhere: it SHALL NOT jump while the way ahead is clear, and SHALL NOT jump at a wall or a gap it has already been found unable to clear.
 
@@ -158,6 +170,10 @@ None of this SHALL cost a bot anything a player would not pay. A running jump SH
 #### Scenario: A bottomless gap is not walked into
 - **WHEN** a bot moving toward a target meets a gap it cannot clear
 - **THEN** it stops at the edge and does not walk off
+
+#### Scenario: It does not run off the strip it lands on
+- **WHEN** a bot drops from a ledge onto a short strip of ground with a gap it cannot cross beyond it
+- **THEN** it stops on the strip rather than carrying its speed over the far edge
 
 #### Scenario: No jumping for its own sake
 - **WHEN** a bot is walking toward a target across clear, flat ground

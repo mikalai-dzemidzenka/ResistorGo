@@ -159,3 +159,46 @@ func TestABotSearchesUpOntoALedge(t *testing.T) {
 	}
 	t.Errorf("the bot never got up onto the wall: x=%v y=%v searching=%t", bot.Pos.X, bot.Pos.Y, bot.Bot.searching)
 }
+
+// The failure this guards was the plainest one in play: a bot following a
+// fighter that hopped onto a ledge walked up to the wall, lost sight at the
+// moment the wall came between them - which leaves the spot last seen on the
+// ground the bot is already standing on - arrived there instantly, gave the
+// search up, and stood pressed against the wall for the rest of the match,
+// blind to the fighter directly above it.
+func TestABotLooksOverTheWallItLostSomeoneBehind(t *testing.T) {
+	const wallX = 240
+	level := append(row(-480, 48, 40), Vector2i{X: wallX, Y: 0})
+	bot, target := botScene(t, level, rl.Vector2{X: 190}, rl.Vector2{X: 210})
+	if !bot.canSee(target) {
+		t.Fatal("the bot cannot see the fighter to begin with")
+	}
+	bot.Input = botInput(bot)               // sees it on the ground
+	target.Pos = rl.Vector2{X: 250, Y: -48} // up onto the wall, out of sight
+	if bot.canSee(target) {
+		t.Fatal("the fighter is meant to be hidden by the wall")
+	}
+	for range 900 {
+		bot.Input = botInput(bot)
+		bot.Update(float32(FixedTimeStep))
+		if bot.canSee(target) {
+			return
+		}
+	}
+	t.Errorf("the bot never found the fighter above it: x=%v y=%v searching=%t", bot.Pos.X, bot.Pos.Y, bot.Bot.searching)
+}
+
+// Two fighters standing on the same spot see each other, whichever way they
+// face. Nothing within a body's width is "behind" anybody.
+func TestFightersOnTopOfEachOtherAreNotBlind(t *testing.T) {
+	bot, target := botScene(t, row(-480, 48, 40), rl.Vector2{X: 200}, rl.Vector2{X: 202})
+	bot.Orientation = -1 // turned away from a fighter two pixels to its right
+	if !bot.canSee(target) {
+		t.Error("a bot is blind to the fighter it is standing on top of")
+	}
+	// but a fighter a real distance behind it is still behind it
+	target.Pos.X = 320
+	if bot.canSee(target) {
+		t.Error("a bot saw a fighter well behind it")
+	}
+}
