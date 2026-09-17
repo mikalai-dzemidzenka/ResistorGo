@@ -20,8 +20,16 @@ const (
 	// frame the fighter pushes off on. The two before it are the anticipation,
 	// drawn rather than spent in a state of its own.
 	RunJumpLaunchFrame = 2
-	Gravity            = 1500
-	MaxJumpSpeed       = -Gravity * 10
+	// How long each jump is drawn winding up before it leaves the ground. Named
+	// here rather than left in the two SetAnim calls because the wind-up is not
+	// only an animation: it is ground the fighter covers still standing, which
+	// is what a bot has to press its jump ahead of. See botJumpWindupTicks.
+	RunJumpSeconds   = 0.5
+	RunJumpFrames    = 6
+	JumpStartSeconds = 0.7
+	JumpStartFrames  = 13
+	Gravity          = 1500
+	MaxJumpSpeed     = -Gravity * 10
 	// The run-jump leaves the ground harder than a standing one: the run is
 	// what buys the extra height, and the half-pool it costs is what the
 	// height is paid for with. Derived from the standing jump, so retuning
@@ -199,6 +207,12 @@ type Actor struct {
 	DeathTicks       uint16  // ticks since the death animation finished
 	DenyUntil        float64 // game time a refused swing stops flashing; local only, never replicated
 	Owner            uint16  // network player this fighter belongs to; 0 for bots
+	// What the bot has in mind. Never replicated and never rewound: it is
+	// worked out afresh by whichever world is actually simulating the match,
+	// and a client is told what the bot did, not what it was thinking. Zero is
+	// a bot with nothing in mind, so a fighter spawning or respawning starts
+	// with a clean one for free.
+	Bot botMind
 }
 
 // Input is one simulation tick of player intent; it is also the network command.
@@ -784,7 +798,12 @@ func (a *Actor) checkCollision() {
 		oColX := c.X
 		oColWidth := c.Width
 
-		if pColCenterX > oColX && pColCenterX < oColX+oColWidth &&
+		// The left edge claims the fighter and the right edge does not, so a
+		// tile boundary belongs to exactly one tile. With both edges exclusive
+		// a fighter whose centre landed exactly on a seam was claimed by
+		// neither, left the ground for that one tick and was put into the fall
+		// - which, walking an unbroken floor, cancelled any jump winding up.
+		if pColCenterX >= oColX && pColCenterX < oColX+oColWidth &&
 			pColDownY+1 > oColY && pColDownY < oColY+oColHeight {
 			a.OnGround = true
 			a.Speed.Y = 0
@@ -879,58 +898,6 @@ func (a *Actor) blockSides(fromX float32) {
 			a.stopRun()
 		}
 	}
-}
-
-// nearest returns the closest other actor in the same world.
-func (a *Actor) nearest() *Actor {
-	var best *Actor
-	bestD := float32(math.MaxFloat32)
-	for _, b := range a.W.Actors {
-		if b == a {
-			continue
-		}
-		if d := abs(b.Pos.X-a.Pos.X) + abs(b.Pos.Y-a.Pos.Y); d < bestD {
-			best, bestD = b, d
-		}
-	}
-	return best
-}
-
-// botInput produces the bot's command for this tick (authoritative worlds only).
-func botInput(a *Actor) Input {
-	if a.State == StateAttacked {
-		return a.Input
-	}
-	const near = 50
-	in := Input{Updown: a.Updown}
-	if rand.Int()%61 == 0 {
-		in.Updown = uint8(rand.Int() % 3)
-	}
-	t := a.nearest()
-	if t == nil {
-		return in
-	}
-	if t.Pos.X < a.Pos.X {
-		if a.Pos.X-t.Pos.X > near {
-			in.Right = true
-		} else {
-			if rand.Int()%61 == 3 {
-				in.Attack = true
-			}
-		}
-		a.face(-1)
-	}
-	if t.Pos.X > a.Pos.X {
-		if t.Pos.X-a.Pos.X > near {
-			in.Left = true
-		} else {
-			if rand.Int()%61 == 3 {
-				in.Attack = true
-			}
-		}
-		a.face(1)
-	}
-	return in
 }
 
 // edge-triggered buttons are latched per rendered frame and consumed by the next tick
@@ -1138,6 +1105,7 @@ func (a *Actor) endHitRun() { a.HitRun = 0 }
 // kills. It is one of the two places structure is spent.
 func (a *Actor) takeHit(attacker *Actor) {
 	attacker.SwingHit = true
+	a.alerted(attacker)
 	a.pressured()
 	cost := a.hitCost()
 	a.HitRun = min(a.HitRun+1, HitRunCapped)
@@ -1170,6 +1138,7 @@ func (a *Actor) takeHit(attacker *Actor) {
 // hit would have cost.
 func (a *Actor) confirmBlock(attacker *Actor) {
 	attacker.SwingHit = true
+	a.alerted(attacker)
 	a.pressured()
 	a.endHitRun() // any attack stopped is the run broken, block-all included
 	if a.Updown == 3 {
@@ -1495,7 +1464,7 @@ func (a *Actor) enterRunJumpState() bool {
 	}
 	a.spendEnergy(EnergyRunJump)
 	a.State = StateRunJump
-	a.SetAnim("resources/threefour/run-jump.png", AnimOptions{animDuration: 0.5, totalFrames: 6, once: true, reset: true})
+	a.SetAnim("resources/threefour/run-jump.png", AnimOptions{animDuration: RunJumpSeconds, totalFrames: RunJumpFrames, once: true, reset: true})
 	return true
 }
 
@@ -1554,7 +1523,7 @@ func (a *Actor) enterFallState() {
 
 func (a *Actor) enterJumpStartState() {
 	a.State = StateJumpStart
-	a.SetAnim("resources/threefour/jump-start.png", AnimOptions{animDuration: 0.7, totalFrames: 13, once: true, animYOffset: -48})
+	a.SetAnim("resources/threefour/jump-start.png", AnimOptions{animDuration: JumpStartSeconds, totalFrames: JumpStartFrames, once: true, animYOffset: -48})
 }
 
 func (a *Actor) Interp(alpha float32) {

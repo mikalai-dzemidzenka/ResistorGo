@@ -42,6 +42,10 @@ func abs(x float32) float32 {
 	return math.Float32frombits(math.Float32bits(x) &^ (1 << 31))
 }
 
+func sqrtf(x float32) float32 {
+	return float32(math.Sqrt(float64(x)))
+}
+
 func aabb(a, b rl.Rectangle) bool {
 	return a.X < b.X+b.Width && a.X+a.Width > b.X && a.Y < b.Y+b.Height && a.Y+a.Height > b.Y
 }

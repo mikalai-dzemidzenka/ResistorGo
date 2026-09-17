@@ -430,22 +430,25 @@ func TestClimbRefusesToTurn(t *testing.T) {
 		}
 	}
 
-	// the rule belongs to the state, not to the player's keys: a bot that
-	// wants to face a target the other way is refused the same turn
+	// The rule belongs to the state, not to the player's keys: a bot that wants
+	// to turn is refused the same turn. A bot only ever turns toward somewhere
+	// it means to go, and the one place that can be behind it is the spot it
+	// last saw a fighter at - so that is what asks for the turn here.
+	floor()
 	w := NewWorld(true)
 	bot := w.Spawn(rl.Vector2{X: 100}, false)
-	w.Spawn(rl.Vector2{}, true) // its nearest, well to the left
+	bot.Bot.mark(rl.Vector2{}) // last seen well to the bot's left
 	bot.State, bot.Orientation = StateClimb, 1
 	botInput(bot)
 	if bot.Orientation != 1 {
 		t.Errorf("a bot turned to face %d mid-climb", bot.Orientation)
 	}
 
-	// and off the ledge the same bot turns as it always did
+	// and off the ledge the same bot turns to go and look
 	bot.State = StateIdle
 	botInput(bot)
 	if bot.Orientation != -1 {
-		t.Errorf("out of the climb the bot faces %d, want it turned to its target", bot.Orientation)
+		t.Errorf("out of the climb the bot faces %d, want it turned toward where it last saw someone", bot.Orientation)
 	}
 }
 

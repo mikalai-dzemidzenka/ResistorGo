@@ -29,6 +29,13 @@ const (
 	NetDedicated
 )
 
+// LevelPath is the level the game plays. It is the one level there has ever
+// been, unless a development build was given another with -level: a test course
+// of walls, ledges and holes is worth playing a bot against, and is not worth
+// putting into the level people are actually building. Loading and saving both
+// go through it, so a level opened this way cannot be saved over level_1.json.
+var LevelPath = "level_1.json"
+
 var (
 	Debug                = DevTools
 	GameTimeSec          float64
@@ -131,7 +138,7 @@ func Game() {
 	defer shutdownNet()
 
 	LE = NewLevelEditor(39, 83)
-	LE.LoadLevel("level_1.json")
+	LE.LoadLevel(LevelPath)
 
 	for !rl.WindowShouldClose() && !quit {
 		if DevTools && rl.IsKeyPressed(rl.KeyGrave) {
@@ -304,7 +311,7 @@ func runLevel(dt float32) {
 		WhiteShader = rl.LoadShaderFromMemory("", fsWhite)
 		OutlineShader = rl.LoadShaderFromMemory("", fsOutline)
 		loadRimShader()
-		LE.LoadLevel("level_1.json")
+		LE.LoadLevel(LevelPath)
 
 		Sh = loadShaders()
 		// 512 is the resolution every light has always been drawn at; radius,
