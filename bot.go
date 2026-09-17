@@ -365,6 +365,16 @@ const (
 	// How far ahead it reads the ground for holes. Far enough to commit a
 	// run-jump before the edge arrives, whatever the speed.
 	botLook = 96
+	// How much room a bot wants behind a gap it means to jump: the ground it
+	// takes to get up to a run from a standstill, plus the ground the run-jump
+	// spends winding up. Derived, so retuning the acceleration or the animation
+	// carries it along.
+	//
+	// A gap is crossed by the running jump or not at all. The standing jump is
+	// no use for one: it winds up for the best part of a second, on its feet,
+	// and a fighter walking at an edge for that long is over it before the jump
+	// ever leaves the ground.
+	botRunUp = RunReach*RunReach/(2*DefaultAcc) + RunReach*RunJumpWindupTicks/60
 )
 
 // clears reports whether a jump that rises rise pixels gets the bot onto a wall
@@ -392,6 +402,14 @@ func (a *Actor) running() bool { return a.State == StateRun }
 // the bot slides into it having decided not to.
 func (a *Actor) brake() float32 {
 	return a.Speed.X * a.Speed.X / (2 * a.Friction)
+}
+
+// roomBehind reports whether the ground behind the bot runs on far enough to
+// take a run-up on. Backing off into a second hole would trade one gap it
+// cannot cross for one it falls into.
+func (a *Actor) roomBehind(dir int8) bool {
+	_, hole := a.edgeAhead(-dir, botRunUp, botDrop)
+	return !hole
 }
 
 // step is what a bot means to do with its feet this tick: which way to walk,
@@ -455,32 +473,48 @@ func botStep(a *Actor, goal rl.Vector2) step {
 	// hole at all, which is how following a target down a ledge comes for free.
 	if edge, ok := a.edgeAhead(dir, botLook+a.brake(), botDrop); ok {
 		gap := (edge - a.front(dir)) * float32(dir)
-		run, air := a.running() && a.canRunJump(), float32(JumpAirTicks)
-		if run {
-			air = RunJumpAirTicks
+		// Only the running jump crosses a gap, so what matters is the speed the
+		// bot will be doing at the edge, not the speed it is doing while it
+		// decides - and whether that is a run at all.
+		speed := a.takeoff(gap)
+		reaches := func(v float32) bool {
+			_, ok := a.landingBeyond(dir, edge, a.reachAt(v, RunJumpAirTicks), botDrop)
+			return ok
 		}
-		if _, ok := a.landingBeyond(dir, edge, a.reachAt(a.takeoff(gap), air), botDrop); !ok {
-			// Nothing to land on. Stop pressing forward while there is still
-			// room to coast to a halt, which brings the bot to rest at the edge
-			// rather than over it - friction takes back very nearly what the
-			// acceleration gave, so it comes to rest a stride short of it.
+		switch {
+		case a.canRunJump() && speed >= RunReach && reaches(speed):
+			// Press early enough that the push-off frame comes before the edge.
+			if gap <= a.reach(RunJumpWindupTicks)+probeStep {
+				return step{dir: dir, jump: true}
+			}
+			return step{dir: dir}
+
+		case a.canRunJump() && reaches(MaxSpeed) && gap < botRunUp && a.roomBehind(dir):
+			// It could clear this at a run and cannot from here: there is not
+			// enough ground left to get up to one. So back away from the edge
+			// far enough to take a run at it. Backing off turns the bot and
+			// costs it sight of whatever it was after, but the spot it last saw
+			// that thing at is still across the gap, so it turns round and comes
+			// back the moment it has the room.
+			return step{dir: -dir}
+
+		default:
+			// Nothing to land on, or no way to get up the speed. Stop pressing
+			// forward while there is still room to coast to a halt, which
+			// brings the bot to rest at the edge rather than over it - friction
+			// takes back very nearly what the acceleration gave, so it comes to
+			// rest a stride short of it.
 			//
-			// The standoff is what makes it hold there rather than creep: a bot
-			// at rest needs no room to stop, so with the braking distance alone
-			// it would press forward again the moment it halted.
+			// The standoff is a fixed distance and not a braking distance: a
+			// threshold that moved with the speed has an equilibrium in it, and
+			// the bot found it, pressing and releasing on alternate ticks while
+			// going nowhere, because at that speed the step it takes is smaller
+			// than the pixel the position is truncated to.
 			if gap <= max(a.brake()+botAdjacent, botStandoff) {
 				return step{stop: true}
 			}
 			return step{dir: dir}
 		}
-		windup := a.reach(JumpWindupTicks)
-		if run {
-			windup = a.reach(RunJumpWindupTicks)
-		}
-		if gap <= windup+probeStep {
-			return step{dir: dir, jump: true}
-		}
-		return step{dir: dir}
 	}
 
 	return step{dir: dir}

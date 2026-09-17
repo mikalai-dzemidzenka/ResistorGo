@@ -205,3 +205,52 @@ func TestBotMovesAgainWhenTheTargetBecomesReachable(t *testing.T) {
 		t.Errorf("with the target back on its own floor the bot answers %+v, want it walking", s)
 	}
 }
+
+// A bot that finds itself too close to a gap to get up to a run backs away from
+// the edge, takes a run at it and crosses. Standing at the edge deciding it
+// cannot make it - which is true, from a standstill a stride away - and then
+// never moving again is the failure this guards: the answer has to be to go and
+// get the room, because a gap is crossed by the running jump or not at all.
+func TestBotBacksOffToTakeARunAtAGap(t *testing.T) {
+	// floor to x=288, a 56px gap, floor again from x=344
+	level := append(row(-480, 48, 16), row(344, 48, 20)...)
+	bot := loneBot(t, level, rl.Vector2{X: 240}) // a stride from the edge, at rest
+	goal := rl.Vector2{X: 420}
+	bot.Update(float32(FixedTimeStep)) // one tick to put it on its feet
+	if s := botStep(bot, goal); s.dir != -1 {
+		t.Fatalf("from a standstill by the edge the bot answers %+v, want it backing off", s)
+	}
+	backedOff := false
+	for range 900 {
+		bot.Input = bot.walk(Input{Updown: bot.Updown}, goal)
+		bot.Update(float32(FixedTimeStep))
+		if bot.Pos.X < 200 {
+			backedOff = true
+		}
+		if bot.Pos.Y > 100 {
+			t.Fatalf("the bot went into the gap at x=%v", bot.Pos.X)
+		}
+		if bot.OnGround && bot.Pos.X > 344 {
+			if !backedOff {
+				t.Error("the bot crossed without ever backing off for a run-up")
+			}
+			return
+		}
+	}
+	t.Errorf("the bot never crossed: x=%v y=%v", bot.Pos.X, bot.Pos.Y)
+}
+
+// It does not back off into a second hole to get a run at the first.
+func TestBotDoesNotBackOffIntoAnotherGap(t *testing.T) {
+	// a short island: nothing before x=240, floor 240..336, a gap, floor beyond
+	level := append(row(240, 48, 2), row(440, 48, 20)...)
+	bot := loneBot(t, level, rl.Vector2{X: 290})
+	goal := rl.Vector2{X: 520}
+	for range 600 {
+		bot.Input = bot.walk(Input{Updown: bot.Updown}, goal)
+		bot.Update(float32(FixedTimeStep))
+		if bot.Pos.Y > 100 {
+			t.Fatalf("the bot backed off the island at x=%v", bot.Pos.X)
+		}
+	}
+}

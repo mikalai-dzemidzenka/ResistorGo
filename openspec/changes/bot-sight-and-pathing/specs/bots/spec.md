@@ -124,7 +124,7 @@ A bot moving toward something SHALL read the level immediately in front of it an
 - A **rise it can step onto** SHALL be walked onto, with no jump.
 - A **wall it can clear** SHALL be jumped: a running jump when the bot is running and can afford one, a standing jump otherwise. Where the jump brings the bot to a ledge it can take hold of, it SHALL climb it as any fighter does.
 - A **wall it cannot clear** SHALL stop the bot. It SHALL NOT stand pressed into the wall walking on the spot.
-- A **gap it can cross** — one with ground on the far side within a jump — SHALL be jumped.
+- A **gap it can cross** — one with ground on the far side within a running jump — SHALL be jumped. A gap SHALL be crossed by the running jump alone: the standing jump SHALL NOT be used for one. Where the bot is too close to the edge to reach a run before it, and the far side is within a running jump made at speed, the bot SHALL back away from the edge far enough to take a run at it and then cross — unless backing away would take it into another gap, in which case it SHALL stop as it would at any gap it cannot cross.
 - A **gap it cannot cross** SHALL stop the bot at the near edge. A bot SHALL NOT walk off a ledge into a gap it has no way out of.
 
 A bot SHALL jump only to get somewhere: it SHALL NOT jump while the way ahead is clear, and SHALL NOT jump at a wall or a gap it has already been found unable to clear.
@@ -146,6 +146,14 @@ None of this SHALL cost a bot anything a player would not pay. A running jump SH
 #### Scenario: A crossable gap is jumped
 - **WHEN** a bot moving toward a target meets a gap in the floor with ground on the far side within its jump
 - **THEN** it jumps across and keeps going
+
+#### Scenario: It goes back for a run-up rather than giving up at the edge
+- **WHEN** a bot stands close enough to a crossable gap that it could not reach a run before the edge
+- **THEN** it backs away from the edge, comes at the gap at a run and crosses it, rather than standing there having decided it cannot
+
+#### Scenario: It does not back into another gap
+- **WHEN** the ground behind a bot runs out before it has the room for a run-up
+- **THEN** it stays where it is and stops at the gap, rather than backing off the ledge behind it
 
 #### Scenario: A bottomless gap is not walked into
 - **WHEN** a bot moving toward a target meets a gap it cannot clear

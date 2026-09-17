@@ -44,6 +44,12 @@
 - [x] 6b.2 Make a searching bot turn toward the remembered spot even when there is nowhere to step, so a blow landed from point-blank behind still spins it round; verify by the turn test above
 - [x] 6b.3 Verify the limits: a blocked attack alerts the same, a hit does not make the attacker visible (it searches where the blow came from and gives up), a fighter already in view outranks a blow from behind, and a human is never steered
 
+## 6c. Gaps are crossed at a run
+
+- [x] 6c.1 Found in play: a bot that reached a crossable gap slowly stopped a stride short and never moved again — from a standstill it cannot predict enough speed at the edge, and a standing jump cannot cross a gap at all, because its 42-tick wind-up walks the fighter off the edge before take-off
+- [x] 6c.2 Judge a gap by the running jump alone: it must be affordable, and the speed predicted at the edge must be a run. Where the far side is within a run-up jump but the room is not there, back away from the edge by `botRunUp` (derived from `RunReach`, `DefaultAcc` and the run-jump wind-up) and come at it again; verify `TestBotBacksOffToTakeARunAtAGap`
+- [x] 6c.3 Never back off into a second hole; verify `TestBotDoesNotBackOffIntoAnotherGap`
+
 ## 7. Verify in play
 
 - [x] 7.1 Run the full suite with `go test ./...` and confirm every existing test — combat, energy, structure, net, spectator, menu — still passes
