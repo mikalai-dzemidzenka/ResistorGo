@@ -61,6 +61,11 @@ const (
 	BlockStructure     = 0.5
 	StructureRegen     = 1  // per second, once calm
 	StructureCalmTicks = 90 // 1.5s without a loss before it refills
+	// What a kill pays the winner back. Two hits' worth: enough to be felt
+	// going into whoever is next and nowhere near a heal, since a fight is
+	// twelve hits long. Derived from the cost of a hit, so retuning that
+	// carries the reward along with it.
+	KillStructure = 2 * HitStructure
 
 	// Energy is what a fighter spends to attack, counted in whole points.
 	// Every swing costs the same, a block at the attacker's height pays back,
@@ -1216,6 +1221,9 @@ func (a *Actor) enterDeathState(attacker *Actor) {
 	if attacker != nil {
 		attacker.FreezeTicks = HitStopTicks
 		attacker.restoreEnergy(MaxEnergy) // a kill puts the winner straight back in the fight
+		// and some of the beating it took getting there back. The refill wait is
+		// left alone: the reward is for the kill, not a reason to stop fighting.
+		attacker.restoreStructure(KillStructure)
 	}
 	a.SetAnim("resources/threefour/death_fall.png", AnimOptions{animDuration: 0.6, totalFrames: 9, once: true})
 }

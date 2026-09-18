@@ -408,3 +408,43 @@ func TestPredictedWorldSpendsNoStructure(t *testing.T) {
 		}
 	}
 }
+
+// A kill pays the winner back a little of what it cost them, whichever way the
+// killing attack got through, and never past the cap. It leaves the refill wait
+// where it was, and a hit that does not kill pays nothing.
+func TestKillRestoresTheKillersStructure(t *testing.T) {
+	_, att, def := swing(t, 1)
+	att.Structure, att.CalmTicks = MaxStructure/2, 7
+	def.Structure = 100
+	def.takeHit(att)
+	if def.State == StateDeath {
+		t.Fatal("the first hit was meant to leave the defender standing")
+	}
+	if att.Structure != MaxStructure/2 {
+		t.Errorf("a hit that killed nobody paid the attacker %v structure", att.Structure-MaxStructure/2)
+	}
+
+	def.Structure = 0.01
+	def.takeHit(att)
+	if def.State != StateDeath {
+		t.Fatalf("the hit did not kill: defender in state %v", def.State)
+	}
+	if want := float32(MaxStructure/2 + KillStructure); att.Structure != want {
+		t.Errorf("a landed kill left the attacker at %v structure, want %v", att.Structure, want)
+	}
+	if att.CalmTicks != 7 {
+		t.Errorf("the kill moved the attacker's refill wait to %d, want 7", att.CalmTicks)
+	}
+
+	// through a block-all, the other way a fighter dies
+	_, att, def = swing(t, 3)
+	att.Structure = MaxStructure - KillStructure/2
+	def.Structure = BlockAllStructure / 2
+	def.confirmBlock(att)
+	if def.State != StateDeath {
+		t.Fatalf("the block-all did not break: defender in state %v", def.State)
+	}
+	if att.Structure != MaxStructure {
+		t.Errorf("breaking a block-all left the winner at %v structure, want the cap of %v", att.Structure, float32(MaxStructure))
+	}
+}
