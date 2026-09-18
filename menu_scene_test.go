@@ -53,7 +53,7 @@ func TestSceneColorsArePaletteReds(t *testing.T) {
 		"the sky":       {menuSky, menuSkyTop},
 		"the sun":       nil,
 		"the ground":    {menuGround},
-		"the rain":      {menuRain},
+		"the rain":      {menuRain, menuRainTip},
 		"the models":    {menuModelHead, menuModelJab, menuModelKick},
 		"the grid ramp": nil,
 		"the chrome": {menuNeon, menuAccent, menuBright, menuMuted, menuDim,

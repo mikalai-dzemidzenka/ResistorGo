@@ -67,6 +67,22 @@ raygui's `DEFAULT` control propagates a base property to every control, so eleve
 
 Alternative: a second `.rgs` style file for the menu, loaded on entering the menu. Rejected for now — it is another asset to keep in step with the palette by hand, and the eleven properties are the whole difference.
 
+### The rain's weight, as tuned
+
+The first pass was too faint to read in play: the scanline gaps cut most of each streak, and a shower that looked present in a still frame disappeared in motion. The values it settled at:
+
+```
+  streaks at once        160        (was 90)
+  body alpha            0.65        (was 0.45)
+  streak length       12..52 scene px  (was 10..46)
+  tip                      3 px, in a brighter red than the body
+                                    (was 2 px in the body's own red)
+```
+
+The tip is its own declared colour rather than the body's, so a streak has a lit head and a dim trail — which is what makes it read as falling rather than as a static dash. It is a palette red like everything else, so the scene's red rule still covers it.
+
+The sweeping band was left where it was. Nothing about it read wrong; the rain was the whole of the problem.
+
 ### The panel's geometry is constants, and a test holds the column inside it
 
 The panel is a rectangle between the two rules, inset from the left edge, and its bounds are constants next to the row geometry. A windowless test checks that the header, the logo at the scale the logo picks, all six rows with their labels and the error line are inside it, and that the panel is inside the rules. That is the same trick the layout test already played on the 560-pixel column, extended to the thing that is now actually drawn.
@@ -88,7 +104,3 @@ Alternatives weighed: inset the rules to the panel's width, which keeps the old 
 ## Migration Plan
 
 Nothing to migrate. No asset, save file or protocol changes: `settings.json`, the level and the network protocol are untouched. Reverting is reverting the three source files.
-
-## Open Questions
-
-- Whether the rain wants to be heavier. It is deliberately faint — the scanline gaps cut most of each streak — and this is the kind of thing that only reads right in motion, not in a capture.

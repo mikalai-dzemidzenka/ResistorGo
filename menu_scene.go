@@ -38,7 +38,8 @@ var (
 	menuSkyTop    = EndesgaPalette[63]    // the sky lifts to this at the top of the window
 	menuSunColors = []int{58, 59, 60, 61} // the top of the sun down
 	menuGround    = EndesgaPalette[17]
-	menuRain      = EndesgaPalette[61] // the streaks falling over the scene
+	menuRain      = EndesgaPalette[61] // the body of a streak falling over the scene
+	menuRainTip   = EndesgaPalette[59] // its tip, where the streak catches the neon
 	menuModelHead = EndesgaPalette[60]
 	menuModelJab  = EndesgaPalette[59]
 	menuModelKick = EndesgaPalette[58]
@@ -92,7 +93,7 @@ func neonColor(role neonRole, t float64) rl.Color {
 type menuDrop struct{ x, y, speed, length float32 }
 
 // menuDropCount is how many streaks fall at once.
-const menuDropCount = 90
+const menuDropCount = 160
 
 var (
 	// menuDrops is the rain, laid out once from a fixed seed so every run gets
@@ -113,7 +114,7 @@ func makeMenuDrops(seed int64) []menuDrop {
 			x:      r.Float32(),
 			y:      r.Float32(),
 			speed:  0.15 + r.Float32()*0.35,
-			length: menuScaled(5 + r.Float32()*18),
+			length: menuScaled(6 + r.Float32()*20),
 		}
 	}
 	return drops
@@ -186,7 +187,7 @@ func drawNeonGrid(t float64, col rl.Color) {
 // tip, the way rain catches the neon. A streak that has fallen past the bottom
 // comes back above the top in a new column.
 func drawMenuRain(dt float32) {
-	tip := menuScaled(2)
+	tip := menuScaled(3)
 	for i := range menuDrops {
 		d := &menuDrops[i]
 		d.y += d.speed * dt
@@ -195,8 +196,8 @@ func drawMenuRain(dt float32) {
 			d.x = menuRainRand.Float32()
 		}
 		x, y := d.x*menuSceneW, d.y*menuSceneH
-		menuVLine(x, y, d.length, rl.Fade(menuRain, 0.45))
-		menuVLine(x, y+d.length-tip, tip, menuRain)
+		menuVLine(x, y, d.length, rl.Fade(menuRain, 0.65))
+		menuVLine(x, y+d.length-tip, tip, menuRainTip)
 	}
 }
 

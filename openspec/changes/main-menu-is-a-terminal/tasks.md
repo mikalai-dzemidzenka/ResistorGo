@@ -1,7 +1,7 @@
 The code for groups 1 to 5 has shipped: it was written and verified in one
 session, and those tasks are marked for what was actually checked. What is left
-open in group 6 is what a capture cannot answer — the keys, and the two things
-that are a matter of eye — and the release build.
+open in group 6 is what a capture cannot answer: the keys, the editor's style
+after a match, and the run of the release build.
 
 ## 1. The chrome's colours
 
@@ -39,5 +39,5 @@ that are a matter of eye — and the release build.
 - [ ] 6.1 Play the menu (`go run ./cmd`) and work the main screen with the keyboard alone: W/S and the arrows wrapping at both ends, Enter and Space taking the row, and the highlight following the mouse the moment it moves over another row without the two ever both being lit.
 - [ ] 6.2 Press Escape on Host Game with an error shown, on Join Game mid-edit of the address, on Options after moving the music volume, and on Connecting; confirm each leaves exactly as its Back row does and that no field comes back still being edited.
 - [ ] 6.3 Start a match, open the level editor and confirm its widgets are in the editor's dark style, not the menu's reds.
-- [ ] 6.4 Tune the rain's weight and the sweeping band's speed and alpha by eye in play — they read differently in motion than in a capture — and record any values that change in design.md, closing its open question.
+- [x] 6.4 Tune the rain's weight and the sweeping band's speed and alpha by eye in play — they read differently in motion than in a capture — and record any values that change in design.md, closing its open question. The rain was judged too faint in the release build and was raised (streaks, body alpha, length, and a brighter tip of its own); the new weight was checked in a capture of the development build. The band was left as it was. Verified by the values recorded in design.md and by `go test ./` passing with the rain's tip named in the scene's red-set test.
 - [ ] 6.5 Build the release binary with `.\build.ps1` and confirm it packs, then run it and confirm the menu is the same as the development build's.
