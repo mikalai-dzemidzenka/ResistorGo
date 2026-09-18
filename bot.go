@@ -256,6 +256,33 @@ func (a *Actor) landingBeyond(dir int8, edgeX, reach, drop float32) (float32, bo
 	return 0, false
 }
 
+// How a bot fights once a fighter is in reach of its swing. Feel numbers, like
+// the sight ones, to be turned by eye in play.
+const (
+	// The wait between one attack and the next, plus a random part of this
+	// spread so the pressure does not arrive on a metronome. Short: a bot that
+	// has walked into reach is there to fight, and the swing and the recovery
+	// after it already take a third of a second on their own.
+	BotSwingWaitTicks  = 10
+	BotSwingWaitSpread = 14
+	// How many blows an attack runs to: one, and then up to this many more,
+	// drawn when the attack opens. Decided once rather than rolled per tick -
+	// a roll the whole length of a blow is a roll a bot never loses, and a
+	// chain that never broke ran until the pool did.
+	BotChainBlows = 3
+	// What it keeps in the pool, in swings. It opens an attack only with this
+	// much to spend and presses on into a chain while this much is left, so the
+	// pressure comes in bursts with a gap after each one: swinging holds the
+	// refill off entirely, so a bot that never stopped would fight on an empty
+	// pool for the rest of the match.
+	BotOpenSwings  = 8
+	BotChainSwings = 2
+	// How often the guard drifts while nothing is being thrown: one tick in
+	// this. It does not drift mid-chain - changing height there throws a
+	// transition animation that costs more time than the change is worth.
+	BotGuardDriftOdds = 61
+)
+
 // botMind is everything a bot carries from one tick to the next: where it last
 // saw the fighter it was after, and how long it will go on looking there.
 //
@@ -266,6 +293,8 @@ type botMind struct {
 	hasLast   bool // something was seen at lastSeen; the zero vector is a real position
 	searching bool
 	patience  uint16 // ticks left to reach the spot, then to stand and look
+	swingWait uint16 // ticks left before it opens another attack
+	chainLeft uint8  // blows still to press in the attack under way
 }
 
 // forget puts the bot back to having nothing in mind.
@@ -716,26 +745,45 @@ func botInput(a *Actor) Input {
 		return a.Input
 	}
 	in := Input{Updown: a.Updown}
-	if rand.Int()%61 == 0 {
-		in.Updown = uint8(rand.Int() % 3)
+	// Both of these belong between attacks rather than during one. The wait
+	// counted while the swing was still playing was always spent by the time
+	// the bot could act on it, so the gap it is there to leave never arrived;
+	// and a guard that moved mid-chain threw a transition animation that cost
+	// more than the change was worth.
+	if a.State != StateAttack {
+		if a.Bot.swingWait > 0 {
+			a.Bot.swingWait--
+		}
+		if rand.Int()%BotGuardDriftOdds == 0 {
+			in.Updown = uint8(rand.Int() % 3)
+		}
 	}
 
 	if t := a.seen(); t != nil {
 		// Seeing anything at all ends a search before its counter is ever
 		// read: what is there now beats where something used to be.
 		a.Bot.mark(t.Pos)
-		// Close enough to swing at: stop walking into it and start throwing.
-		// Close is both ways about: a fighter standing on a ledge overhead is
-		// within arm's reach across the floor and nowhere near the end of a
-		// swing, and a bot that only measured the one distance would stand
-		// under it throwing at the air instead of climbing up to it.
-		const near = 50
-		if abs(t.Pos.X-a.Pos.X) <= near && abs(t.Pos.Y-a.Pos.Y) <= a.CollisionBox.Height {
+		// In reach of a swing: stop walking into it and start throwing. Reach
+		// is the rectangles, not a distance - a fighter standing on a ledge
+		// overhead is within arm's reach across the floor and nowhere near the
+		// end of a swing, and a bot that measured the distance alone would
+		// stand under it throwing at the air instead of climbing up to it.
+		//
+		// Only from its feet: there is no swing in the air to throw, and a bot
+		// that stopped steering mid-jump to press one flew on wherever the arc
+		// was already taking it.
+		if a.OnGround && a.inSwingRange(t) {
 			a.face(facing(t.Pos.X - a.Pos.X))
-			if rand.Int()%61 == 3 {
-				in.Attack = true
-			}
+			in.Attack = a.pressAttack()
 			return in
+		}
+		if a.tooClose(t) {
+			// Walk on through and out the other side, where the arm covers the
+			// body again. A fighter faces the way it walks, so stepping back is
+			// turning its back on what it is fighting: it would lose sight of it
+			// on the tick it turned, and its own memory of the spot would be
+			// where it is already standing, so it would stop there for good.
+			return a.walkStep(in, step{dir: facing(t.Pos.X - a.Pos.X)})
 		}
 		return a.walk(in, t.Pos)
 	}
@@ -802,6 +850,66 @@ func (a *Actor) walkStep(in Input, s step) Input {
 	}
 	in.Jump = s.jump
 	return in
+}
+
+// inSwingRange reports whether a swing thrown now would reach t: the box the
+// bot's guard height throws, carried forward by the dash the swing takes,
+// against the collision box a hit is decided against.
+//
+// It asks the rectangles the hit test itself asks rather than a distance typed
+// in by hand, so a bot stops where its swings actually land. The distance it
+// used to stop at was half again the reach of the arm, which is how a bot could
+// press the attack all match and hit nothing at all.
+func (a *Actor) inSwingRange(t *Actor) bool {
+	o := facing(t.Pos.X - a.Pos.X)
+	box, ok := a.attackBoxFacing(a.Updown, a.Pos, o)
+	if !ok {
+		// guarding with block-all: no swing to measure, so measure the one it
+		// would throw the moment it stopped guarding
+		box, _ = a.attackBoxFacing(1, a.Pos, o)
+	}
+	box.X += float32(o) * AttackDash
+	return aabb(box, t.collisionRect())
+}
+
+// tooClose reports the other way a swing misses: not the arm falling short but
+// the arm overshooting, the fighter being under the bot rather than in front of
+// it. The arm covers the half of the sprite the bot faces, so two fighters on
+// the same pixel column have nothing to hit.
+//
+// It is one pixel wide - a step either side and the arm covers the body again -
+// but the lunge that comes with every swing walks the bot four pixels in, so it
+// is a pixel a bot can land on and, without an answer to it, stand on for the
+// rest of the match.
+func (a *Actor) tooClose(t *Actor) bool {
+	return !a.inSwingRange(t) && aabb(a.collisionRect(), t.collisionRect())
+}
+
+// pressAttack decides whether the bot presses the attack this tick, and arms
+// the wait before the next time it may.
+//
+// Mid-swing the press is what queues the next blow of the chain, so this is
+// both how an attack is opened and how one is carried on. What holds the
+// pressure back is the pool: opening costs a reserve the bot keeps, and a chain
+// runs only while there is still something to spend, because swinging stops the
+// refill outright and a bot that never let go would spend the match empty.
+func (a *Actor) pressAttack() bool {
+	if a.State == StateAttack {
+		// One press per blow: while one is queued the answer for this blow is
+		// already given, and pressing again every tick of it is what turned a
+		// chain that should break into one that never did.
+		if a.AttackQueued || a.Bot.chainLeft == 0 || a.Energy < BotChainSwings*EnergySwing {
+			return false
+		}
+		a.Bot.chainLeft--
+		return true
+	}
+	if a.Bot.swingWait > 0 || a.Energy < BotOpenSwings*EnergySwing {
+		return false
+	}
+	a.Bot.swingWait = BotSwingWaitTicks + uint16(rand.Int()%BotSwingWaitSpread)
+	a.Bot.chainLeft = uint8(rand.Int() % BotChainBlows) // the blows after this one
+	return true
 }
 
 // facing is the way to turn to look at something dx away.

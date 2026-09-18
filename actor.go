@@ -1282,6 +1282,14 @@ func (a *Actor) updateAttacked() {
 // and interpolation cannot reach hit resolution. Block-all (3) has no attack,
 // and reports none.
 func (a *Actor) attackBoxAt(updown uint8, pos rl.Vector2) (rl.Rectangle, bool) {
+	return a.attackBoxFacing(updown, pos, a.Orientation)
+}
+
+// attackBoxFacing is the box a swing would cover were the fighter facing o. The
+// arm covers the half of the sprite in front of it, so the two facings reach
+// opposite ways from the same position. attackBoxAt is this for the way the
+// fighter is facing now.
+func (a *Actor) attackBoxFacing(updown uint8, pos rl.Vector2, o int8) (rl.Rectangle, bool) {
 	var box rl.Rectangle
 	switch updown {
 	case 0:
@@ -1294,7 +1302,7 @@ func (a *Actor) attackBoxAt(updown uint8, pos rl.Vector2) (rl.Rectangle, bool) {
 		return rl.Rectangle{}, false
 	}
 	return rl.Rectangle{
-		X:      pos.X + box.X + 12*float32(a.Orientation+1),
+		X:      pos.X + box.X + 12*float32(o+1),
 		Y:      pos.Y + box.Y,
 		Width:  box.Width,
 		Height: box.Height,
