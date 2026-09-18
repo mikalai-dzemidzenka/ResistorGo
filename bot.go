@@ -103,6 +103,12 @@ func (a *Actor) front(dir int8) float32 {
 	return l + a.CollisionBox.Width
 }
 
+// support is the column a fighter stands or falls by: the middle of its
+// collision box, which is the one checkCollision looks for ground under.
+func (a *Actor) support() float32 {
+	return a.Pos.X + a.CollisionBox.X + a.CollisionBox.Width/2
+}
+
 // feet and head are the bottom and top of the collision box.
 func (a *Actor) feet() float32 { return a.Pos.Y + a.CollisionBox.Y + a.CollisionBox.Height }
 func (a *Actor) head() float32 { return a.Pos.Y + a.CollisionBox.Y }
@@ -189,19 +195,47 @@ func groundAt(x, feetY, drop float32) (float32, bool) {
 	return top, found
 }
 
+// solidAt reports whether the column at x has anything at all in it that stops
+// the bot dropping out of the world: ground it can stand on, or a rise it
+// cannot, which is a wall and somebody else's problem. Only an empty column is
+// a hole.
+//
+// This is the question edgeAhead asks, and it is not the one groundAt answers.
+// A step up is not ground the bot can stand on from here, but a bot that read
+// it as a hole would brake at the foot of a staircase - and, in the air with no
+// wall check in front of it, brake backwards off the ledge it just left.
+func solidAt(x, feetY, drop float32) bool {
+	for _, c := range LE.solids {
+		if x < c.X || x >= c.X+c.Width {
+			continue
+		}
+		if c.Y <= feetY+drop {
+			return true
+		}
+	}
+	return false
+}
+
 // edgeAhead returns the last column ahead of the bot that still has ground
 // under it before the ground runs out, and whether it runs out at all within
 // lookahead. A bot standing over nothing reports no edge: it is already falling
 // and the question does not arise.
+//
+// Measured from where the fighter is actually held up, not from the leading
+// face of its collision box. A fighter stands or falls by the middle of that
+// box - it is the one column checkCollision looks under - and the face is
+// half a body ahead of it. Probing from the face, a bot walking at a ledge
+// lost the hole the moment the face crossed it, which is several pixels before
+// it would fall, and walked those last pixels with nothing telling it to stop.
 func (a *Actor) edgeAhead(dir int8, lookahead, drop float32) (float32, bool) {
-	from := a.front(dir)
+	from := a.support()
 	last := from
-	if _, ok := groundAt(from, a.feet(), drop); !ok {
+	if !solidAt(from, a.feet(), drop) {
 		return 0, false
 	}
 	for d := float32(probeStep); d <= lookahead; d += probeStep {
 		x := from + d*float32(dir)
-		if _, ok := groundAt(x, a.feet(), drop); !ok {
+		if !solidAt(x, a.feet(), drop) {
 			return last, true
 		}
 		last = x
@@ -464,8 +498,29 @@ func (a *Actor) brakeForHole(dir int8) (step, bool) {
 	if _, across := a.landingBeyond(dir, edge, a.reachAt(MaxSpeed, RunJumpAirTicks), botDrop); across {
 		return step{}, false
 	}
-	s := a.holdShortOf(dir, (edge-a.front(dir))*float32(dir))
+	s := a.holdShortOf(dir, (edge-a.support())*float32(dir))
 	return s, s.dir != dir
+}
+
+// downLedge is where a fighter would stand on the ground below the ledge the
+// bot is on, and whether there is one close enough ahead to drop to. It is the
+// other half of overWall: a fighter that goes down is lost the same way one
+// that goes up is, at the moment the ledge comes between them, and leaves the
+// same useless spot behind - the ground under the bot's own feet.
+func (a *Actor) downLedge() (rl.Vector2, bool) {
+	dir := a.Orientation
+	from := a.support()
+	for d := float32(probeStep); d <= botLook; d += probeStep {
+		x := from + d*float32(dir)
+		top, ok := groundAt(x, a.feet(), botDrop)
+		if !ok {
+			return rl.Vector2{}, false // a hole it cannot take, not a step down
+		}
+		if top > a.feet()+StepHeight {
+			return rl.Vector2{X: x - a.CollisionBox.X - a.CollisionBox.Width/2, Y: top - 48}, true
+		}
+	}
+	return rl.Vector2{}, false
 }
 
 // roomBehind reports whether the ground behind the bot runs on far enough to
@@ -543,7 +598,7 @@ func botStep(a *Actor, goal rl.Vector2) step {
 	// A hole in the ground: ground below within a drop it will take is not a
 	// hole at all, which is how following a target down a ledge comes for free.
 	if edge, ok := a.edgeAhead(dir, botLook+a.brake(), botDrop); ok {
-		gap := (edge - a.front(dir)) * float32(dir)
+		gap := (edge - a.support()) * float32(dir)
 		// Only the running jump crosses a gap, so what matters is the speed the
 		// bot will be doing at the edge, not the speed it is doing while it
 		// decides - and whether that is a run at all.
@@ -648,7 +703,15 @@ func (a *Actor) alerted(attacker *Actor) {
 // on nothing at all - it stands where it is, still drifting its guard, and it
 // does not turn. Turning toward something it cannot see would put that thing in
 // view on the next tick and the cone would mean nothing.
+//
+// A broken fighter does not think at all: it holds no key, looks at nothing and
+// remembers nothing while the fall plays out. Actor.Update drops a dead
+// fighter's command and face refuses a dead turn, so this is not what keeps the
+// body still - it is that a corpse has no business seeing.
 func botInput(a *Actor) Input {
+	if a.State == StateDeath {
+		return Input{}
+	}
 	if a.State == StateAttacked {
 		return a.Input
 	}
@@ -704,6 +767,11 @@ func botInput(a *Actor) Input {
 		// the tick it starts, with the quarry standing directly overhead and a
 		// wall the bot is pressed against hiding it for good.
 		if spot, ok := a.overWall(); ok {
+			a.Bot.lastSeen = spot
+			return a.walkStep(in, botStep(a, spot))
+		}
+		// And the same the other way: over the edge it went down.
+		if spot, ok := a.downLedge(); ok {
 			a.Bot.lastSeen = spot
 			return a.walkStep(in, botStep(a, spot))
 		}

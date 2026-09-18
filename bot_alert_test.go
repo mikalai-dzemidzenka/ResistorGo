@@ -123,3 +123,37 @@ func TestAPlayerIsNotAlertedByBeingHit(t *testing.T) {
 		t.Errorf("a human-controlled fighter was given something to think about: %+v", player.Bot)
 	}
 }
+
+// A fighter that has been broken stops being part of the fight, and that
+// includes which way it is looking: the fall it plays out cannot be turned
+// round by whatever its eyes would still have reported.
+func TestADeadBotDoesNotTurn(t *testing.T) {
+	bot, attacker := ambush(t)
+	bot.takeHit(attacker) // it now remembers where the blow came from
+	bot.enterDeathState(attacker)
+	for range 30 {
+		bot.Input = botInput(bot)
+		bot.Update(float32(FixedTimeStep))
+		if bot.Orientation != 1 {
+			t.Fatalf("the dead bot turned to face %d", bot.Orientation)
+		}
+	}
+}
+
+// And it does not think either: a corpse holds no key down and its memory of
+// where the fighter went stops being kept up.
+func TestADeadBotDoesNotThink(t *testing.T) {
+	bot, attacker := ambush(t)
+	bot.takeHit(attacker)
+	bot.enterDeathState(attacker)
+	mind := bot.Bot
+	for range 30 {
+		if in := botInput(bot); in != (Input{}) {
+			t.Fatalf("the dead bot asked for %+v, want no command at all", in)
+		}
+		bot.Update(float32(FixedTimeStep))
+	}
+	if bot.Bot != mind {
+		t.Errorf("the dead bot went on looking: %+v, want %+v", bot.Bot, mind)
+	}
+}

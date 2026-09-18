@@ -142,7 +142,7 @@
    "x": 1120,
    "y": 48
   },
-  "1196,248": {
+  "1196,48": {
    "collisionRects": [
     {
      "Height": 105,
@@ -153,9 +153,9 @@
    ],
    "resource": "resources/blocks/mn_block.png",
    "x": 1196,
-   "y": 248
+   "y": 48
   },
-  "1272,248": {
+  "1272,48": {
    "collisionRects": [
     {
      "Height": 105,
@@ -166,9 +166,9 @@
    ],
    "resource": "resources/blocks/mn_block.png",
    "x": 1272,
-   "y": 248
+   "y": 48
   },
-  "1348,248": {
+  "1348,48": {
    "collisionRects": [
     {
      "Height": 105,
@@ -179,7 +179,7 @@
    ],
    "resource": "resources/blocks/mn_block.png",
    "x": 1348,
-   "y": 248
+   "y": 48
   },
   "1424,248": {
    "collisionRects": [
@@ -194,7 +194,7 @@
    "x": 1424,
    "y": 248
   },
-  "1500,48": {
+  "1500,248": {
    "collisionRects": [
     {
      "Height": 105,
@@ -205,7 +205,7 @@
    ],
    "resource": "resources/blocks/mn_block.png",
    "x": 1500,
-   "y": 48
+   "y": 248
   },
   "152,48": {
    "collisionRects": [
@@ -220,7 +220,7 @@
    "x": 152,
    "y": 48
   },
-  "1576,48": {
+  "1576,248": {
    "collisionRects": [
     {
      "Height": 105,
@@ -231,9 +231,9 @@
    ],
    "resource": "resources/blocks/mn_block.png",
    "x": 1576,
-   "y": 48
+   "y": 248
   },
-  "1652,48": {
+  "1652,248": {
    "collisionRects": [
     {
      "Height": 105,
@@ -244,6 +244,45 @@
    ],
    "resource": "resources/blocks/mn_block.png",
    "x": 1652,
+   "y": 248
+  },
+  "1728,48": {
+   "collisionRects": [
+    {
+     "Height": 105,
+     "Width": 76,
+     "X": 0,
+     "Y": 0
+    }
+   ],
+   "resource": "resources/blocks/mn_block.png",
+   "x": 1728,
+   "y": 48
+  },
+  "1804,48": {
+   "collisionRects": [
+    {
+     "Height": 105,
+     "Width": 76,
+     "X": 0,
+     "Y": 0
+    }
+   ],
+   "resource": "resources/blocks/mn_block.png",
+   "x": 1804,
+   "y": 48
+  },
+  "1880,48": {
+   "collisionRects": [
+    {
+     "Height": 105,
+     "Width": 76,
+     "X": 0,
+     "Y": 0
+    }
+   ],
+   "resource": "resources/blocks/mn_block.png",
+   "x": 1880,
    "y": 48
   },
   "228,48": {

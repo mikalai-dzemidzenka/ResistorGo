@@ -50,11 +50,14 @@ func TestSceneColorsArePaletteReds(t *testing.T) {
 	}
 
 	used := map[string][]rl.Color{
-		"the sky":       {menuSky},
+		"the sky":       {menuSky, menuSkyTop},
 		"the sun":       nil,
 		"the ground":    {menuGround},
+		"the rain":      {menuRain},
 		"the models":    {menuModelHead, menuModelJab, menuModelKick},
 		"the grid ramp": nil,
+		"the chrome": {menuNeon, menuAccent, menuBright, menuMuted, menuDim,
+			menuPanelCol, menuRowFill, menuRowFillOn},
 	}
 	for _, i := range menuSunColors {
 		used["the sun"] = append(used["the sun"], EndesgaPalette[i])

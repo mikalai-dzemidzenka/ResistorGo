@@ -214,6 +214,9 @@ func enterLevel() {
 	Stage = StageLevel
 	Accumulator = 0
 	Spec = SpecCam{Follow: true, Pos: Cam.Camera2D.Target}
+	// the menu paints the raygui widgets in its own reds (menuWidgetStyle);
+	// the editor and the level HUD get the dark style back
+	loadStyle()
 	rl.DisableCursor()
 }
 

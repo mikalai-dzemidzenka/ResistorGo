@@ -116,8 +116,11 @@ func TestABotWithNoEnergyDoesNotCommitToARunJump(t *testing.T) {
 	bot.Energy = EnergyRunJump - 1
 	goal := rl.Vector2{X: 700}
 	for range 900 {
+		// Kept poor at the top of the tick, not the bottom: the pool refills a
+		// point every tick or two, so a bot topped up after its command was
+		// built could afford the jump by the time the next one was.
+		bot.Energy = EnergyRunJump - 1
 		bot.Input = bot.walk(Input{Updown: bot.Updown}, goal)
-		bot.Energy = EnergyRunJump - 1 // kept poor: it can never afford one
 		bot.Update(float32(FixedTimeStep))
 		if bot.Pos.Y > 100 {
 			t.Fatalf("a bot that cannot pay for a run-jump went into the gap: x=%v y=%v", bot.Pos.X, bot.Pos.Y)

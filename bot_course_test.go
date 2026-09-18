@@ -32,8 +32,8 @@ func loadCourse(t *testing.T) {
 
 func TestTestCourseLoads(t *testing.T) {
 	loadCourse(t)
-	if len(LE.solids) != 30 {
-		t.Errorf("the course has %d collision rectangles, want 30", len(LE.solids))
+	if len(LE.solids) != 33 {
+		t.Errorf("the course has %d collision rectangles, want 33", len(LE.solids))
 	}
 	// the fighters spawn at Pos.Y 0, so the ground they land on must be at 48
 	if _, ok := groundAt(0, 48, 1); !ok {
@@ -61,6 +61,7 @@ func TestABotGetsAlongTheTestCourse(t *testing.T) {
 		{"across the gap", rl.Vector2{X: 540}, rl.Vector2{X: 860}, 816, 0, 900},
 		{"up to the high ledge", rl.Vector2{X: 830}, rl.Vector2{X: 1060, Y: -96}, 968, -96, 1200},
 		{"down off the ledge", rl.Vector2{X: 1050, Y: -96}, rl.Vector2{X: 1170}, 1120, 0, 900},
+		{"along the strip", rl.Vector2{X: 1150}, rl.Vector2{X: 1380}, 1340, 0, 900},
 	}
 	for _, leg := range legs {
 		w := NewWorld(true)
@@ -86,9 +87,9 @@ func TestABotGetsAlongTheTestCourse(t *testing.T) {
 func TestABotStopsAtTheCoursesUncrossableGap(t *testing.T) {
 	loadCourse(t)
 	w := NewWorld(true)
-	bot := w.Spawn(rl.Vector2{X: 1140}, false)
+	bot := w.Spawn(rl.Vector2{X: 1200}, false)
 	bot.Orientation = 1
-	goal := rl.Vector2{X: 1550} // the far side, well out of reach
+	goal := rl.Vector2{X: 1800} // the far side, well out of reach
 	for range 1200 {
 		bot.Input = bot.walk(Input{Updown: bot.Updown}, goal)
 		bot.Update(float32(FixedTimeStep))
@@ -96,7 +97,59 @@ func TestABotStopsAtTheCoursesUncrossableGap(t *testing.T) {
 			t.Fatalf("the bot went into the pit at x=%v", bot.Pos.X)
 		}
 	}
-	if bot.Pos.X > 1196 {
-		t.Errorf("the bot ended at x=%v, past the edge of the gap at 1196", bot.Pos.X)
+	if bot.Pos.X > 1424 {
+		t.Errorf("the bot ended at x=%v, past the edge of the gap at 1424", bot.Pos.X)
+	}
+}
+
+// The whole thing at once: a fighter walks the length of the course and a bot
+// follows it the way it would in play, seeing, losing, searching, climbing the
+// wall, jumping the gap, taking the stairs and coming down the drop.
+//
+// This is the test that found what playing it found. Driving a bot at a fixed
+// goal, as the legs above do, never reproduces a bot that loses sight of
+// something that moves - and losing sight at the wrong moment was the failure.
+func TestABotFollowsAFighterTheLengthOfTheCourse(t *testing.T) {
+	loadCourse(t)
+	w := NewWorld(true)
+	bot := w.Spawn(rl.Vector2{X: 200}, false)
+	bot.Orientation = 1
+	leader := w.Spawn(rl.Vector2{X: 330}, true)
+	leader.Orientation = 1
+	// Along the strip below the ledge, and well short of the pit: the point is
+	// to follow the course, not to stage a duel on the brink of a hole, where
+	// the lunge that comes with every swing walks a fighter over the edge.
+	goal := rl.Vector2{X: 1280}
+
+	lostAt, worst := -1, 0
+	for i := range 2500 {
+		leader.Input = leader.walk(Input{Updown: leader.Updown}, goal)
+		bot.Input = botInput(bot)
+		leader.Update(float32(FixedTimeStep))
+		bot.Update(float32(FixedTimeStep))
+		if bot.canSee(leader) {
+			if lostAt >= 0 && i-lostAt > worst {
+				worst = i - lostAt
+			}
+			lostAt = -1
+		} else if lostAt < 0 {
+			lostAt = i
+		}
+		if bot.Pos.Y > 150 {
+			t.Fatalf("the bot fell into the pit at tick %d, x=%v", i, bot.Pos.X)
+		}
+	}
+	if lostAt >= 0 {
+		t.Errorf("the bot ended blind, since tick %d: x=%v y=%v", lostAt, bot.Pos.X, bot.Pos.Y)
+	}
+	if d := abs(bot.Pos.X - leader.Pos.X); d > 80 {
+		t.Errorf("the bot ended %v from the fighter it was following", d)
+	}
+	// A bot cannot be blind for longer than it is willing to look: the bound is
+	// its patience, not a number picked to fit. The stretch that gets near it is
+	// the one where the fighter drops off the high ledge, which takes the bot a
+	// couple of seconds to work out.
+	if worst > SightSearchTicks {
+		t.Errorf("the bot was blind for %d ticks at a stretch, longer than it will search for (%d)", worst, SightSearchTicks)
 	}
 }

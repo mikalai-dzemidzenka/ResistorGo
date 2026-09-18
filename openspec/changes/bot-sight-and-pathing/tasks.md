@@ -57,6 +57,14 @@
 - [x] 6d.3 Nothing within a body's width counts as behind, so two fighters on the same spot are not blind to each other; verify `TestFightersOnTopOfEachOtherAreNotBlind`
 - [x] 6d.4 Read the ground ahead while airborne too, and hard-brake by turning when there is not even room to coast; verify `TestBotLandingOnAShortStripDoesNotRunOffIt` and `TestBotHardBrakesWhenCoastingWouldNotStopIt`
 
+## 6e. The strip, and what widening it found
+
+- [x] 6e.1 Widen the test course's strip below the high ledge from one block to four (304px): a bot coming off the ledge at a run needs about 205px to pull up, and with 76px it could only refuse the drop altogether
+- [x] 6e.2 Measure holes from the column the fighter is actually held up by — the middle of its collision box, which is the one `checkCollision` looks under — not the leading face half a body ahead of it. Probing from the face, a bot lost the hole the moment the face crossed it and walked the last pixels unbraked, ending with its centre one pixel past the edge, stationary and falling
+- [x] 6e.3 A hole is an empty column, not a high one: `edgeAhead` now asks whether there is anything at all to stand on, because reading a step up as a hole made a bot brake at the foot of a staircase and, in the air with no wall check ahead of it, brake backwards off the ledge it had just left
+- [x] 6e.4 Look down off a ledge as well as up over a wall when a search runs out of ground; verify the end-to-end follow test
+- [x] 6e.5 Add `TestABotFollowsAFighterTheLengthOfTheCourse` — a fighter walks the course and a bot follows it through every obstacle. Driving a bot at a fixed goal never reproduces one that loses sight of something moving, which was the whole failure; run it 25 times over for flakiness, the odds being unseeded
+
 ## 7. Verify in play
 
 - [x] 7.1 Run the full suite with `go test ./...` and confirm every existing test — combat, energy, structure, net, spectator, menu — still passes

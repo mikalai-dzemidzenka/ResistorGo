@@ -98,7 +98,7 @@ A fighter under human control SHALL NOT be steered by any of this.
 ### Requirement: A bot searches where it last saw someone
 A bot that loses sight of the fighter it was reacting to SHALL remember the position that fighter was last seen at and go there. It SHALL move toward that position by the same rules it uses to move anywhere, stopping where the level stops it. On arriving — or once it has spent its patience trying to arrive, whichever comes first — the bot SHALL wait there briefly and then give up, returning to the resting behaviour of a bot that sees no one.
 
-A search that runs out of ground at a wall the bot could get onto SHALL carry on over that wall: the bot SHALL take the top of it as the place to look next, rather than giving up at its foot. A fighter that climbs out of view is lost at the moment the wall comes between the two of them, which leaves the spot it was last seen at on the ground the bot is already standing on — and a bot pressed against a wall can see nothing above it, so giving up there would leave it blind to a fighter directly overhead for as long as both stood still.
+A search that runs out of ground at a wall the bot could get onto, or at the edge of a drop it would take, SHALL carry on over it — up onto the wall, or down off the ledge: the bot SHALL take the top of it as the place to look next, rather than giving up at its foot. A fighter that climbs out of view is lost at the moment the wall comes between the two of them, which leaves the spot it was last seen at on the ground the bot is already standing on — and a bot pressed against a wall can see nothing above it, so giving up there would leave it blind to a fighter directly overhead for as long as both stood still.
 
 A search SHALL end immediately if the bot sees any fighter while it is under way; the bot SHALL react to what it now sees rather than to where something used to be. A bot SHALL search for one remembered position at a time: losing sight again replaces the remembered position rather than queueing another search.
 
@@ -115,6 +115,10 @@ A searching bot SHALL NOT swing. It is going somewhere, not fighting.
 #### Scenario: Patience runs out short of the spot
 - **WHEN** the level stops a bot from ever reaching the spot it is searching for
 - **THEN** the bot gives up after its patience is spent rather than pressing on indefinitely
+
+#### Scenario: It looks over the ledge it lost someone down
+- **WHEN** a bot following a fighter loses sight of it at the edge of a drop it would take
+- **THEN** it goes down after it and looks from there, rather than stopping on the ledge above
 
 #### Scenario: It looks over the wall it lost someone behind
 - **WHEN** a bot following a fighter loses sight of it at the foot of a wall it could climb

@@ -1004,12 +1004,15 @@ func (a *Actor) restoreStructure(amount float32) {
 }
 
 // face turns the fighter, and is the only way anything but a replayed or
-// replicated record does: a climb refuses the turn. The climb animation is what
-// carries the fighter over the ledge it grabbed, and one that turned halfway up
-// would mantle one way while facing the other. Every turn a player or a bot
-// asks for goes through here so the rule cannot be missed by a new caller.
+// replicated record does: a climb or a death refuses the turn. The climb
+// animation is what carries the fighter over the ledge it grabbed, and one that
+// turned halfway up would mantle one way while facing the other. A broken
+// fighter has stopped being part of the fight, so nothing it can still see
+// turns it: the fall would spin on the spot while it played out. Every turn a
+// player or a bot asks for goes through here so the rule cannot be missed by a
+// new caller.
 func (a *Actor) face(orientation int8) {
-	if a.State == StateClimb {
+	if a.State == StateClimb || a.State == StateDeath {
 		return
 	}
 	a.Orientation = orientation
