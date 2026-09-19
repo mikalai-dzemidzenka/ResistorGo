@@ -398,6 +398,12 @@ func (a *Actor) seen() *Actor {
 	bestD := float32(math.MaxFloat32)
 	from := a.eye()
 	for _, b := range a.W.Actors {
+		if b.State == StateDeath {
+			// the dead are out of the fight: nothing to walk to, and nothing
+			// to swing at either, which is what a bot did until the body was
+			// taken out of the world
+			continue
+		}
 		if !a.canSee(b) {
 			continue
 		}

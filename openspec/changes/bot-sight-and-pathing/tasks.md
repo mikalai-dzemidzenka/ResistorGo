@@ -65,6 +65,26 @@
 - [x] 6e.4 Look down off a ledge as well as up over a wall when a search runs out of ground; verify the end-to-end follow test
 - [x] 6e.5 Add `TestABotFollowsAFighterTheLengthOfTheCourse` — a fighter walks the course and a bot follows it through every obstacle. Driving a bot at a fixed goal never reproduces one that loses sight of something moving, which was the whole failure; run it 25 times over for flakiness, the odds being unseeded
 
+## 6f. A body is not a target
+
+Found after the fact: `seen()` filtered on the sight cone alone, so a fighter
+that had gone down was still the nearest thing a bot could see. The bot walked
+to the body and swung at it until the world got round to removing it, and the
+living fighter standing past it was never chosen.
+
+- [ ] 6f.1 Skip the dead in `seen()`, so a body is neither approached nor swung
+      at; verify the `A body is not a target` and `The living are found past the
+      dead` scenarios
+- [ ] 6f.2 Verify the course test still measures pathing rather than a kill: a
+      bot that catches the leader and fights it long enough kills it, and with
+      the dead no longer seen there is nothing left to follow and nothing the
+      rest of the course can say. Hold the bot's swing back in
+      `TestABotFollowsAFighterTheLengthOfTheCourse`, leaving everything that gets
+      it along the course - the jumps included - as it is
+- [ ] 6f.3 Confirm nothing else treats a body as a live fighter: check the
+      attack-target outline, the bot's guard adaptation and the spectator's
+      follow target against a dead actor
+
 ## 7. Verify in play
 
 - [x] 7.1 Run the full suite with `go test ./...` and confirm every existing test — combat, energy, structure, net, spectator, menu — still passes

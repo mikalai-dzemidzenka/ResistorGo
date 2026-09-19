@@ -125,6 +125,12 @@ func TestABotFollowsAFighterTheLengthOfTheCourse(t *testing.T) {
 	for i := range 2500 {
 		leader.Input = leader.walk(Input{Updown: leader.Updown}, goal)
 		bot.Input = botInput(bot)
+		// The swing is held back. A bot that catches up fights, and one that
+		// fights long enough kills - and then there is nothing left to follow
+		// and nothing the rest of the course can say. Everything that gets the
+		// bot along the course is left as it is, the jumps included; what it
+		// does once it arrives has its own tests.
+		bot.Input.Attack = false
 		leader.Update(float32(FixedTimeStep))
 		bot.Update(float32(FixedTimeStep))
 		if bot.canSee(leader) {

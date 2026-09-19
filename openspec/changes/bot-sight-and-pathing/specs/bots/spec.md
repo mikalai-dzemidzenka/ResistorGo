@@ -10,6 +10,7 @@ A bot SHALL choose the fighter it reacts to from those it can see, and only from
 - **Range** — the other fighter is within the bot's sight range.
 - **Direction** — the other fighter lies within a fixed angle either side of the direction the bot is facing. A fighter behind the bot SHALL NOT be seen, and neither SHALL one far enough above or below that it falls outside that angle. Nothing within a body's width SHALL count as behind: two fighters that close are touching, and neither is hidden from the other by which way it happens to face.
 - **A clear line** — no solid part of the level lies on the straight line between the two fighters. A fighter on the far side of a wall, a floor or a ceiling SHALL NOT be seen, however close it is and however squarely the bot faces it.
+- **Still in the fight** — the other fighter is not dead. A body SHALL NOT be seen, however plainly it lies in front of the bot. The dead leave the fight the moment they go down, not when the world gets round to taking them out of it, and a bot SHALL neither walk to one nor swing at one.
 
 When more than one fighter is seen, the bot SHALL react to the nearest of them. Sight SHALL be judged afresh every tick, so a fighter stepping behind cover is lost the moment the cover is between them, and one stepping out is seen again the moment it is not.
 
@@ -42,6 +43,14 @@ Sight SHALL be a bot's alone. A fighter under human control SHALL never have wha
 #### Scenario: The nearest of several
 - **WHEN** a bot can see two fighters at once
 - **THEN** it reacts to the nearer one
+
+#### Scenario: A body is not a target
+- **WHEN** a fighter the bot was fighting dies, and its body is still in the world, in range and in the open
+- **THEN** the bot does not react to it: it neither approaches it nor swings at it
+
+#### Scenario: The living are found past the dead
+- **WHEN** a bot can see a body and a living fighter at once, and the body is the nearer of the two
+- **THEN** the bot reacts to the living fighter
 
 #### Scenario: A player is never blinded
 - **WHEN** a human-controlled fighter has an opponent behind it, out of range or behind a wall
