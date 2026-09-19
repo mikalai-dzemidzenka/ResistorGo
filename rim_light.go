@@ -25,6 +25,13 @@ const rimMinStrength = 0.02
 // light's own brightness at the fighter.
 const rimStrength = 1.0
 
+// rimCap is the most a rim adds, as a fraction of white, however strong the
+// lights reaching the fighter are together. Far from a light a rim is well under
+// it and unchanged; close to one, or inside several, the whole rim is scaled
+// down to it, keeping its colour. Without it a fighter beside a lamp was traced
+// in solid white.
+const rimCap = 0.35
+
 // rimLight is one light that rims a fighter: where it is in world pixels, its
 // colour, and how strong it is at the fighter.
 type rimLight struct {
@@ -115,6 +122,7 @@ var rimLoc struct {
 	topTexture, topTexelSize, topBounds int32
 	hasTop                              int32
 	lightCount, lightPos, lightColor    int32
+	cap                                 int32
 }
 
 func loadRimShader() {
@@ -135,6 +143,7 @@ func loadRimShader() {
 	rimLoc.lightCount = loc("lightCount")
 	rimLoc.lightPos = loc("lightPos")
 	rimLoc.lightColor = loc("lightColor")
+	rimLoc.cap = loc("rimCap")
 }
 
 // rimQuad grows a sprite draw by one pixel on every side, so the ring of empty
@@ -192,6 +201,7 @@ func drawRim(a *Actor, lights []LevelLight, occluders []rl.Rectangle) {
 	rl.SetShaderValue(RimShader, rimLoc.lightCount, []float32{float32(len(rims))}, rl.ShaderUniformFloat)
 	rl.SetShaderValueV(RimShader, rimLoc.lightPos, lp[:], rl.ShaderUniformVec2, rimMaxLights)
 	rl.SetShaderValueV(RimShader, rimLoc.lightColor, lc[:], rl.ShaderUniformVec3, rimMaxLights)
+	rl.SetShaderValue(RimShader, rimLoc.cap, []float32{rimCap}, rl.ShaderUniformFloat)
 	rl.DrawTexturePro(tex, grown, dst, rl.Vector2{}, 0, rl.White)
 	rl.EndShaderMode()
 }

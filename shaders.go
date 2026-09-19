@@ -221,6 +221,7 @@ uniform float hasTop;         // 1 when the fighter has a top layer
 uniform float lightCount;     // how many of the entries below are in use
 uniform vec2 lightPos[4];     // in the frame's texels
 uniform vec3 lightColor[4];
+uniform float rimCap;         // the brightest a rim may add, as a fraction of white
 
 out vec4 finalColor;
 
@@ -275,8 +276,15 @@ void main()
         float f = max(dot(outward, normalize(toLight)), 0.0);
         sum += lightColor[i] * f;
     }
-    if (max(sum.r, max(sum.g, sum.b)) <= 0.0) {
+    float peak = max(sum.r, max(sum.g, sum.b));
+    if (peak <= 0.0) {
         discard;
+    }
+    // a rim is added on top of a scene the same lights have already lit, so
+    // near a lamp - or inside several - it would add up past white into a flat
+    // sticker border; scaled as a whole, it keeps its colour under the ceiling
+    if (peak > rimCap) {
+        sum *= rimCap / peak;
     }
     finalColor = vec4(sum, 1.0);
 }
