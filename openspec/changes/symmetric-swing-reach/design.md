@@ -160,6 +160,14 @@ Rollback is reverting the constant.
 
 ## Open Questions
 
-- Whether `tooClose` needs its own adjustment or whether it falls out of the
-  corrected reach. Answerable while implementing; it changes neither the specs
-  nor the approach.
+- ~~Whether `tooClose` needs its own adjustment or whether it falls out of the
+  corrected reach.~~ **Resolved while implementing.** It falls out, and further
+  than expected: `tooClose` is `!inSwingRange && overlap`, `inSwingRange`
+  measures the swing thrown *toward* the target, and with both facings reaching
+  the same ground every overlap is now inside one of them. It has no constants
+  of its own to retune, and it can no longer return true. The one pixel it
+  guarded - two fighters on the same column - was only ever unreachable because
+  the right-facing box began exactly on the collision box's far edge, which
+  `aabb` treats as clear. It is left in place, documented, because it is the
+  right question to ask and a later change to either box's width could make it
+  live again.

@@ -1302,6 +1302,16 @@ func (a *Actor) attackBoxAt(updown uint8, pos rl.Vector2) (rl.Rectangle, bool) {
 // arm covers the half of the sprite in front of it, so the two facings reach
 // opposite ways from the same position. attackBoxAt is this for the way the
 // fighter is facing now.
+//
+// The box mirrors about the middle of the collision box, not the middle of the
+// 48px sprite frame. Those are not the same point - the collision box is inset
+// 14 and 14 wide, so it sits 3px left of the frame's - and the box used to
+// mirror about the frame while every reach test measured it against the
+// collision box. The 3px went in with one sign facing right and the other
+// facing left, so a swing reached 38px one way and 32px the other, and a
+// fighter standing exactly on another could be hit facing left but not facing
+// right. Mirroring about the box reach is measured against costs the forward
+// swing 3px and gives the backward one 3px, and leaves 35 either way.
 func (a *Actor) attackBoxFacing(updown uint8, pos rl.Vector2, o int8) (rl.Rectangle, bool) {
 	var box rl.Rectangle
 	switch updown {
@@ -1314,8 +1324,9 @@ func (a *Actor) attackBoxFacing(updown uint8, pos rl.Vector2, o int8) (rl.Rectan
 	default:
 		return rl.Rectangle{}, false
 	}
+	mid := a.CollisionBox.X + a.CollisionBox.Width/2
 	return rl.Rectangle{
-		X:      pos.X + box.X + 12*float32(o+1),
+		X:      pos.X + box.X + mid + (float32(o)-1)*box.Width/2,
 		Y:      pos.Y + box.Y,
 		Width:  box.Width,
 		Height: box.Height,

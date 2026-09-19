@@ -887,6 +887,15 @@ func (a *Actor) inSwingRange(t *Actor) bool {
 // but the lunge that comes with every swing walks the bot four pixels in, so it
 // is a pixel a bot can land on and, without an answer to it, stand on for the
 // rest of the match.
+//
+// That pixel is gone. It was never a fact about arms and bodies: the box was
+// mirrored about the middle of the sprite frame while the body it is measured
+// against sits three pixels to the left of that, so facing right the box began
+// exactly on the body's far edge and cleared it by the width of nothing. With
+// the box mirrored about the body instead, every overlap is inside the swing
+// thrown at it, and this cannot return true - see TestOverlappingIsAlwaysInReach.
+// It is left standing because it is the right question to ask, and a later
+// change to either box's width could make it worth asking again.
 func (a *Actor) tooClose(t *Actor) bool {
 	return !a.inSwingRange(t) && aabb(a.collisionRect(), t.collisionRect())
 }

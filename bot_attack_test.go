@@ -62,11 +62,23 @@ func TestBotInReachKeepsAttacking(t *testing.T) {
 // The distance a bot stops at is the distance its swing crosses. Measured
 // against the hit test itself: wherever the bot believes it is in range, a
 // swing thrown there reaches the other fighter's collision box.
+//
+// Swept both ways round. The reach used to be three pixels longer facing right
+// than facing left, so a sweep on one side alone could not have seen it.
 func TestBotStopsWhereItsSwingLands(t *testing.T) {
-	for dx := float32(0); dx <= 80; dx++ {
+	var reachRight, reachLeft int
+	for dx := float32(-80); dx <= 80; dx++ {
 		bot, target := botScene(t, nil, rl.Vector2{}, rl.Vector2{X: dx})
+		// the swing inSwingRange measures is the one thrown at the target, so
+		// the bot is turned to it rather than left facing right
+		bot.Orientation = facing(dx)
 		if !bot.inSwingRange(target) {
 			continue
+		}
+		if dx > 0 {
+			reachRight++
+		} else if dx < 0 {
+			reachLeft++
 		}
 		box, ok := bot.attackBoxAt(bot.Updown, bot.Pos)
 		if !ok {
@@ -77,6 +89,10 @@ func TestBotStopsWhereItsSwingLands(t *testing.T) {
 			t.Errorf("dx=%v: the bot would swing here, and the swing does not reach", dx)
 		}
 	}
+	if reachRight != reachLeft {
+		t.Errorf("the bot reaches %d pixels ahead of it and %d behind - the two should mirror", reachRight, reachLeft)
+	}
+
 	// and the distance it used to stop at is not one of them
 	bot, target := botScene(t, nil, rl.Vector2{}, rl.Vector2{X: 50})
 	if bot.inSwingRange(target) {
