@@ -101,10 +101,9 @@ const (
 	PushSeconds = 0.35
 	PushFrames  = 7
 	PushFrame   = 3 // the frame both arms are out: where the shove lands
-	// How far the shove moves the crowder. It starts 3 to 13px away, so this
-	// must be at least 11 to clear the 14px overlap and at most 21 to stay
-	// inside the 35px a swing reaches - the middle of that, so a later change
-	// to either width does not quietly throw the crowder out of reach.
+	// How far the shove moves the crowder. It starts 0 to 13px away, so this
+	// must be at least 14 to clear the 14px overlap and at most 21 to stay
+	// inside the 35px a swing reaches.
 	PushDistance = 16
 	PushSpeed    = PunchSpeed // what it leaves in the shoved fighter, as a hit does
 
@@ -340,12 +339,12 @@ func (a *Actor) Update(dt float32) {
 	a.updateVertSpeed(dt)
 	a.updateFalling()
 
-	// A fighter standing still with another on its back, where the one behind
-	// can swing and it cannot, turns on it and shoves it off. Only standing
-	// still: whoever is walking or running away has a follower behind it by
-	// definition, and is already answering it. A fighter guarding everything
-	// stands its ground instead.
-	if a.State == StateIdle && a.OnGround && a.Updown != 3 && !a.Input.Left && !a.Input.Right {
+	// Two fighters cannot stand in one another: whichever is on its feet and free
+	// - standing, walking or running - turns on the other and shoves it off. One
+	// already swinging, blocking, stunned or still flinching from a hit finishes
+	// that first, and one guarding everything stands its ground. The first to
+	// qualify shoves, and the stun it throws keeps the other from shoving back.
+	if (a.State == StateIdle || a.State == StateRun) && a.OnGround && a.Updown != 3 && a.FlinchTicks == 0 {
 		if other := a.crowding(); other != nil {
 			a.enterPushState(other)
 		}
@@ -1248,16 +1247,18 @@ func (a *Actor) Flickering() bool {
 	return true
 }
 
-// crowding returns a living fighter overlapping this one that this one cannot
-// swing at, facing the way it faces. The arm covers the ground in front of the
-// body, so such a fighter is always behind - and from there, facing this one,
-// it can swing at this one's back.
+// crowding returns a living fighter on its feet whose collision box overlaps
+// this one's, in front or behind.
+//
+// Only one on its feet: a shove is a thing done on the ground, to someone on
+// it. A fighter passing through in the air - jumping up past a ledge another
+// stands on, most often - is left to land first. Shoving it out of the air
+// knocked a climber off the same ledge every time it tried it.
 //
 // A crowder the last shove could not clear - one flush against a wall - is left
-// alone until the two are apart. The shove turns the fighter to face it, which
-// is answer enough for a bot; but a player standing still faces the mouse again
-// the next tick, and with the mouse still pointing away the same crowder would
-// be shoved again, and again, and no other button would ever be read.
+// alone until the two are apart. Nothing else would stop the next tick on its
+// feet from throwing the same shove at the same fighter again, and again, with
+// no other button ever read.
 func (a *Actor) crowding() *Actor {
 	if a.W == nil {
 		return nil
@@ -1266,10 +1267,10 @@ func (a *Actor) crowding() *Actor {
 		a.PushStuck = nil
 	}
 	for _, other := range a.W.Actors {
-		if other == a || other == a.PushStuck || other.State == StateDeath {
+		if other == a || other == a.PushStuck || other.State == StateDeath || !other.OnGround {
 			continue
 		}
-		if aabb(a.collisionRect(), other.collisionRect()) && !a.swingReachFacing(other, a.Orientation) {
+		if aabb(a.collisionRect(), other.collisionRect()) {
 			return other
 		}
 	}
@@ -1277,8 +1278,8 @@ func (a *Actor) crowding() *Actor {
 }
 
 // pushDir is the way a shove moves other: away from the fighter throwing it.
-// The crowder is never on the same column, but a third fighter caught in the
-// shove can be, and there the arms decide.
+// Two fighters on the same pixel column have no side to be on, and there the
+// arms decide.
 func (a *Actor) pushDir(other *Actor) int8 {
 	if d := other.Pos.X - a.Pos.X; d != 0 {
 		return facing(d)
@@ -1286,10 +1287,17 @@ func (a *Actor) pushDir(other *Actor) int8 {
 	return a.Orientation
 }
 
-// enterPushState turns on the crowder and starts the shove. The turn is always
-// toward it, and never ambiguous: a crowder is at least 3px to one side. It
-// cannot be steered while it plays.
+// enterPushState turns to the crowder and starts the shove, so the arms point
+// the way the crowder will go. It cannot be steered while it plays.
+//
+// The crowder is stunned at once, not when the arms come out. It is usually
+// mid-swing - the lunge of its swings is how it walked in - and that swing
+// would otherwise land during the wind-up, put the shover on guard and cut the
+// shove off before it threw anyone.
 func (a *Actor) enterPushState(other *Actor) {
+	if a.W != nil && a.W.Authority {
+		other.enterShovedState(a)
+	}
 	a.face(a.pushDir(other))
 	a.State = StatePush
 	a.PushDone = false
@@ -1327,18 +1335,39 @@ func (a *Actor) updatePush() {
 	}
 }
 
-// shove moves a fighter away from the one throwing it.
+// shove moves a fighter away from the one throwing it, and stuns it.
 //
 // The ground it gives up is a displacement and not only speed: a fighter
 // mid-swing holds its own speed down to the lunge, and would otherwise stand
 // its ground through a shove. The speed is set before the wall is asked, so a
 // wall that cuts the throw short also takes away the speed into it.
 func (a *Actor) shove(other *Actor) {
+	other.enterShovedState(a)
 	dir := float32(a.pushDir(other))
 	fromX := other.Pos.X
 	other.Pos.X = float32(int(other.Pos.X + dir*PushDistance))
 	other.Speed.X = dir * PushSpeed
 	other.blockSides(fromX)
+}
+
+// enterShovedState is what a shove leaves the fighter it lands on: the lockout
+// and the animation of a stun, so it cannot swing back through the rest of the
+// shove, and none of the hit - no structure, no hit counted, no flash, no
+// hit-stop. Whatever it was doing ends, as a stun ends it. One already stunned
+// is left to finish the stun it has.
+func (a *Actor) enterShovedState(by *Actor) {
+	switch a.State {
+	case StateAttacked:
+		return
+	case StateAttack:
+		a.exitAttackState()
+	case StateBlock:
+		a.exitBlockState()
+	}
+	a.State = StateAttacked
+	a.Attacker = by
+	a.stopFlicker()
+	a.SetAnim("resources/threefour/hit-top.png", AnimOptions{animDuration: 0.3, totalFrames: 4, once: true, reset: true})
 }
 
 // enterDeathState is where a broken structure goes. The fighter stops acting

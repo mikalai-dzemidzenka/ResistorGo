@@ -8,39 +8,30 @@ a swing (dash included) covers 35px in front of the body's centre, the same both
 ways:
 
 ```
-  overlap              -14 < dx < 14
+  overlap              -14 < dx < 14      <- what sets a shove off
   reach facing right    -3 < dx < 35
   reach facing left    -35 < dx < 3
-
-  crowding = overlap and not reach
-             facing right:  dx in [-13, -3]
-             facing left:   dx in [  3, 13]
 ```
-
-The window is always behind the fighter, never in front, and never at `dx = 0`.
-It is also one-sided: a fighter at `dx = -8` behind a right-facing one has that
-one at `+8` in front of it, inside its own reach whenever it faces it.
 
 What exists today: the state enum ends in a `stateCount` sentinel and the
 snapshot decoder is bounded by it, so an appended state survives the wire.
 `inSwingRange` in `bot.go` computes reach inline. Every movement test runs on
 `floor()`, a level with no wall. A player standing still faces the mouse every
 tick (`Actor.Update`, the `StateIdle` branch); a bot faces its target when in
-range and its last sighting otherwise.
+range and its last sighting otherwise. `StateIdle` covers walking as well as
+standing - anything below `RunReach`.
 
-A first implementation was built against the old premise and withdrawn; it is
-saved, with its `push_test.go`, in `recovered.md`. Parts carry over unchanged;
-the decisions below mark what does not.
+A first implementation was built against an older premise and withdrawn; it is
+saved, with its `push_test.go`, in `recovered.md`.
 
 ## Goals / Non-Goals
 
 **Goals:**
 
-- A shove that only answers the one-sided position, and leaves the two facing one
-  another at arm's length.
-- One expression of "can this fighter reach that one", shared by the shove and
-  the bot.
-- No shove that can repeat itself, without a guard written for the purpose.
+- No two fighters on the ground left standing in one another.
+- A shove that leaves the two facing one another at arm's length, and finishes
+  once started.
+- No shove that can repeat itself against the same fighter from the same spot.
 
 **Non-Goals:**
 
@@ -51,21 +42,39 @@ the decisions below mark what does not.
 
 ## Decisions
 
-### Only from standing
+### Any overlap, from anyone on its feet and free
 
-The trigger is `StateIdle` on the ground, with no movement key held, not guarding
-everything, and nothing else. The movement key is part of it because
-`StateIdle` is not only standing: it covers walking too, anything below
-`RunReach`, and a fighter walking away from a follower is a chase all the same. The withdrawn version also shoved from `StateRun`, and in the bot course
-test it fired on 142 of 500 ticks: whoever is being followed always has its
-follower behind it. A running fighter has its own answer - it is already moving
-away - so standing is the only state in which being on someone's back is a
-position rather than a pursuit.
+The trigger is any overlap of collision boxes, in front, behind or on the same
+column, thrown by a fighter in `StateIdle` or `StateRun` - standing, walking or
+running - on the ground, not guarding everything and not flinching from a hit.
 
-Alternatives: shoving from any grounded state (the chase problem, and it would
-cut swings short); requiring the crowd to persist N ticks (a tuning knob with no
-evidence it is needed yet - can be added later without changing the state or the
-art).
+How it got here, since each step was tried in play or in a test:
+
+- Behind only, standing only. The first version answered only the one-sided
+  position - a fighter on another's back, which can hit it and cannot be hit
+  back. In play, overlaps in front were left standing, which read as a glitch.
+- Any overlap was chosen instead. Running was kept in: an overlap during a chase
+  is still two fighters in one another. The cost, measured in the withdrawn
+  version, is that a chase shoves often - whoever is caught up with shoves its
+  pursuer. The stun it throws is also what keeps the one caught up with from
+  being shoved straight back.
+- Flinching is not free. A flinch leaves the fighter in control, but with any
+  overlap counting, a flinched shover started a fresh shove on the next tick and
+  the hit that interrupted it meant nothing. For the 12 ticks of a flinch it
+  does not shove.
+- A swing, a block or a stun is finished first; they already own the fighter,
+  and cutting them short was the most aggressive option offered and not chosen.
+
+Who shoves when both qualify: the one earlier in `W.Actors` runs first, shoves,
+and stuns the other at once, which takes it out of the running. Consistent within
+one simulation; slice order picks it.
+
+### Only a fighter on the ground is shoved
+
+A fighter in the air is skipped by `crowding` until it lands. Found by the bot
+course test: a bot standing on a ledge shoved a climber out of the air every time
+it jumped for the ledge, six times over, and then lost sight of it for good. A
+shove is a ground move; one landing in another is shoved as any other overlap.
 
 ### Turn toward the crowder, then push it away
 
@@ -77,69 +86,49 @@ shover:
 
       B  A -->                            B          <-- A
     [==][==]                            [==]  . . . [==]
-    dx in [-13, -3]                     dx in [-29, -19]
-    B can hit A; A cannot hit B         apart, face to face, both in reach
+    dx in [-13, 13]                     |dx| in [16, 29]
+                                        apart, face to face, both in reach
 ```
 
-The withdrawn version first turned toward the other and then dropped the turn,
-because at `dx = 0` "which side the other is on is a pixel of noise" and a bot
-turned away from its target as often as toward it. The window no longer contains
-`dx = 0`; the nearest a crowder can be is 3px to one side, so the side is always
-unambiguous and the turn is always toward the fighter the bot is fighting.
+For an overlap in front the shover already faces the crowder. On the same column
+(`dx = 0`) there is no side, and the shover's own facing decides.
 
-The alternative - shove the way the fighter already faces, throwing the crowder
-through it to its front - lands inside reach too, but `push.png` shows both arms
-pushing forward, and the crowder passing through the body to meet them reads as a
-teleport.
+The alternative - shove the way the fighter already faces, throwing a crowder
+behind it through its body to its front - lands inside reach too, but `push.png`
+shows both arms pushing forward, and the crowder passing through the body to meet
+them reads as a teleport.
 
 For a player, the facing the shove sets holds while it plays; on returning to
-standing the mouse decides again, as it always does from standing. Nothing is
-lost: the crowder is no longer overlapping, so wherever the player then faces
-cannot set off another shove.
+standing the mouse decides again.
 
 ### `PushDistance` = 16, bounded both ways
 
-The crowder starts 3 to 13px from the shover and is moved `PushDistance` further:
+The crowder starts 0 to 13px from the shover and is moved `PushDistance` further:
 
 ```
-  must clear the overlap:   3 + PD >= 14   ->  PD >= 11
+  must clear the overlap:   0 + PD >= 14   ->  PD >= 14
   must stay in reach:      13 + PD <  35   ->  PD <= 21
 
-   11 ............. 16 ............. 21
+   14 ...... 16 ............. 21
 ```
 
-The withdrawn value, 20, satisfies both but lands a deep crowder at 33 of 35px -
-two pixels from out of reach, which a later change to `AttackDash` or a box width
-would silently close. 16 sits in the middle and lands the crowder 19 to 29px out.
-Both bounds are asserted by a test sweeping every offset in the window, not by
-the comment beside the constant.
+16 lands the crowder 16 to 29px out. Both bounds are asserted by a test sweeping
+every overlapping offset, both facings, not by the comment beside the constant.
 
-### The turn guards a bot; a remembered crowder guards a player
+### A remembered crowder stops a shove repeating
 
-A wall can cut the throw short, leaving the crowder where it was. For a bot the
-turn is enough: the shover ends facing the crowder, anything overlapping in
-front is inside reach, and `crowding()` is false:
-
-```
-  |B [==] <-- A [==]     wall stops B; A faces left; B at dx in [-13, -3]
-  |                      is inside the left-facing reach (-35, 3)
-```
-
-It is not enough for a player. Standing still, a player faces the mouse again on
-the next tick, and with the mouse still pointing away the same crowder is behind
-again: the shove repeats every 0.35s and no other button is read (found by
-`TestAWallStopsTheThrow` while implementing). So the fighter also remembers, in
-`PushStuck`, a crowder its shove left still overlapping, and `crowding()` skips
-that one until the two are apart.
+A wall can cut the throw short, leaving the crowder where it was, still
+overlapping. Nothing else stops the next tick on the shover's feet from throwing
+the same shove again, every 0.35s, with no other button read (found by
+`TestAWallStopsTheThrow`). So the fighter remembers, in `PushStuck`, a crowder
+its shove left still overlapping, and `crowding()` skips that one until the two
+are apart. Usually the crowder, once its stun ends, shoves back and parts them
+itself; the memory covers the one that does not, such as one guarding everything.
 
 It is recorded on the landing frame in every world, not only the authority's. A
 client moves nobody, so on a client the crowder is always still overlapping and
 always remembered - which is what stops a predicting client throwing the same
 shove every 0.35s while it waits for the snapshot that parts them.
-
-Alternative rejected: holding the shove's turn until the mouse next crosses
-sides, which would change how a standing player follows the mouse everywhere, not
-only here.
 
 ### Displacement first, then speed, then the wall
 
@@ -149,38 +138,58 @@ crowder's speed *before* `blockSides`, so a throw a wall cuts short keeps the
 clamp's removal of wall-ward speed rather than overwriting it and pressing the
 fighter into the wall.
 
+### The crowder is stunned when the shove starts, not when it lands
+
+Found in play: the shove rarely finished. A reproduction with a real bot
+walking onto a standing player's back showed two ways it was cut off. Once it
+landed, the crowder - now face to face and in reach - swung, the shover's guard
+matched the height, and the provisional block ended the shove at frame 4 of 7.
+And before it landed, the crowder was usually already mid-swing, because the
+lunge of each swing is how a bot walks in; that swing arrived inside the 9-tick
+wind-up and the shove never threw anyone.
+
+So the shove stuns, and stuns at once. `enterPushState` puts the crowder into
+`enterShovedState` on the authority: `StateAttacked` and `hit-top.png`, the
+lockout of a stun, ending whatever it was doing. It is not `enterAttackedState`:
+it skips `hitFeedback`, so there is no structure cost, no hit counted, no flash,
+no `EvHit` and no hit-stop, and its speed is the shove's `PushSpeed` rather than
+`StunKnockback`, which friction would carry about 45px - past the 35 the
+distance bounds are there to keep. A fighter already stunned keeps the stun it
+has rather than having it restarted.
+
+Stunning only on the landing frame was tried first: it fixed the first failure
+and not the second. After the change, 15 shoves across 20 randomised runs all
+played to the end.
+
 ### Reach is asked in one place
 
 `swingReachFacing(t, o)` is lifted out of `inSwingRange` with its block-all
 fallback (measure the swing the fighter would throw the moment it stopped
-guarding). `inSwingRange` becomes a one-line caller; `crowding` asks it with the
-fighter's own facing.
+guarding). `inSwingRange` becomes a one-line caller, and the shove's distance
+tests measure against it.
 
 ### Carried over unchanged from the withdrawn version
 
 `StatePush` and `push.png` appended; `PushSeconds` 0.35 over `PushFrames` 7,
 landing on `PushFrame` 3; the `PushDone` once-latch; the dead neither shove nor
 are shoved; the displacement lands only where `W.Authority`; `StatePush` excluded
-from `canMove`; `jump_test.go`'s fighters spaced apart.
+from `canMove`; `jump_test.go`'s runners spaced apart.
 
 ## Risks / Trade-offs
 
 - **[A client predicts a turn the server does not make]** -> The crowding check
-  is not authority-gated, only the displacement is, so a predicting client turns
-  and plays the shove on its own reading of a lagged remote fighter. The turn
-  makes a misprediction more visible than before: the local fighter flips, then
-  is corrected. Measured in play under latency simulation (tasks); if it shows,
-  the check moves behind the authority and the client plays whatever `StatePush`
-  the snapshot carries, at the cost of a round trip.
-- **[Back to back, both are crowded]** -> Two fighters facing away from one
-  another can each be behind the other; both shove on the same tick and turn to
-  face. The one earlier in `W.Actors` lands first, and the second's overlap
-  re-check then fails, so exactly one displacement happens. Consistent, but slice
-  order picks who moves.
-- **[The one behind hits during the wind-up]** -> By design the shove is
-  interruptible, so a fighter camping someone's back with swings keeps them in
-  `StateAttacked` and never lets them shove. That is the reward for getting
-  there; turning around by mouse is still the answer between hits.
+  is not authority-gated, only the displacement and the stun are, so a
+  predicting client turns and plays the shove on its own reading of a lagged
+  remote fighter. Measured in play under latency simulation (tasks); if it
+  shows, the check moves behind the authority and the client plays whatever
+  `StatePush` the snapshot carries, at the cost of a round trip.
+- **[Close fighting turns into shoving]** -> A bot's lunges walk it into its
+  target a few swings into any exchange, and the overlap is shoved - by the bot
+  as often as by its target. That stuns one of them for 0.3s and resets the
+  distance. It is what was asked for; if it makes fights feel stop-start, the
+  lever is `AttackDash` or how the bot spaces itself, not the shove.
+- **[A stun for every overlap]** -> Walking into anyone who is free costs a stun.
+  In a chase that is the pursuer, whenever it catches up.
 - **[Tests assumed a quiet world]** -> Anything that stands two fighters within
   14px of each other now has a shove in it. Swept by running the suite
   repeatedly, not by inspection.

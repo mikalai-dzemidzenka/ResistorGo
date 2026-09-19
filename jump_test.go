@@ -110,7 +110,9 @@ func TestStandingJumpUnchanged(t *testing.T) {
 		t.Errorf("the standing jump plays %q, want the wind-up", stand.Anim)
 	}
 
-	runner := ground(w, 10)
+	// clear of the other: two fighters standing in one another shove each other
+	// apart, and this test is about the jump
+	runner := ground(w, 120)
 	runner.State = StateRun
 	runner.Speed.X = RunReach + 20
 	runner.Input.Jump = true
@@ -186,7 +188,7 @@ func TestRunJumpKeepsMomentum(t *testing.T) {
 	jumped.State = StateRun
 	jumped.Speed.X = RunReach
 	jumped.Input.Jump = true
-	kept := ground(w, 10)
+	kept := ground(w, 120) // clear of the other, so neither shoves the other
 	kept.State = StateRun
 	kept.Speed.X = RunReach
 	jumped.Update(float32(FixedTimeStep))

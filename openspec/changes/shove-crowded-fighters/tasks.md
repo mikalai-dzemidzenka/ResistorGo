@@ -75,12 +75,47 @@
 
 - [x] 6.1 Build with `build.ps1` (never a plain `go build`) and confirm the
       packed `resistor.exe` is replaced and runs
-- [ ] 6.2 Stand still with the mouse facing away and let a bot walk onto your
-      back; confirm the fighter turns, both arms go out, the bot is thrown to
-      arm's length and the fight carries on face to face
+- [ ] 6.2 Let a bot walk into you, from in front and from behind, standing and
+      running; confirm the fighter turns to it, both arms go out, the bot is
+      thrown to arm's length and the fight carries on face to face
 - [ ] 6.3 Stand flush against a wall with a bot crowding in; confirm nobody locks
       into repeated shoves
 - [ ] 6.4 Play against the dedicated server with latency simulation (`F5`-`F8`)
       and watch for a predicted turn the server does not make; if it shows,
       gate the crowding check on `W.Authority`, record the decision in
       design.md, and verify the `A client moves nobody` scenario still holds
+
+## 7. The shove stuns (found in play: the shove did not finish)
+
+- [x] 7.1 Reproduce the unfinished shove headlessly with a real bot walking onto
+      a standing player's back; verify the two cut-offs - a block after landing,
+      and the crowder's own swing landing inside the wind-up
+- [x] 7.2 Add `enterShovedState`: the lockout and animation of a stun, ending a
+      swing or a block, with no structure, hit count, flash, `EvHit` or hit-stop,
+      and the shove's own speed; apply it on the authority when the shove starts;
+      verify the `Stunned, not hurt`, `No hit is shown` and `A client moves
+      nobody` scenarios
+- [x] 7.3 Verify the `A swing already thrown does not cut the shove off`
+      scenario with a crowder just short of its hit frame at the shover's guard
+      height, and that the test fails with the stun moved to the landing frame;
+      verify the reproduction then finishes every shove it throws
+- [ ] 7.4 In play, confirm the shoved bot reads as stunned rather than hit, and
+      that the shove now plays to its end
+
+## 8. Any overlap is shoved (asked for in play)
+
+- [x] 8.1 Trigger on any overlap of two fighters on the ground, in front, behind
+      or on the same column, from standing, walking or running; not from a
+      swing, a block, a stun, a flinch, the air or block-all; verify `Any
+      overlap is shoved` and `Only a fighter on its feet and free shoves`,
+      including that exactly one of two overlapping fighters shoves
+- [x] 8.2 Skip a fighter in the air as a target; verify `Not the one in the air`
+      and that `TestABotFollowsAFighterTheLengthOfTheCourse` - where a bot on a
+      ledge was shoving a climber out of the air - passes repeatedly
+- [x] 8.3 Re-derive `PushDistance`'s bounds for a crowder starting 0 to 13px
+      away (14 to 21; 16 kept); verify the distance and arm's-length sweeps
+      cover every overlapping offset in both facings
+- [x] 8.4 Reconcile the tests the wider trigger disturbs - the jump runners
+      spaced apart, the bot attack target updated so its stun wears off, the
+      wall test's crowder guarding everything so it cannot part the two itself;
+      verify `go test ./...` passes three times running

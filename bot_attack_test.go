@@ -12,14 +12,19 @@ import (
 // answered the same way and nothing about the count depends on which height the
 // bot happens to be swinging at.
 //
-// Only the bot is updated: the hit test runs inside the swinging fighter's own
-// update, so blows resolve on the target without it acting.
+// The hit test runs inside the swinging fighter's own update, so blows resolve
+// on the target without it acting; it is still updated, because the lunge of
+// every swing walks the bot into it and the bot shoves it off, and a target
+// never updated would never come out of the stun that leaves it in. Guarding
+// everything, it never shoves back.
 func fight(bot, target *Actor, n int) (swings, landed int) {
-	target.Updown = 3
+	target.Updown, target.Input.Updown = 3, 3
 	was, structure := bot.State, target.Structure
 	for range n {
 		bot.Input = botInput(bot)
 		bot.Update(float32(FixedTimeStep))
+		target.FreezeTicks = 0
+		target.Update(float32(FixedTimeStep))
 		if bot.State == StateAttack && was != StateAttack {
 			swings++
 		}
