@@ -25,6 +25,7 @@ And nothing in the game falls. Once the wind-up finishes, the airborne fighter i
 ### Modified Capabilities
 
 - `energy`: *Energy pool* — the pool no longer gates attacking alone. Its rule that "moving, jumping, climbing and blocking SHALL cost nothing and SHALL be available at any energy" is what the run-jump's cost contradicts, and its scenario that an empty fighter can still jump has to say which jump it means.
+- `multiplayer/replication`: *Robust packet handling* — appending two states after `StateDeath` was safe on the wire but not in the decoder, whose validity check was spelled against `StateDeath` by name. Every snapshot carrying a fighter in either new state was discarded whole, all actors in it. The check has to be expressed against the number of states so appending one cannot outrun it, and "malformed" has to mean what the protocol disallows rather than what a stale bound happens to say.
 
 ## Impact
 

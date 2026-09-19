@@ -140,6 +140,11 @@ const (
 	// every state below it for anyone drawing from an older build
 	StateRunJump
 	StateFall
+	// stateCount is one past the last state. A replicated state is checked
+	// against it, so appending a state cannot leave that check behind - it was
+	// left at the death when the run-jump and the fall were appended, and every
+	// snapshot carrying either was thrown away as malformed.
+	stateCount
 )
 
 const (
