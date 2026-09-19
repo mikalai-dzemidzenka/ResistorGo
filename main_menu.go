@@ -111,8 +111,9 @@ const (
 	menuRowW       = 300
 	menuRowH       = 40
 	menuRowGap     = 8
-	menuLabelW     = 170 // label plus gap, left of a row
-	menuLogoBottom = menuRowY - 64
+	menuLabelW     = 170           // label plus gap, left of a row
+	menuLogoBottom = menuRowY - 56 // clear of the header above it by menuLogoGap
+	menuLogoGap    = 10
 )
 
 // The terminal the menu is framed as, in window pixels: a rule across the top

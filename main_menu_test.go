@@ -32,6 +32,11 @@ func TestMenuPanelHoldsTheColumn(t *testing.T) {
 	if top := menuLogoBottom - logoH*s; top < menuPanelTop {
 		t.Errorf("the logo starts at y %v, above the panel at %d", top, menuPanelTop)
 	}
+	// the header's last line, drawn by drawMenuPanel at menuPanelTop+66 in 12px
+	// text, and the logo under it with its 3px ghost: room between the two
+	if header, top := float32(menuPanelTop+66+12), menuLogoBottom-logoH*s; top-header < menuLogoGap {
+		t.Errorf("the logo starts %vpx under the header, want at least %d", top-header, menuLogoGap)
+	}
 	// the header above the logo, the last of it being the screen name
 	if menuLogoBottom+8+12 > menuRow(0).Y-34 {
 		t.Error("the screen name under the logo runs into the error line")
