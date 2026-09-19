@@ -118,25 +118,40 @@ every overlapping offset, both facings, not by the comment beside the constant.
 ### A remembered crowder stops a shove repeating
 
 A wall can cut the throw short, leaving the crowder where it was, still
-overlapping. Nothing else stops the next tick on the shover's feet from throwing
-the same shove again, every 0.35s, with no other button read (found by
-`TestAWallStopsTheThrow`). So the fighter remembers, in `PushStuck`, a crowder
-its shove left still overlapping, and `crowding()` skips that one until the two
-are apart. Usually the crowder, once its stun ends, shoves back and parts them
+overlapping; and the glide leaves it overlapping for its first tick or two in any
+case. Nothing else stops the next tick on the shover's feet from throwing the
+same shove again, every half second, with no other button read (found by
+`TestAWallStopsTheThrow`). So the fighter remembers, in `PushStuck`, the fighter
+its shove landed on, and `crowding()` skips that one until the two are apart. Usually the crowder, once its stun ends, shoves back and parts them
 itself; the memory covers the one that does not, such as one guarding everything.
 
 It is recorded on the landing frame in every world, not only the authority's. A
 client moves nobody, so on a client the crowder is always still overlapping and
 always remembered - which is what stops a predicting client throwing the same
-shove every 0.35s while it waits for the snapshot that parts them.
+shove every half second while it waits for the snapshot that parts them.
 
-### Displacement first, then speed, then the wall
+### A glide in whole pixels, not a jump and not a speed
 
-`shove` moves `Pos.X` directly, because a fighter mid-swing clamps its own speed
-to the lunge and a speed-only shove would leave it standing still. It sets the
-crowder's speed *before* `blockSides`, so a throw a wall cuts short keeps the
-clamp's removal of wall-ward speed rather than overwriting it and pressing the
-fighter into the wall.
+The shove carries the crowder rather than putting it down 16px away in one tick,
+which read as a teleport. It sets `ShoveLeft` and `ShoveDir` on the crowder, and
+each tick after the crowder's own move `glide` takes a third of what is left,
+rounded up: 16 goes 6, 4, 2, 2, 1, 1, an ease-out over six ticks that spans the
+arms-out frames 3 and 4.
+
+Speed was the obvious alternative and does not work here. Position is truncated
+to whole pixels every tick, so anything under 60 px/s moves nobody - the bug
+recorded in `flinch-knockback-is-lost-to-rounding` - and a slide under friction
+loses its whole slow tail to it; its distance would be neither 16 nor anything
+the bounds could be written against. The glide moves whole pixels only, so it
+travels exactly `PushDistance`.
+
+Each step asks `blockSides`, as every sideways move does; a step a wall stops
+short ends the glide there, flush, with the rest dropped rather than pressed into
+the wall. The crowder's own speed is zeroed when it is stunned, so a runner
+stunned mid-stride does not slide on into the shover during the wind-up.
+
+The glide belongs to the crowder, not to the shover's state: a shover hit out of
+its shove after landing does not leave the crowder half-way.
 
 ### The crowder is stunned when the shove starts, not when it lands
 
@@ -170,10 +185,23 @@ tests measure against it.
 
 ### Carried over unchanged from the withdrawn version
 
-`StatePush` and `push.png` appended; `PushSeconds` 0.35 over `PushFrames` 7,
-landing on `PushFrame` 3; the `PushDone` once-latch; the dead neither shove nor
+`StatePush` and `push.png` appended; `PushFrame` 3, the frame the arms come out; the `PushDone` once-latch; the dead neither shove nor
 are shoved; the displacement lands only where `W.Authority`; `StatePush` excluded
-from `canMove`; `jump_test.go`'s runners spaced apart.
+from `canMove`; `jump_test.go`'s runners spaced apart. Not carried over: the
+one-tick displacement and `PushSpeed`, replaced by the glide.
+
+### Ten frames at three ticks each
+
+`push.png` grew from 7 frames to 10: three more recovery frames on the end, back
+to standing, with the arms still first fully out on frame 3 (ink to x=45) and
+the follow-through on frame 4 (x=47). The rate is kept at three ticks a frame,
+so `PushSeconds` goes from 0.35 to 0.5 and the shove lands at the same moment,
+0.15s in; only the recovery is longer.
+
+The crowder's stun is 0.3s, so it recovers about 12 ticks before the shove's
+last frame. In the reproduction, 23 of 25 shoves played all ten frames; the
+other two lost their last recovery frames to the crowder's next swing meeting
+the shover's guard, long after the throw had landed.
 
 ## Risks / Trade-offs
 

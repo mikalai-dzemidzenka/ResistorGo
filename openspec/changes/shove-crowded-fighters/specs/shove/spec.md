@@ -85,6 +85,18 @@ A shove SHALL move the fighter it lands on far enough that the two no longer
 overlap, and not so far that the shover's swing cannot reach it, from anywhere a
 shove can be thrown.
 
+#### Scenario: Carried there, not put there
+
+- **WHEN** a shove lands
+- **THEN** the fighter shoved SHALL be carried away over several ticks, a few
+  pixels at a time and slowing as it goes, never moved the whole distance at
+  once
+
+#### Scenario: A wall ends the carry
+
+- **WHEN** a wall stops the fighter being carried
+- **THEN** it SHALL stop against the wall and SHALL NOT be pressed on into it
+
 #### Scenario: The two end up apart
 
 - **WHEN** a shove lands on a fighter anywhere in the position that sets a shove

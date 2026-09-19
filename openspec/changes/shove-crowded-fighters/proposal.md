@@ -18,12 +18,13 @@ standing, so the trigger is now any overlap.
 - A new actor state, `StatePush`, appended to the state enum. When two fighters
   on the ground overlap, in front, behind or on the same spot, the first one on
   its feet and free - standing, walking or running - turns to face the other and
-  shoves it. It plays `push.png` over 7 frames, cannot be steered, and lands on
+  shoves it. It plays `push.png` over 10 frames, cannot be steered, and lands on
   the frame both arms are out.
 - A fighter swinging, blocking, stunned, flinching from a hit, in the air or
   guarding everything does not shove; it finishes what it is doing. A fighter in
   the air is not shoved until it lands.
-- The shove moves the crowder away from the shover, far enough to clear the
+- The shove carries the crowder away from the shover - a short glide over a few
+  ticks, not a jump - far enough to clear the
   overlap and near enough to stay inside the reach of a swing, and stuns it from
   the moment the shove begins - which also keeps it from shoving back. It takes
   no structure, no energy and counts as no hit. Without the stun the crowder -

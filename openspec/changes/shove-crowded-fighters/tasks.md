@@ -119,3 +119,13 @@
       spaced apart, the bot attack target updated so its stun wears off, the
       wall test's crowder guarding everything so it cannot part the two itself;
       verify `go test ./...` passes three times running
+- [x] 8.5 `push.png` grew to 10 frames: set `PushFrames` 10 and `PushSeconds`
+      0.5, keeping three ticks a frame and the landing on frame 3, where the
+      arms are first fully out; verify the suite passes and the reproduction
+      still lands every shove it throws
+- [x] 8.6 Carry the crowder instead of moving it 16px in one tick: a whole-pixel
+      ease-out glide (6, 4, 2, 2, 1, 1) on the crowder, wall-checked every step,
+      replacing the displacement and `PushSpeed`; remember the fighter shoved
+      from the landing on, so the overlap that lasts into the glide is not
+      shoved again; verify `Carried there, not put there` and `A wall ends the
+      carry`, and that the suite passes three times running

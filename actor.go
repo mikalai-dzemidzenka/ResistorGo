@@ -98,14 +98,13 @@ const (
 	// A shove is what a standing fighter does about another on its back: the
 	// one behind can swing at it and it cannot swing back. It turns on the
 	// crowder and throws it off, costing it nothing but its ground.
-	PushSeconds = 0.35
-	PushFrames  = 7
+	PushSeconds = 0.5 // three ticks a frame
+	PushFrames  = 10
 	PushFrame   = 3 // the frame both arms are out: where the shove lands
 	// How far the shove moves the crowder. It starts 0 to 13px away, so this
 	// must be at least 14 to clear the 14px overlap and at most 21 to stay
 	// inside the 35px a swing reaches.
 	PushDistance = 16
-	PushSpeed    = PunchSpeed // what it leaves in the shoved fighter, as a hit does
 
 	// One in three: the odds a bot answers a landed hit by moving its guard to
 	// the height that hit it. A feel number, to be turned by eye in play.
@@ -227,7 +226,9 @@ type Actor struct {
 	FlinchTicks      uint8   // ticks a hit that did not stun keeps the fighter flickering
 	SwingHit         bool    // this fighter's current swing has already landed
 	PushDone         bool    // this fighter's current shove has already moved someone
-	PushStuck        *Actor  // a crowder its last shove left still overlapping; not shoved again until apart
+	PushStuck        *Actor  // the fighter its last shove landed on; not shoved again until the two are apart
+	ShoveLeft        uint8   // pixels a shove still has to carry this fighter
+	ShoveDir         int8    // which way that shove is carrying it
 	Dying            bool    // dead and waiting to be taken out of the world
 	DeathTicks       uint16  // ticks since the death animation finished
 	DenyUntil        float64 // game time a refused swing stops flashing; local only, never replicated
@@ -472,6 +473,9 @@ func (a *Actor) Update(dt float32) {
 	a.Pos.X += a.Speed.X * dt
 	a.Pos.X = float32(int(a.Pos.X))
 	a.blockSides(fromX)
+	if a.ShoveLeft > 0 {
+		a.glide()
+	}
 	a.Pos.Y += a.Speed.Y * dt
 	a.Pos.Y = float32(int(a.Pos.Y))
 }
@@ -1255,10 +1259,10 @@ func (a *Actor) Flickering() bool {
 // stands on, most often - is left to land first. Shoving it out of the air
 // knocked a climber off the same ledge every time it tried it.
 //
-// A crowder the last shove could not clear - one flush against a wall - is left
-// alone until the two are apart. Nothing else would stop the next tick on its
-// feet from throwing the same shove at the same fighter again, and again, with
-// no other button ever read.
+// The fighter the last shove landed on is left alone until the two are apart -
+// while it glides clear, and for good if a wall stops it flush. Nothing else
+// would stop the next tick on its feet from throwing the same shove at the same
+// fighter again, and again, with no other button ever read.
 func (a *Actor) crowding() *Actor {
 	if a.W == nil {
 		return nil
@@ -1309,9 +1313,10 @@ func (a *Actor) enterPushState(other *Actor) {
 // the animation. The shove is the authority's alone, as a hit is: a client is
 // shown the animation, and the ground it changed hands, by the snapshot.
 //
-// Whoever is still overlapping once it has landed is remembered, on a client
-// too - there nobody moved, and the snapshot is what parts them - so the next
-// tick standing does not throw the same shove at the same fighter again.
+// Whoever it lands on is remembered, on a client too, until the two are apart:
+// the crowder glides clear over the next few ticks, a wall can stop it short,
+// and on a client nobody moves until the snapshot says so - and in none of
+// those should the next tick on its feet throw the same shove again.
 func (a *Actor) updatePush() {
 	if a.W != nil && !a.PushDone && a.AnimCurrentFrame >= PushFrame {
 		a.PushDone = true
@@ -1325,9 +1330,7 @@ func (a *Actor) updatePush() {
 			if a.W.Authority {
 				a.shove(other)
 			}
-			if aabb(a.collisionRect(), other.collisionRect()) {
-				a.PushStuck = other
-			}
+			a.PushStuck = other
 		}
 	}
 	if a.AnimFinished {
@@ -1335,19 +1338,31 @@ func (a *Actor) updatePush() {
 	}
 }
 
-// shove moves a fighter away from the one throwing it, and stuns it.
+// shove stuns a fighter and sends it gliding away from the one throwing it.
 //
-// The ground it gives up is a displacement and not only speed: a fighter
-// mid-swing holds its own speed down to the lunge, and would otherwise stand
-// its ground through a shove. The speed is set before the wall is asked, so a
-// wall that cuts the throw short also takes away the speed into it.
+// The ground it gives up is a glide it is carried along, not speed it is given:
+// the game moves in whole pixels, truncating every tick, so a speed that slows
+// under a pixel a tick never moves anyone, and the tail of any slide is lost.
 func (a *Actor) shove(other *Actor) {
 	other.enterShovedState(a)
-	dir := float32(a.pushDir(other))
-	fromX := other.Pos.X
-	other.Pos.X = float32(int(other.Pos.X + dir*PushDistance))
-	other.Speed.X = dir * PushSpeed
-	other.blockSides(fromX)
+	other.Speed.X = 0
+	other.ShoveLeft, other.ShoveDir = PushDistance, a.pushDir(other)
+}
+
+// glide carries a shoved fighter one step of the way, easing out: a third of
+// what is left each tick, rounded up, so 16 pixels go 6, 4, 2, 2, 1, 1. Walls
+// are asked the way every other move asks them, and one that stops a step
+// short ends the glide there.
+func (a *Actor) glide() {
+	step := (a.ShoveLeft + 2) / 3
+	fromX := a.Pos.X
+	a.Pos.X += float32(a.ShoveDir) * float32(step)
+	a.blockSides(fromX)
+	if abs(a.Pos.X-fromX) < float32(step) {
+		a.ShoveLeft = 0
+		return
+	}
+	a.ShoveLeft -= step
 }
 
 // enterShovedState is what a shove leaves the fighter it lands on: the lockout
@@ -1366,6 +1381,7 @@ func (a *Actor) enterShovedState(by *Actor) {
 	}
 	a.State = StateAttacked
 	a.Attacker = by
+	a.Speed.X = 0 // or a runner stunned mid-stride slides into the shover
 	a.stopFlicker()
 	a.SetAnim("resources/threefour/hit-top.png", AnimOptions{animDuration: 0.3, totalFrames: 4, once: true, reset: true})
 }

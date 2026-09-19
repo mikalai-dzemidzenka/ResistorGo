@@ -322,20 +322,60 @@ func TestAShoveCannotBeSteered(t *testing.T) {
 	}
 }
 
-// A shove moves each fighter at most once.
-func TestAShoveLandsOnce(t *testing.T) {
-	w, a, b := crowd(t, -8, 1)
-	moved := 0
-	last := b.Pos.X
-	for range pushTicks {
+// The crowder glides clear rather than jumping there: from the frame the arms
+// come out it is carried a few pixels a tick, always away, easing out, the whole
+// of PushDistance and no more - one shove, carried once.
+func TestAShoveGlidesTheCrowderClear(t *testing.T) {
+	w, _, b := crowd(t, -8, 1)
+	from, last := b.Pos.X, b.Pos.X
+	var steps []float32
+	for range 3 * pushTicks {
 		run(w, 1)
-		if b.Pos.X != last && a.State == StatePush {
-			moved++
+		if d := last - b.Pos.X; d != 0 { // away is to the left
+			steps = append(steps, d)
 		}
 		last = b.Pos.X
 	}
-	if moved != 1 {
-		t.Errorf("the shove moved the crowder %d times, want once", moved)
+	if len(steps) < 4 {
+		t.Errorf("the crowder moved in %d steps %v, want a glide over several ticks", len(steps), steps)
+	}
+	for i, d := range steps {
+		if d < 0 {
+			t.Errorf("step %d of %v went back toward the shover", i, steps)
+		}
+		if d > 6 {
+			t.Errorf("step %d of %v jumped %vpx in one tick", i, steps, d)
+		}
+		if i > 0 && d > steps[i-1] {
+			t.Errorf("the glide sped up at step %d of %v, want it easing out", i, steps)
+		}
+	}
+	if got := from - b.Pos.X; got != PushDistance {
+		t.Errorf("the glide carried the crowder %vpx, want %v", got, PushDistance)
+	}
+}
+
+// A wall part of the way along ends the glide where it stands, flush, with the
+// rest of it dropped rather than pressed into the wall.
+func TestAWallEndsTheGlide(t *testing.T) {
+	walls()
+	defer floor()
+	w := NewWorld(true)
+	a := w.Spawn(rl.Vector2{}, true)
+	b := w.Spawn(rl.Vector2{}, true)
+	b.Pos.X = wallX - b.CollisionBox.X + 5 // five pixels of room
+	a.Pos.X = b.Pos.X + 8
+	a.Orientation, a.Input.FaceLeft = -1, true
+	b.Orientation, b.Input.FaceLeft = 1, false
+	for _, f := range []*Actor{a, b} {
+		f.checkCollision()
+	}
+	run(w, pushTicks)
+	if left := b.Pos.X + b.CollisionBox.X; left != wallX {
+		t.Errorf("the crowder stopped with its edge at %v, want flush on the wall at %v", left, wallX)
+	}
+	if b.ShoveLeft != 0 {
+		t.Errorf("the glide still has %vpx to carry the crowder into the wall", b.ShoveLeft)
 	}
 }
 
