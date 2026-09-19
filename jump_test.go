@@ -20,24 +20,22 @@ func TestAnimTableIsAppendOnly(t *testing.T) {
 		"resources/threefour/hit-top.png":    24,
 		"resources/threefour/death_fall.png": 25,
 		"resources/threefour/turnover.png":   45,
+		"resources/threefour/run-jump.png":   46,
+		"resources/threefour/fall.png":       47,
 	} {
 		if got := animID(path); got != want {
 			t.Errorf("%s has id %d, want %d - something was inserted rather than appended", path, got, want)
 		}
 	}
 
-	// the two new ones are on the end, in order, and survive the round trip
-	for i, path := range []string{
-		"resources/threefour/run-jump.png",
-		"resources/threefour/fall.png",
-	} {
-		id := animID(path)
-		if want := uint8(len(animTable) - 2 + i); id != want {
-			t.Errorf("%s has id %d, want %d - it is not at the end of the table", path, id, want)
-		}
-		if back := animPath(id); back != path {
-			t.Errorf("id %d came back as %q, want %q", id, back, path)
-		}
+	// the newest one is on the end, and survives the round trip
+	const newest = "resources/threefour/push.png"
+	id := animID(newest)
+	if want := uint8(len(animTable) - 1); id != want {
+		t.Errorf("%s has id %d, want %d - it is not at the end of the table", newest, id, want)
+	}
+	if back := animPath(id); back != newest {
+		t.Errorf("id %d came back as %q, want %q", id, back, newest)
 	}
 }
 
@@ -112,7 +110,9 @@ func TestStandingJumpUnchanged(t *testing.T) {
 		t.Errorf("the standing jump plays %q, want the wind-up", stand.Anim)
 	}
 
-	runner := ground(w, 10)
+	// clear of the other: two fighters standing in one another shove each other
+	// apart, and this test is about the jump
+	runner := ground(w, 120)
 	runner.State = StateRun
 	runner.Speed.X = RunReach + 20
 	runner.Input.Jump = true
@@ -188,7 +188,7 @@ func TestRunJumpKeepsMomentum(t *testing.T) {
 	jumped.State = StateRun
 	jumped.Speed.X = RunReach
 	jumped.Input.Jump = true
-	kept := ground(w, 10)
+	kept := ground(w, 120) // clear of the other, so neither shoves the other
 	kept.State = StateRun
 	kept.Speed.X = RunReach
 	jumped.Update(float32(FixedTimeStep))
@@ -430,22 +430,25 @@ func TestClimbRefusesToTurn(t *testing.T) {
 		}
 	}
 
-	// the rule belongs to the state, not to the player's keys: a bot that
-	// wants to face a target the other way is refused the same turn
+	// The rule belongs to the state, not to the player's keys: a bot that wants
+	// to turn is refused the same turn. A bot only ever turns toward somewhere
+	// it means to go, and the one place that can be behind it is the spot it
+	// last saw a fighter at - so that is what asks for the turn here.
+	floor()
 	w := NewWorld(true)
 	bot := w.Spawn(rl.Vector2{X: 100}, false)
-	w.Spawn(rl.Vector2{}, true) // its nearest, well to the left
+	bot.Bot.mark(rl.Vector2{}) // last seen well to the bot's left
 	bot.State, bot.Orientation = StateClimb, 1
 	botInput(bot)
 	if bot.Orientation != 1 {
 		t.Errorf("a bot turned to face %d mid-climb", bot.Orientation)
 	}
 
-	// and off the ledge the same bot turns as it always did
+	// and off the ledge the same bot turns to go and look
 	bot.State = StateIdle
 	botInput(bot)
 	if bot.Orientation != -1 {
-		t.Errorf("out of the climb the bot faces %d, want it turned to its target", bot.Orientation)
+		t.Errorf("out of the climb the bot faces %d, want it turned toward where it last saw someone", bot.Orientation)
 	}
 }
 

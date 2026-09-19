@@ -1,6 +1,71 @@
 package resistor
 
-import "testing"
+import (
+	"slices"
+	"testing"
+)
+
+// The panel has to hold the whole menu column - the header, the logo at the
+// scale logoScale picks, every row with its label and the error line - and the
+// panel itself has to stay between the two rules the window is framed by.
+func TestMenuPanelHoldsTheColumn(t *testing.T) {
+	if menuPanelTop < menuRuleTop || menuPanelBottom > menuRuleBottom {
+		t.Errorf("panel spans y %d..%d, outside the rules at %d and %d", menuPanelTop, menuPanelBottom, menuRuleTop, menuRuleBottom)
+	}
+	for i := range 6 { // the host screen uses six rows, the most of any screen
+		r := menuRow(i)
+		if r.X-menuLabelW < menuPanelLeft || r.X+r.Width > menuPanelW {
+			t.Errorf("row %d with its label spans x %v..%v, want inside the panel at %d..%d", i, r.X-menuLabelW, r.X+r.Width, menuPanelLeft, menuPanelW)
+		}
+		if r.Y < menuPanelTop || r.Y+r.Height > menuPanelBottom {
+			t.Errorf("row %d spans y %v..%v, want inside the panel at %d..%d", i, r.Y, r.Y+r.Height, menuPanelTop, menuPanelBottom)
+		}
+	}
+	// the logo, at the size it is actually drawn: 209x28 pixels of art,
+	// centred over the widget column
+	const logoW, logoH = 209, 28
+	s := logoScale(logoW)
+	x := menuRowX + menuRowW/2 - logoW*s/2
+	if x < menuPanelLeft || x+logoW*s > menuPanelW {
+		t.Errorf("the logo spans x %v..%v, want inside the panel at %d..%d", x, x+logoW*s, menuPanelLeft, menuPanelW)
+	}
+	if top := menuLogoBottom - logoH*s; top < menuPanelTop {
+		t.Errorf("the logo starts at y %v, above the panel at %d", top, menuPanelTop)
+	}
+	// the header's last line, drawn by drawMenuPanel at menuPanelTop+66 in 12px
+	// text, and the logo under it with its 3px ghost: room between the two
+	if header, top := float32(menuPanelTop+66+12), menuLogoBottom-logoH*s; top-header < menuLogoGap {
+		t.Errorf("the logo starts %vpx under the header, want at least %d", top-header, menuLogoGap)
+	}
+	// the header above the logo, the last of it being the screen name
+	if menuLogoBottom+8+12 > menuRow(0).Y-34 {
+		t.Error("the screen name under the logo runs into the error line")
+	}
+}
+
+// The rain is laid out in normalized coordinates from a fixed seed, so it is
+// the same shower every run and it covers the scene whatever the scene is
+// drawn at.
+func TestMenuRainCoversTheScene(t *testing.T) {
+	drops := makeMenuDrops(7)
+	if len(drops) != menuDropCount {
+		t.Fatalf("got %d streaks, want %d", len(drops), menuDropCount)
+	}
+	for i, d := range drops {
+		if d.x < 0 || d.x > 1 || d.y < 0 || d.y > 1 {
+			t.Errorf("streak %d sits at %v,%v, outside the scene", i, d.x, d.y)
+		}
+		if d.speed <= 0 {
+			t.Errorf("streak %d falls at %v, want faster than nothing", i, d.speed)
+		}
+		if d.length <= 0 || d.length > menuSceneH/4 {
+			t.Errorf("streak %d is %v pixels long, want between 0 and a quarter of the scene", i, d.length)
+		}
+	}
+	if !slices.Equal(drops, makeMenuDrops(7)) {
+		t.Error("the same seed gives a different shower")
+	}
+}
 
 func TestMenuLayout(t *testing.T) {
 	const winW, winH = SW * WindowScale, SH * WindowScale

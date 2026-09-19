@@ -931,7 +931,7 @@ func (le *LevelEditor) OpenObjects() {
 // and nothing else writes either file.
 func (le *LevelEditor) Save() {
 	ok := saveObjectDefaults(objectDefaultsPath, le.defaults)
-	le.SaveLevel("level_1.json")
+	le.SaveLevel(LevelPath)
 	if !ok {
 		le.dirty = true // the level is saved, but not everything is
 	}

@@ -1,11 +1,13 @@
 package resistor
 
 import (
-	rlg "github.com/gen2brain/raylib-go/raygui"
-	rl "github.com/gen2brain/raylib-go/raylib"
+	"fmt"
 	"math"
 	"strconv"
 	"strings"
+
+	rlg "github.com/gen2brain/raylib-go/raygui"
+	rl "github.com/gen2brain/raylib-go/raylib"
 )
 
 const (
@@ -48,8 +50,10 @@ func runMainMenu(dt float32) {
 	t := GameTimeSec
 	gridCol := neonColor(neonGrid, t)
 
-	// the fixed layers: the sky with its sun and the neon grid
-	drawMenuBackground(t, gridCol)
+	menuInput()
+
+	// the scene: the sky with its sun, the neon grid, the rain and the CRT
+	drawMenuBackground(t, dt, gridCol)
 
 	rl.BeginTextureMode(MainMenuTexture)
 	rl.ClearBackground(menuSky)
@@ -67,26 +71,13 @@ func runMainMenu(dt float32) {
 	martelo()
 	rl.EndMode3D()
 	rl.EndTextureMode()
+
 	rl.BeginTextureMode(MenuFrame)
 	rl.ClearBackground(rl.Black)
-	{
-		rl.DrawTextureEx(MainMenuTexture.Texture, rl.Vector2{
-			X: 0,
-			Y: 0,
-		}, 0, menuPixel, rl.White)
-		tex := resources["resources/main_menu/resistor.png"]
-		col := rl.White
-		if GameTimeSec > 3 {
-			col.A = 255
-		} else if GameTimeSec > 2 {
-			col.A = uint8(math.Min((math.Sin(GameTimeSec-2))*255, 255))
-		} else {
-			col.A = 0
-		}
-		s := logoScale(tex.Width)
-		x := math.Floor(menuRowX + menuRowW/2 - float64(tex.Width)*float64(s)/2)
-		rl.DrawTextureEx(tex, rl.Vector2{float32(x), menuLogoBottom - float32(tex.Height)*s}, 0, s, col)
-	}
+	rl.DrawTextureEx(MainMenuTexture.Texture, rl.Vector2{}, 0, menuPixel, rl.White)
+	drawMenuPanel()
+	drawMenuRules()
+	drawMenuLogo()
 	drawMenuUI()
 	rl.EndTextureMode()
 
@@ -120,8 +111,23 @@ const (
 	menuRowW       = 300
 	menuRowH       = 40
 	menuRowGap     = 8
-	menuLabelW     = 170 // label plus gap, left of a row
-	menuLogoBottom = menuRowY - 64
+	menuLabelW     = 170           // label plus gap, left of a row
+	menuLogoBottom = menuRowY - 56 // clear of the header above it by menuLogoGap
+	menuLogoGap    = 10
+)
+
+// The terminal the menu is framed as, in window pixels: a rule across the top
+// and the bottom of the window with a readout on each, and the panel the menu
+// column stands on. The panel is wide enough for the logo at the scale
+// logoScale picks and tall enough for the six rows of the host screen.
+const (
+	menuRuleTop     = 48
+	menuRuleBottom  = VH - 48
+	menuRuleInset   = 28 // how far short of the window edges a rule stops
+	menuPanelLeft   = 8
+	menuPanelTop    = 160
+	menuPanelBottom = menuRuleBottom - 8
+	menuTextSpacing = 2 // the gap between glyphs of every text the menu draws
 )
 
 // menuRow is the i-th widget row of a menu screen, in window pixels.
@@ -141,34 +147,268 @@ func logoScale(texW int32) float32 {
 	return max(1, min(s, WindowScale))
 }
 
+// menuText draws one line of the menu's text. Everything the chrome writes goes
+// through here, so it is all the default font at one spacing.
+func menuText(s string, x, y, size float32, col rl.Color) {
+	rl.DrawTextEx(rl.GetFontDefault(), s, rl.Vector2{X: x, Y: y}, size, menuTextSpacing, col)
+}
+
+// menuTextRight draws one line of text ending at x.
+func menuTextRight(s string, x, y, size float32, col rl.Color) {
+	w := rl.MeasureTextEx(rl.GetFontDefault(), s, size, menuTextSpacing).X
+	menuText(s, x-w, y, size, col)
+}
+
+// menuLine draws a one pixel high horizontal rule.
+func menuLine(x1, x2, y, width float32, col rl.Color) {
+	rl.DrawLineEx(rl.Vector2{X: x1, Y: y}, rl.Vector2{X: x2, Y: y}, width, col)
+}
+
+// The highlight of the main screen. A row is chosen with the mouse or with the
+// keyboard, so the first screen can be worked without a mouse at all; the other
+// screens have text fields and spinners on their rows and are mouse-driven, as
+// they were.
+var (
+	menuSel  int  // the highlighted row
+	menuTake bool // the highlighted row was chosen this frame
+)
+
+// menuMainLabels are the rows of the main screen, in order.
+var menuMainLabels = []string{"Single Player", "Host Game", "Join Game", "Options", "Quit"}
+
+// menuInput reads the keys the chrome advertises: the highlight on the main
+// screen, and Escape backing out of any other screen the way its Back button
+// does.
+func menuInput() {
+	if menuScreen == menuMain {
+		menuNavigate(len(menuMainLabels))
+	} else {
+		menuTake = false
+		if rl.IsKeyPressed(rl.KeyEscape) {
+			menuBack()
+		}
+	}
+}
+
+// menuNavigate moves the highlight over the n rows of the main screen and notes
+// whether the highlighted row was chosen. Moving the mouse over a row takes the
+// highlight, so the two ways of picking never disagree about what is lit.
+func menuNavigate(n int) {
+	if rl.IsKeyPressed(rl.KeyDown) || rl.IsKeyPressed(rl.KeyS) {
+		menuSel = (menuSel + 1) % n
+	}
+	if rl.IsKeyPressed(rl.KeyUp) || rl.IsKeyPressed(rl.KeyW) {
+		menuSel = (menuSel + n - 1) % n
+	}
+	menuSel = clamp(menuSel, 0, n-1)
+
+	mouse := rl.GetMousePosition()
+	moved := rl.GetMouseDelta()
+	click := rl.IsMouseButtonPressed(rl.MouseLeftButton)
+	hovered := -1
+	for i := range n {
+		if rl.CheckCollisionPointRec(mouse, menuRow(i)) {
+			hovered = i
+			if moved.X != 0 || moved.Y != 0 || click {
+				menuSel = i
+			}
+		}
+	}
+	menuTake = rl.IsKeyPressed(rl.KeyEnter) || rl.IsKeyPressed(rl.KeySpace) || (click && hovered >= 0)
+}
+
+// menuBack leaves the screen that is up, as its last row does.
+func menuBack() {
+	hostPortEdit, hostMaxEdit, hostBotsEdit, hostMaxSpecEdit = false, false, false, false
+	joinAddrEdit, winSizeEdit = false, false
+	switch menuScreen {
+	case menuHost, menuJoin:
+		menuError = ""
+		menuScreen = menuMain
+	case menuOptions:
+		SaveSettings()
+		menuScreen = menuMain
+	case menuConnecting:
+		leaveMatch("", connectingFrom)
+	}
+}
+
+// menuScreenName is the readout under the logo: which screen is up.
+func menuScreenName() string {
+	switch menuScreen {
+	case menuHost:
+		return "HOST // OPEN A SESSION"
+	case menuJoin:
+		return "JOIN // REACH A SESSION"
+	case menuOptions:
+		return "OPTIONS // THIS MACHINE"
+	case menuConnecting:
+		return "LINK // HANDSHAKE"
+	}
+	return "MAIN // SELECT A ROUTE"
+}
+
+// drawMenuPanel draws the panel the menu column stands on, and the header above
+// the logo.
+func drawMenuPanel() {
+	p := rl.Rectangle{
+		X: menuPanelLeft, Y: menuPanelTop,
+		Width:  menuPanelW - menuPanelLeft,
+		Height: menuPanelBottom - menuPanelTop,
+	}
+	rl.DrawRectangleRec(p, rl.Fade(menuPanelCol, 0.90))
+	rl.DrawRectangleLinesEx(p, 1, rl.Fade(menuDim, 0.85))
+
+	x := float32(menuRowX - menuLabelW) // the left edge of the label column
+	menuLine(x, x+200, menuPanelTop+24, 2, menuAccent)
+	menuText("NEO-MINSK", x, menuPanelTop+36, 22, menuBright)
+	menuText("SECURE TERMINAL // ACCESS", x, menuPanelTop+66, 12, menuMuted)
+	menuText(menuScreenName(), x, menuLogoBottom+8, 12, menuMuted)
+}
+
+// drawMenuRules draws the two rules the window is framed by and their readouts:
+// what this terminal is, what it is talking to, and how the screen that is up is
+// worked.
+func drawMenuRules() {
+	menuLine(menuRuleInset, VW-menuRuleInset, menuRuleTop, 1, rl.Fade(menuNeon, 0.45))
+	menuText("RESISTOR.SYS", 30, 21, 18, menuNeon)
+	menuText("SECURE CONNECTION // NEO-MINSK", 200, 23, 14, menuMuted)
+
+	status := "SYS.ONLINE"
+	switch {
+	case Cli != nil:
+		status = "LINK ACTIVE"
+	case Srv != nil:
+		status = "HOST ACTIVE"
+	}
+	menuTextRight(status, VW-30, 23, 14, menuNeon)
+
+	menuLine(menuRuleInset, VW-menuRuleInset, menuRuleBottom, 1, rl.Fade(menuNeon, 0.30))
+	hint := "W/S  NAVIGATE     ENTER  SELECT"
+	if menuScreen != menuMain {
+		hint = "MOUSE  SELECT     ESC  BACK"
+	}
+	menuText(hint, 30, VH-31, 14, menuMuted)
+	menuTextRight(fmt.Sprintf("PROTO %d // BUILD 0.1", ProtocolVersion), VW-30, VH-31, 14, menuAccent)
+}
+
+// drawMenuLogo draws the game's logo over the widget column, with an offset
+// ghost of itself behind it. Its fade-in is unchanged.
+func drawMenuLogo() {
+	tex := resources["resources/main_menu/resistor.png"]
+	a := 0.0
+	switch {
+	case GameTimeSec > 3:
+		a = 1
+	case GameTimeSec > 2:
+		a = math.Min(math.Sin(GameTimeSec-2), 1)
+	}
+	col, ghost := rl.White, menuAccent
+	col.A = uint8(a * 255)
+	ghost.A = uint8(a * 110)
+
+	s := logoScale(tex.Width)
+	x := float32(math.Floor(menuRowX + menuRowW/2 - float64(tex.Width)*float64(s)/2))
+	y := menuLogoBottom - float32(tex.Height)*s
+	rl.DrawTextureEx(tex, rl.Vector2{X: x + 3, Y: y + 3}, 0, s, ghost)
+	rl.DrawTextureEx(tex, rl.Vector2{X: x, Y: y}, 0, s, col)
+}
+
+// drawMenuRow draws row i as a terminal row: its number, its label, a marker
+// down its left edge, and a pulsing glow around it while it is highlighted.
+func drawMenuRow(r rl.Rectangle, label string, i int, active bool) {
+	edge, fill, mark := menuDim, menuRowFill, menuMuted
+	if active {
+		edge, fill, mark = menuNeon, menuRowFillOn, menuNeon
+		pulse := float32(0.22 + 0.10*math.Sin(GameTimeSec*5))
+		glow := rl.Rectangle{X: r.X - 4, Y: r.Y - 4, Width: r.Width + 8, Height: r.Height + 8}
+		rl.DrawRectangleRec(glow, rl.Fade(menuNeon, pulse))
+	}
+	rl.DrawRectangleRec(r, fill)
+	rl.DrawRectangleLinesEx(r, 1, rl.Fade(edge, 0.80))
+	rl.DrawRectangleRec(rl.Rectangle{X: r.X, Y: r.Y, Width: 4, Height: r.Height}, mark)
+
+	menuText(fmt.Sprintf("%02d", i+1), r.X+14, r.Y+14, 14, mark)
+	menuText(label, r.X+48, r.Y+11, 20, menuBright)
+	if active {
+		menuText(">", r.X+r.Width-22, r.Y+11, 20, menuAccent)
+	}
+}
+
+// menuButton draws row i as a menu row and reports whether it was chosen this
+// frame. On the main screen the keyboard moves the highlight; on the others the
+// row under the mouse is the lit one.
+func menuButton(i int, label string) bool {
+	r := menuRow(i)
+	hover := rl.CheckCollisionPointRec(rl.GetMousePosition(), r)
+	if menuScreen == menuMain {
+		drawMenuRow(r, label, i, i == menuSel)
+		return menuTake && i == menuSel
+	}
+	drawMenuRow(r, label, i, hover)
+	return hover && rl.IsMouseButtonPressed(rl.MouseLeftButton)
+}
+
+// menuChoice draws the rows of the main screen and returns the one chosen this
+// frame, or -1.
+func menuChoice(labels []string) int {
+	chosen := -1
+	for i, s := range labels {
+		if menuButton(i, s) {
+			chosen = i
+		}
+	}
+	return chosen
+}
+
+// menuWidgetStyle paints the raygui widgets the menu still uses - the text
+// fields, the spinners, the slider, the toggles and the dropdown - in the
+// scene's reds, so they match the rows drawn by hand. DEFAULT reaches every
+// control; loadStyle puts the dark editor style back when a level starts.
+func menuWidgetStyle() {
+	set := func(p rlg.PropertyID, col rl.Color) {
+		rlg.SetStyle(rlg.DEFAULT, p, rlg.PropertyValue(rl.ColorToInt(col)))
+	}
+	set(rlg.BORDER_COLOR_NORMAL, menuDim)
+	set(rlg.BASE_COLOR_NORMAL, menuRowFill)
+	set(rlg.TEXT_COLOR_NORMAL, menuBright)
+	set(rlg.BORDER_COLOR_FOCUSED, menuNeon)
+	set(rlg.BASE_COLOR_FOCUSED, menuRowFillOn)
+	set(rlg.TEXT_COLOR_FOCUSED, menuBright)
+	set(rlg.BORDER_COLOR_PRESSED, menuAccent)
+	set(rlg.BASE_COLOR_PRESSED, menuRowFillOn)
+	set(rlg.TEXT_COLOR_PRESSED, menuBright)
+	set(rlg.BORDER_COLOR_DISABLED, menuDim)
+	set(rlg.BASE_COLOR_DISABLED, menuRowFill)
+	set(rlg.TEXT_COLOR_DISABLED, menuMuted)
+	set(rlg.LINE_COLOR, menuDim)
+	set(rlg.BACKGROUND_COLOR, menuRowFill)
+}
+
 func drawMenuUI() {
+	menuWidgetStyle()
 	row := menuRow
 	label := func(i int, text string) {
 		r := row(i)
-		r.X -= menuLabelW
-		r.Width = 160
-		rlg.Label(r, text)
+		menuText(text, r.X-menuLabelW, r.Y+12, 16, menuBright)
 	}
 
 	switch menuScreen {
 	case menuMain:
-		if rlg.Button(row(0), "Single Player") {
+		switch menuChoice(menuMainLabels) {
+		case 0:
 			menuError = ""
 			startOffline()
-		}
-		if rlg.Button(row(1), "Host Game") {
+		case 1:
 			menuError = ""
 			menuScreen = menuHost
-		}
-		if rlg.Button(row(2), "Join Game") {
+		case 2:
 			menuError = ""
 			menuScreen = menuJoin
-		}
-		if rlg.Button(row(3), "Options") {
+		case 3:
 			menuError = ""
 			menuScreen = menuOptions
-		}
-		if rlg.Button(row(4), "Quit") {
+		case 4:
 			quit = true
 		}
 	case menuHost:
@@ -188,12 +428,11 @@ func drawMenuUI() {
 		if rlg.Spinner(row(3), "", &hostMaxSpec, 0, 8, hostMaxSpecEdit) {
 			hostMaxSpecEdit = !hostMaxSpecEdit
 		}
-		if rlg.Button(row(4), "Start") {
+		if menuButton(4, "Start") {
 			hostGame()
 		}
-		if rlg.Button(row(5), "Back") {
-			menuError = ""
-			menuScreen = menuMain
+		if menuButton(5, "Back") {
+			menuBack()
 		}
 	case menuJoin:
 		label(0, "Address")
@@ -209,15 +448,14 @@ func drawMenuUI() {
 				menuScreen = menuConnecting
 			}
 		}
-		if rlg.Button(row(1), "Connect") {
+		if menuButton(1, "Connect") {
 			join(false)
 		}
-		if rlg.Button(row(2), "Join as spectator") {
+		if menuButton(2, "Join as spectator") {
 			join(true)
 		}
-		if rlg.Button(row(3), "Back") {
-			menuError = ""
-			menuScreen = menuMain
+		if menuButton(3, "Back") {
+			menuBack()
 		}
 	case menuOptions:
 		label(0, "Fullscreen")
@@ -245,9 +483,8 @@ func drawMenuUI() {
 		}
 		rlg.Toggle(row(3), hudText, &hud)
 		Cfg.HideHUD = !hud
-		if rlg.Button(row(4), "Back") {
-			SaveSettings()
-			menuScreen = menuMain
+		if menuButton(4, "Back") {
+			menuBack()
 		}
 		// drawn last so its open list covers the rows below it
 		size := int32(Cfg.WindowSize)
@@ -263,15 +500,15 @@ func drawMenuUI() {
 		if Cli != nil {
 			text = "Connecting to " + Cli.Addr + "..."
 		}
-		rlg.Label(row(0), text)
-		if rlg.Button(row(1), "Cancel") {
-			leaveMatch("", connectingFrom)
+		menuText(text, menuRowX, menuRow(0).Y+12, 20, menuBright)
+		if menuButton(1, "Cancel") {
+			menuBack()
 		}
 	}
 	if menuError != "" {
 		// above the rows (the host screen uses all six), from the label column so long messages stay in the panel
 		r := menuRow(0)
-		rl.DrawText(menuError, int32(r.X-menuLabelW), int32(r.Y-34), 20, rl.Red)
+		menuText(menuError, r.X-menuLabelW, r.Y-34, 20, menuAccent)
 	}
 }
 

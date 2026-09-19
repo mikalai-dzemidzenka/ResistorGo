@@ -393,7 +393,7 @@ func Dedicated(cfg ServerConfig) {
 
 	NetMode = NetDedicated
 	LE = NewLevelEditor(39, 83)
-	LE.LoadLevel("level_1.json")
+	LE.LoadLevel(LevelPath)
 
 	s, err := NewServer(cfg)
 	if err != nil {

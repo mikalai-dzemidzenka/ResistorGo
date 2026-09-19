@@ -37,7 +37,10 @@ func TestNetTwoCollisionRectFloor(t *testing.T) {
 	cfg := DefaultServerConfig()
 	cfg.Port = 27198
 	cfg.MaxPlayers = 2
-	cfg.Bots = 1
+	// No bot: this is about the floor, and a bot spawns a swing away from the
+	// player. Every blow it lands is a correction the client never predicted,
+	// which would be counted here as the floor's doing.
+	cfg.Bots = 0
 	s, err := NewServer(cfg)
 	if err != nil {
 		t.Fatal(err)

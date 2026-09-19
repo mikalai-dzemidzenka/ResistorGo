@@ -29,7 +29,9 @@ func TestAttackBoxAt(t *testing.T) {
 			t.Errorf("height %d reports no attack box", c.updown)
 			continue
 		}
-		want := rl.Rectangle{X: pos.X + 24, Y: pos.Y + c.offY, Width: c.wide, Height: c.high}
+		// 21 is the middle of the collision box, which is what the box mirrors
+		// about - not the middle of the 48px sprite frame, which is 24
+		want := rl.Rectangle{X: pos.X + 21, Y: pos.Y + c.offY, Width: c.wide, Height: c.high}
 		if r != want {
 			t.Errorf("height %d: box %+v, want %+v", c.updown, r, want)
 		}
@@ -47,12 +49,22 @@ func TestAttackBoxAt(t *testing.T) {
 		t.Errorf("block-all reports an attack box")
 	}
 
-	// facing left drops the 24-pixel offset, putting the box over the fighter
+	// facing left the box is the mirror of the right-facing one about the
+	// middle of the collision box, putting it over the fighter and 3px past it
 	a.Orientation = -1
 	left, _ := a.attackBoxAt(1, pos)
-	if want := pos.X + a.AttackBoxMid.X; left.X != want {
+	if want := pos.X + a.AttackBoxMid.X - 3; left.X != want {
 		t.Errorf("facing left the box starts at %v, want %v", left.X, want)
 	}
+	// and the two facings reach the same distance from the body they are
+	// measured against, which is the whole point of mirroring about it
+	a.Orientation = 1
+	right, _ := a.attackBoxAt(1, pos)
+	body := pos.X + a.CollisionBox.X
+	if fwd, back := right.X+right.Width-(body+a.CollisionBox.Width), body-left.X; fwd != back {
+		t.Errorf("the swing reaches %v past the body facing right and %v facing left", fwd, back)
+	}
+	a.Orientation = -1 // left again, for the check below
 
 	// and it is built from the position given, not the fighter's own
 	moved, _ := a.attackBoxAt(1, rl.Vector2{X: pos.X + 10, Y: pos.Y + 3})
@@ -180,8 +192,10 @@ func TestOutlineMarksEveryFighterInRange(t *testing.T) {
 	ResetTime()
 	w := NewWorld(true)
 	att := aim(w, ZeroVec2, 1)
-	first := aim(w, rl.Vector2{X: 26}, 1)
-	second := aim(w, rl.Vector2{X: 32}, 1)
+	// both inside the outline's reach, which is the undashed box: the swing's
+	// own four-pixel lunge is the fighter moving, not the box growing
+	first := aim(w, rl.Vector2{X: 20}, 1)
+	second := aim(w, rl.Vector2{X: 28}, 1)
 	if !outlineTarget(att, first) || !outlineTarget(att, second) {
 		t.Errorf("two fighters in reach: first marked %t, second marked %t - want both", outlineTarget(att, first), outlineTarget(att, second))
 	}

@@ -260,3 +260,27 @@ func TestAnimTableCoversActorAnims(t *testing.T) {
 		t.Error("animTable does not fit a byte")
 	}
 }
+
+// Every state a fighter can be in survives the wire. The decoder's bound was
+// spelled StateDeath while the run-jump and the fall were appended after it, so
+// a snapshot carrying any fighter in either was thrown away whole as malformed -
+// every actor in it, not only the one falling. The bound is the count now, so
+// appending a state cannot leave it behind.
+func TestEveryStateSurvivesTheWire(t *testing.T) {
+	for st := ActorState(0); st < stateCount; st++ {
+		s := Snapshot{Tick: 1, Actors: []ActorRec{{ID: 1, State: uint8(st), AnimTotal: 1}}}
+		got, err := decodeSnapshot(encodeSnapshot(s))
+		if err != nil {
+			t.Errorf("state %d did not survive the wire: %v", st, err)
+			continue
+		}
+		if len(got.Actors) != 1 || got.Actors[0].State != uint8(st) {
+			t.Errorf("state %d came back as %+v", st, got.Actors)
+		}
+	}
+	// and a state that does not exist is still refused
+	s := Snapshot{Tick: 1, Actors: []ActorRec{{ID: 1, State: uint8(stateCount), AnimTotal: 1}}}
+	if _, err := decodeSnapshot(encodeSnapshot(s)); err == nil {
+		t.Errorf("a snapshot carrying state %d was accepted", uint8(stateCount))
+	}
+}

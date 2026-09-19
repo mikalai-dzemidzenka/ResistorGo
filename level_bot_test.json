@@ -1,0 +1,438 @@
+{
+ "0": {
+  "-152,48": {
+   "collisionRects": [
+    {
+     "Height": 105,
+     "Width": 76,
+     "X": 0,
+     "Y": 0
+    }
+   ],
+   "resource": "resources/blocks/mn_block.png",
+   "x": -152,
+   "y": 48
+  },
+  "-228,48": {
+   "collisionRects": [
+    {
+     "Height": 105,
+     "Width": 76,
+     "X": 0,
+     "Y": 0
+    }
+   ],
+   "resource": "resources/blocks/mn_block.png",
+   "x": -228,
+   "y": 48
+  },
+  "-304,48": {
+   "collisionRects": [
+    {
+     "Height": 105,
+     "Width": 76,
+     "X": 0,
+     "Y": 0
+    }
+   ],
+   "resource": "resources/blocks/mn_block.png",
+   "x": -304,
+   "y": 48
+  },
+  "-380,48": {
+   "collisionRects": [
+    {
+     "Height": 105,
+     "Width": 76,
+     "X": 0,
+     "Y": 0
+    }
+   ],
+   "resource": "resources/blocks/mn_block.png",
+   "x": -380,
+   "y": 48
+  },
+  "-456,48": {
+   "collisionRects": [
+    {
+     "Height": 105,
+     "Width": 76,
+     "X": 0,
+     "Y": 0
+    }
+   ],
+   "resource": "resources/blocks/mn_block.png",
+   "x": -456,
+   "y": 48
+  },
+  "-532,48": {
+   "collisionRects": [
+    {
+     "Height": 105,
+     "Width": 76,
+     "X": 0,
+     "Y": 0
+    }
+   ],
+   "resource": "resources/blocks/mn_block.png",
+   "x": -532,
+   "y": 48
+  },
+  "-608,48": {
+   "collisionRects": [
+    {
+     "Height": 105,
+     "Width": 76,
+     "X": 0,
+     "Y": 0
+    }
+   ],
+   "resource": "resources/blocks/mn_block.png",
+   "x": -608,
+   "y": 48
+  },
+  "-76,48": {
+   "collisionRects": [
+    {
+     "Height": 105,
+     "Width": 76,
+     "X": 0,
+     "Y": 0
+    }
+   ],
+   "resource": "resources/blocks/mn_block.png",
+   "x": -76,
+   "y": 48
+  },
+  "0,48": {
+   "collisionRects": [
+    {
+     "Height": 105,
+     "Width": 76,
+     "X": 0,
+     "Y": 0
+    }
+   ],
+   "resource": "resources/blocks/mn_block.png",
+   "y": 48
+  },
+  "1044,-48": {
+   "collisionRects": [
+    {
+     "Height": 105,
+     "Width": 76,
+     "X": 0,
+     "Y": 0
+    }
+   ],
+   "resource": "resources/blocks/mn_block.png",
+   "x": 1044,
+   "y": -48
+  },
+  "1120,48": {
+   "collisionRects": [
+    {
+     "Height": 105,
+     "Width": 76,
+     "X": 0,
+     "Y": 0
+    }
+   ],
+   "resource": "resources/blocks/mn_block.png",
+   "x": 1120,
+   "y": 48
+  },
+  "1196,48": {
+   "collisionRects": [
+    {
+     "Height": 105,
+     "Width": 76,
+     "X": 0,
+     "Y": 0
+    }
+   ],
+   "resource": "resources/blocks/mn_block.png",
+   "x": 1196,
+   "y": 48
+  },
+  "1272,48": {
+   "collisionRects": [
+    {
+     "Height": 105,
+     "Width": 76,
+     "X": 0,
+     "Y": 0
+    }
+   ],
+   "resource": "resources/blocks/mn_block.png",
+   "x": 1272,
+   "y": 48
+  },
+  "1348,48": {
+   "collisionRects": [
+    {
+     "Height": 105,
+     "Width": 76,
+     "X": 0,
+     "Y": 0
+    }
+   ],
+   "resource": "resources/blocks/mn_block.png",
+   "x": 1348,
+   "y": 48
+  },
+  "1424,248": {
+   "collisionRects": [
+    {
+     "Height": 105,
+     "Width": 76,
+     "X": 0,
+     "Y": 0
+    }
+   ],
+   "resource": "resources/blocks/mn_block.png",
+   "x": 1424,
+   "y": 248
+  },
+  "1500,248": {
+   "collisionRects": [
+    {
+     "Height": 105,
+     "Width": 76,
+     "X": 0,
+     "Y": 0
+    }
+   ],
+   "resource": "resources/blocks/mn_block.png",
+   "x": 1500,
+   "y": 248
+  },
+  "152,48": {
+   "collisionRects": [
+    {
+     "Height": 105,
+     "Width": 76,
+     "X": 0,
+     "Y": 0
+    }
+   ],
+   "resource": "resources/blocks/mn_block.png",
+   "x": 152,
+   "y": 48
+  },
+  "1576,248": {
+   "collisionRects": [
+    {
+     "Height": 105,
+     "Width": 76,
+     "X": 0,
+     "Y": 0
+    }
+   ],
+   "resource": "resources/blocks/mn_block.png",
+   "x": 1576,
+   "y": 248
+  },
+  "1652,248": {
+   "collisionRects": [
+    {
+     "Height": 105,
+     "Width": 76,
+     "X": 0,
+     "Y": 0
+    }
+   ],
+   "resource": "resources/blocks/mn_block.png",
+   "x": 1652,
+   "y": 248
+  },
+  "1728,48": {
+   "collisionRects": [
+    {
+     "Height": 105,
+     "Width": 76,
+     "X": 0,
+     "Y": 0
+    }
+   ],
+   "resource": "resources/blocks/mn_block.png",
+   "x": 1728,
+   "y": 48
+  },
+  "1804,48": {
+   "collisionRects": [
+    {
+     "Height": 105,
+     "Width": 76,
+     "X": 0,
+     "Y": 0
+    }
+   ],
+   "resource": "resources/blocks/mn_block.png",
+   "x": 1804,
+   "y": 48
+  },
+  "1880,48": {
+   "collisionRects": [
+    {
+     "Height": 105,
+     "Width": 76,
+     "X": 0,
+     "Y": 0
+    }
+   ],
+   "resource": "resources/blocks/mn_block.png",
+   "x": 1880,
+   "y": 48
+  },
+  "228,48": {
+   "collisionRects": [
+    {
+     "Height": 105,
+     "Width": 76,
+     "X": 0,
+     "Y": 0
+    }
+   ],
+   "resource": "resources/blocks/mn_block.png",
+   "x": 228,
+   "y": 48
+  },
+  "304,44": {
+   "collisionRects": [
+    {
+     "Height": 105,
+     "Width": 76,
+     "X": 0,
+     "Y": 0
+    }
+   ],
+   "resource": "resources/blocks/mn_block.png",
+   "x": 304,
+   "y": 44
+  },
+  "380,48": {
+   "collisionRects": [
+    {
+     "Height": 105,
+     "Width": 76,
+     "X": 0,
+     "Y": 0
+    }
+   ],
+   "resource": "resources/blocks/mn_block.png",
+   "x": 380,
+   "y": 48
+  },
+  "456,0": {
+   "collisionRects": [
+    {
+     "Height": 105,
+     "Width": 76,
+     "X": 0,
+     "Y": 0
+    }
+   ],
+   "resource": "resources/blocks/mn_block.png",
+   "x": 456
+  },
+  "532,48": {
+   "collisionRects": [
+    {
+     "Height": 105,
+     "Width": 76,
+     "X": 0,
+     "Y": 0
+    }
+   ],
+   "resource": "resources/blocks/mn_block.png",
+   "x": 532,
+   "y": 48
+  },
+  "608,48": {
+   "collisionRects": [
+    {
+     "Height": 105,
+     "Width": 76,
+     "X": 0,
+     "Y": 0
+    }
+   ],
+   "resource": "resources/blocks/mn_block.png",
+   "x": 608,
+   "y": 48
+  },
+  "684,48": {
+   "collisionRects": [
+    {
+     "Height": 105,
+     "Width": 76,
+     "X": 0,
+     "Y": 0
+    }
+   ],
+   "resource": "resources/blocks/mn_block.png",
+   "x": 684,
+   "y": 48
+  },
+  "76,48": {
+   "collisionRects": [
+    {
+     "Height": 105,
+     "Width": 76,
+     "X": 0,
+     "Y": 0
+    }
+   ],
+   "resource": "resources/blocks/mn_block.png",
+   "x": 76,
+   "y": 48
+  },
+  "816,48": {
+   "collisionRects": [
+    {
+     "Height": 105,
+     "Width": 76,
+     "X": 0,
+     "Y": 0
+    }
+   ],
+   "resource": "resources/blocks/mn_block.png",
+   "x": 816,
+   "y": 48
+  },
+  "892,0": {
+   "collisionRects": [
+    {
+     "Height": 105,
+     "Width": 76,
+     "X": 0,
+     "Y": 0
+    }
+   ],
+   "resource": "resources/blocks/mn_block.png",
+   "x": 892
+  },
+  "968,-48": {
+   "collisionRects": [
+    {
+     "Height": 105,
+     "Width": 76,
+     "X": 0,
+     "Y": 0
+    }
+   ],
+   "resource": "resources/blocks/mn_block.png",
+   "x": 968,
+   "y": -48
+  }
+ },
+ "ambient": {
+  "color": [
+   150,
+   165,
+   255
+  ],
+  "strength": 0.75
+ }
+}

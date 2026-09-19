@@ -496,7 +496,7 @@ func decodeSnapshot(b []byte) (Snapshot, error) {
 		a.EnergyCalm = r.u8()
 		a.EnergyUntouched = r.u8()
 		a.AttackerID = r.u16()
-		if a.State > uint8(StateDeath) || a.Updown > 3 {
+		if a.State >= uint8(stateCount) || a.Updown > 3 {
 			r.bad = true
 		}
 		s.Actors = append(s.Actors, a)

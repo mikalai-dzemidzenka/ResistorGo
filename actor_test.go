@@ -28,6 +28,21 @@ func floor() {
 	tiles(corners...)
 }
 
+// wallX is the face of the wall walls() raises: a fighter walked left into it
+// comes to rest with its collision box's left edge here.
+const wallX = -48
+
+// walls installs the default floor with a wall standing on it: one tile a whole
+// sprite tall, whose right face is wallX. Nothing on a plain floor can stop a
+// sideways move, so a test that needs one uses this.
+func walls() {
+	corners := make([]Vector2i, 0, (floorHi-floorLo)/48+2)
+	for x := int32(floorLo); x <= floorHi; x += 48 {
+		corners = append(corners, Vector2i{X: x, Y: floorY})
+	}
+	tiles(append(corners, Vector2i{X: wallX - 48, Y: floorY - 48})...)
+}
+
 // TestMain gives every test a floor to stand on. Without one no fighter is
 // ever OnGround, so gravity puts them all into StateFall and nothing that
 // needs a fighter on its feet - attacking, running, respawning - can happen.

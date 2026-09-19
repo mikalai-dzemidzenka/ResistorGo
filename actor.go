@@ -20,8 +20,16 @@ const (
 	// frame the fighter pushes off on. The two before it are the anticipation,
 	// drawn rather than spent in a state of its own.
 	RunJumpLaunchFrame = 2
-	Gravity            = 1500
-	MaxJumpSpeed       = -Gravity * 10
+	// How long each jump is drawn winding up before it leaves the ground. Named
+	// here rather than left in the two SetAnim calls because the wind-up is not
+	// only an animation: it is ground the fighter covers still standing, which
+	// is what a bot has to press its jump ahead of. See botJumpWindupTicks.
+	RunJumpSeconds   = 0.5
+	RunJumpFrames    = 6
+	JumpStartSeconds = 0.7
+	JumpStartFrames  = 13
+	Gravity          = 1500
+	MaxJumpSpeed     = -Gravity * 10
 	// The run-jump leaves the ground harder than a standing one: the run is
 	// what buys the extra height, and the half-pool it costs is what the
 	// height is paid for with. Derived from the standing jump, so retuning
@@ -53,6 +61,11 @@ const (
 	BlockStructure     = 0.5
 	StructureRegen     = 1  // per second, once calm
 	StructureCalmTicks = 90 // 1.5s without a loss before it refills
+	// What a kill pays the winner back. Two hits' worth: enough to be felt
+	// going into whoever is next and nowhere near a heal, since a fight is
+	// twelve hits long. Derived from the cost of a hit, so retuning that
+	// carries the reward along with it.
+	KillStructure = 2 * HitStructure
 
 	// Energy is what a fighter spends to attack, counted in whole points.
 	// Every swing costs the same, a block at the attacker's height pays back,
@@ -81,6 +94,17 @@ const (
 	StunEveryHits   = 3
 	StunKnockback   = 150
 	FlinchHoldTicks = 12
+
+	// A shove is what a standing fighter does about another on its back: the
+	// one behind can swing at it and it cannot swing back. It turns on the
+	// crowder and throws it off, costing it nothing but its ground.
+	PushSeconds = 0.5 // three ticks a frame
+	PushFrames  = 10
+	PushFrame   = 3 // the frame both arms are out: where the shove lands
+	// How far the shove moves the crowder. It starts 0 to 13px away, so this
+	// must be at least 14 to clear the 14px overlap and at most 21 to stay
+	// inside the 35px a swing reaches.
+	PushDistance = 16
 
 	// One in three: the odds a bot answers a landed hit by moving its guard to
 	// the height that hit it. A feel number, to be turned by eye in play.
@@ -127,6 +151,12 @@ const (
 	// every state below it for anyone drawing from an older build
 	StateRunJump
 	StateFall
+	StatePush
+	// stateCount is one past the last state. A replicated state is checked
+	// against it, so appending a state cannot leave that check behind - it was
+	// left at the death when the run-jump and the fall were appended, and every
+	// snapshot carrying either was thrown away as malformed.
+	stateCount
 )
 
 const (
@@ -195,10 +225,20 @@ type Actor struct {
 	EnergyUntouched  uint16  // ticks since an attack last reached it, hit or blocked
 	FlinchTicks      uint8   // ticks a hit that did not stun keeps the fighter flickering
 	SwingHit         bool    // this fighter's current swing has already landed
+	PushDone         bool    // this fighter's current shove has already moved someone
+	PushStuck        *Actor  // the fighter its last shove landed on; not shoved again until the two are apart
+	ShoveLeft        uint8   // pixels a shove still has to carry this fighter
+	ShoveDir         int8    // which way that shove is carrying it
 	Dying            bool    // dead and waiting to be taken out of the world
 	DeathTicks       uint16  // ticks since the death animation finished
 	DenyUntil        float64 // game time a refused swing stops flashing; local only, never replicated
 	Owner            uint16  // network player this fighter belongs to; 0 for bots
+	// What the bot has in mind. Never replicated and never rewound: it is
+	// worked out afresh by whichever world is actually simulating the match,
+	// and a client is told what the bot did, not what it was thinking. Zero is
+	// a bot with nothing in mind, so a fighter spawning or respawning starts
+	// with a clean one for free.
+	Bot botMind
 }
 
 // Input is one simulation tick of player intent; it is also the network command.
@@ -300,6 +340,17 @@ func (a *Actor) Update(dt float32) {
 	a.updateVertSpeed(dt)
 	a.updateFalling()
 
+	// Two fighters cannot stand in one another: whichever is on its feet and free
+	// - standing, walking or running - turns on the other and shoves it off. One
+	// already swinging, blocking, stunned or still flinching from a hit finishes
+	// that first, and one guarding everything stands its ground. The first to
+	// qualify shoves, and the stun it throws keeps the other from shoving back.
+	if (a.State == StateIdle || a.State == StateRun) && a.OnGround && a.Updown != 3 && a.FlinchTicks == 0 {
+		if other := a.crowding(); other != nil {
+			a.enterPushState(other)
+		}
+	}
+
 	switch a.State {
 	case StateClimb:
 		a.Speed = rl.Vector2{}
@@ -359,6 +410,8 @@ func (a *Actor) Update(dt float32) {
 	case StateAttack:
 		a.Speed.X = clamp(a.Speed.X, -AttackDash, AttackDash)
 		a.updateAttack()
+	case StatePush:
+		a.updatePush()
 	case StateAttacked:
 		// no AttackDash cap here: that is the lunge of the fighter doing the
 		// swinging, and capping the one being hit threw StunKnockback away.
@@ -420,6 +473,9 @@ func (a *Actor) Update(dt float32) {
 	a.Pos.X += a.Speed.X * dt
 	a.Pos.X = float32(int(a.Pos.X))
 	a.blockSides(fromX)
+	if a.ShoveLeft > 0 {
+		a.glide()
+	}
 	a.Pos.Y += a.Speed.Y * dt
 	a.Pos.Y = float32(int(a.Pos.Y))
 }
@@ -485,13 +541,8 @@ func (a *Actor) Draw() {
 		return
 	}
 	if TimeShowsHistory() {
-		data := a.RewindData[rewindSlot(rewindCursor)]
-		rl.DrawTextureRec(resources[data.Anim], rl.Rectangle{
-			X:      float32(data.AnimFrame) * 48,
-			Y:      0,
-			Width:  48 * float32(a.Orientation),
-			Height: 48,
-		}, a.drawPos(), rl.White)
+		tex, src, pos := a.spriteDraw()
+		rl.DrawTextureRec(tex, src, pos, rl.White)
 	} else {
 		if a.AnimOnce {
 			a.DrawAnimOnce()
@@ -603,10 +654,20 @@ func (a *Actor) DrawFrame() {
 }
 
 // spriteDraw is the texture, source rectangle and position this fighter's
-// sprite is drawn with on this frame. The outline pass draws the same sprite a
-// second time, so the two must read it from one place or they would drift and
-// the outline would trace a pose the fighter is not in.
+// sprite is drawn with on this frame. The outline and rim passes draw the same
+// sprite a second time, so they must read it from one place or they would drift
+// and trace a pose the fighter is not in. While time shows history it is the
+// recorded frame.
 func (a *Actor) spriteDraw() (rl.Texture2D, rl.Rectangle, rl.Vector2) {
+	if TimeShowsHistory() {
+		data := a.RewindData[rewindSlot(rewindCursor)]
+		return resources[data.Anim], rl.Rectangle{
+			X:      float32(data.AnimFrame) * 48,
+			Y:      0,
+			Width:  48 * float32(a.Orientation),
+			Height: 48,
+		}, a.drawPos()
+	}
 	tex := resources[a.Anim]
 	pos := a.drawPos()
 	height := float32(48)
@@ -620,6 +681,50 @@ func (a *Actor) spriteDraw() (rl.Texture2D, rl.Rectangle, rl.Vector2) {
 		Width:  48 * float32(a.Orientation),
 		Height: height,
 	}, pos
+}
+
+// topAnim is the animation drawn over this fighter's body on this frame, if it
+// has one. The walk is drawn in two layers: the body walks and the arms are a
+// second sheet chosen by the stance, so the fighter holds its guard while it
+// moves. Block-all has no arms of its own and is drawn as the body alone.
+//
+// TODO the walk's rule lives here rather than in the state machine; when
+// AnimTop is set where the animation is, this falls away and AnimTop stays.
+func (a *Actor) topAnim() (string, bool) {
+	if a.AnimTop != nil {
+		return *a.AnimTop, true
+	}
+	if !strings.HasSuffix(a.Anim, "walk.png") {
+		return "", false
+	}
+	switch a.Updown {
+	case 0:
+		return "resources/threefour/walk-bot.png", true
+	case 1:
+		return "resources/threefour/walk-mid.png", true
+	case 2:
+		return "resources/threefour/walk-top.png", true
+	}
+	return "", false
+}
+
+// topDraw is the second sprite drawn over this fighter's body on this frame: the
+// same frame of the top layer's sheet, at the same place as the body. The
+// drawing and the rim both take it from here, so the rim cannot trace a
+// silhouette the fighter is not showing. ok is false when the fighter has no
+// top layer, and while time shows history - a recorded frame holds the body
+// animation alone.
+func (a *Actor) topDraw() (tex rl.Texture2D, src rl.Rectangle, pos rl.Vector2, ok bool) {
+	anim, has := a.topAnim()
+	if !has || TimeShowsHistory() {
+		return tex, src, pos, false
+	}
+	tex, ok = resources[anim]
+	if !ok {
+		return tex, src, pos, false
+	}
+	_, src, pos = a.spriteDraw()
+	return tex, src, pos, true
 }
 
 func (a *Actor) DrawAnimOnce() {
@@ -652,47 +757,15 @@ func (a *Actor) DrawAnim() {
 		Height: 48,
 	}, a.drawPos(), rl.White)
 
-	// TODO
-	if strings.HasSuffix(a.Anim, "walk.png") {
-		switch a.Updown {
-		case 0:
-			rl.DrawTextureRec(resources["resources/threefour/walk-bot.png"], rl.Rectangle{
-				X:      float32(a.AnimCurrentFrame) * 48,
-				Y:      0,
-				Width:  48 * float32(a.Orientation),
-				Height: float32(tex.Height),
-			}, rl.Vector2{
-				X: a.drawPos().X,
-				Y: a.drawPos().Y + float32(a.AnimYOffset),
-			}, rl.White)
-		case 1:
-			rl.DrawTextureRec(resources["resources/threefour/walk-mid.png"], rl.Rectangle{
-				X:      float32(a.AnimCurrentFrame) * 48,
-				Y:      0,
-				Width:  48 * float32(a.Orientation),
-				Height: float32(tex.Height),
-			}, rl.Vector2{
-				X: a.drawPos().X,
-				Y: a.drawPos().Y + float32(a.AnimYOffset),
-			}, rl.White)
-		case 2:
-			rl.DrawTextureRec(resources["resources/threefour/walk-top.png"], rl.Rectangle{
-				X:      float32(a.AnimCurrentFrame) * 48,
-				Y:      0,
-				Width:  48 * float32(a.Orientation),
-				Height: float32(tex.Height),
-			}, rl.Vector2{
-				X: a.drawPos().X,
-				Y: a.drawPos().Y + float32(a.AnimYOffset),
-			}, rl.White)
-		}
+	if top, src, pos, ok := a.topDraw(); ok {
+		rl.DrawTextureRec(top, src, pos, rl.White)
 	}
 }
 
 func (a *Actor) updateHorSpeed(dt float32) {
 	var movePressed bool
 	prevOrientation := a.Orientation
-	canMove := a.State != StateAttack && a.State != StateBlock && a.State != StateAttacked && a.Updown != 3
+	canMove := a.State != StateAttack && a.State != StateBlock && a.State != StateAttacked && a.State != StatePush && a.Updown != 3
 	if a.Input.Right && !(a.State == StateTurnover && prevOrientation == 1) && canMove {
 		movePressed = true
 		if abs(a.Speed.X) < 0.001 {
@@ -767,7 +840,12 @@ func (a *Actor) checkCollision() {
 		oColX := c.X
 		oColWidth := c.Width
 
-		if pColCenterX > oColX && pColCenterX < oColX+oColWidth &&
+		// The left edge claims the fighter and the right edge does not, so a
+		// tile boundary belongs to exactly one tile. With both edges exclusive
+		// a fighter whose centre landed exactly on a seam was claimed by
+		// neither, left the ground for that one tick and was put into the fall
+		// - which, walking an unbroken floor, cancelled any jump winding up.
+		if pColCenterX >= oColX && pColCenterX < oColX+oColWidth &&
 			pColDownY+1 > oColY && pColDownY < oColY+oColHeight {
 			a.OnGround = true
 			a.Speed.Y = 0
@@ -819,6 +897,20 @@ func (a *Actor) isWall(c rl.Rectangle) bool {
 // overlap, so no wall is too thin to stop a fighter at any speed it reaches,
 // and a fighter already inside a wall is never pushed out of it - only kept
 // from going deeper.
+// stopRun takes a fighter out of the run when a wall has stopped it: a run with
+// nowhere to go is not a run, and the key held against the wall walks in place
+// instead of running in place. It is the same end the run comes to when it
+// slows to a stop of its own accord.
+//
+// Only a fighter on the ground. One steering into a wall in the air is stopped
+// beside it and goes on rising or falling, which is a jump or a fall's business,
+// not the run's.
+func (a *Actor) stopRun() {
+	if a.State == StateRun && a.OnGround {
+		a.enterIdleState()
+	}
+}
+
 func (a *Actor) blockSides(fromX float32) {
 	l, w := a.CollisionBox.X, a.CollisionBox.Width
 	fromL, toL := fromX+l, a.Pos.X+l
@@ -833,6 +925,7 @@ func (a *Actor) blockSides(fromX float32) {
 		if right < toL+w {
 			a.Pos.X = right - w - l
 			a.Speed.X = min(a.Speed.X, 0)
+			a.stopRun()
 		}
 	case toL < fromL:
 		left := toL
@@ -844,60 +937,9 @@ func (a *Actor) blockSides(fromX float32) {
 		if left > toL {
 			a.Pos.X = left - l
 			a.Speed.X = max(a.Speed.X, 0)
+			a.stopRun()
 		}
 	}
-}
-
-// nearest returns the closest other actor in the same world.
-func (a *Actor) nearest() *Actor {
-	var best *Actor
-	bestD := float32(math.MaxFloat32)
-	for _, b := range a.W.Actors {
-		if b == a {
-			continue
-		}
-		if d := abs(b.Pos.X-a.Pos.X) + abs(b.Pos.Y-a.Pos.Y); d < bestD {
-			best, bestD = b, d
-		}
-	}
-	return best
-}
-
-// botInput produces the bot's command for this tick (authoritative worlds only).
-func botInput(a *Actor) Input {
-	if a.State == StateAttacked {
-		return a.Input
-	}
-	const near = 50
-	in := Input{Updown: a.Updown}
-	if rand.Int()%61 == 0 {
-		in.Updown = uint8(rand.Int() % 3)
-	}
-	t := a.nearest()
-	if t == nil {
-		return in
-	}
-	if t.Pos.X < a.Pos.X {
-		if a.Pos.X-t.Pos.X > near {
-			in.Right = true
-		} else {
-			if rand.Int()%61 == 3 {
-				in.Attack = true
-			}
-		}
-		a.face(-1)
-	}
-	if t.Pos.X > a.Pos.X {
-		if t.Pos.X-a.Pos.X > near {
-			in.Left = true
-		} else {
-			if rand.Int()%61 == 3 {
-				in.Attack = true
-			}
-		}
-		a.face(1)
-	}
-	return in
 }
 
 // edge-triggered buttons are latched per rendered frame and consumed by the next tick
@@ -1004,12 +1046,15 @@ func (a *Actor) restoreStructure(amount float32) {
 }
 
 // face turns the fighter, and is the only way anything but a replayed or
-// replicated record does: a climb refuses the turn. The climb animation is what
-// carries the fighter over the ledge it grabbed, and one that turned halfway up
-// would mantle one way while facing the other. Every turn a player or a bot
-// asks for goes through here so the rule cannot be missed by a new caller.
+// replicated record does: a climb or a death refuses the turn. The climb
+// animation is what carries the fighter over the ledge it grabbed, and one that
+// turned halfway up would mantle one way while facing the other. A broken
+// fighter has stopped being part of the fight, so nothing it can still see
+// turns it: the fall would spin on the spot while it played out. Every turn a
+// player or a bot asks for goes through here so the rule cannot be missed by a
+// new caller.
 func (a *Actor) face(orientation int8) {
-	if a.State == StateClimb {
+	if a.State == StateClimb || a.State == StateDeath {
 		return
 	}
 	a.Orientation = orientation
@@ -1105,6 +1150,7 @@ func (a *Actor) endHitRun() { a.HitRun = 0 }
 // kills. It is one of the two places structure is spent.
 func (a *Actor) takeHit(attacker *Actor) {
 	attacker.SwingHit = true
+	a.alerted(attacker)
 	a.pressured()
 	cost := a.hitCost()
 	a.HitRun = min(a.HitRun+1, HitRunCapped)
@@ -1137,6 +1183,7 @@ func (a *Actor) takeHit(attacker *Actor) {
 // hit would have cost.
 func (a *Actor) confirmBlock(attacker *Actor) {
 	attacker.SwingHit = true
+	a.alerted(attacker)
 	a.pressured()
 	a.endHitRun() // any attack stopped is the run broken, block-all included
 	if a.Updown == 3 {
@@ -1163,7 +1210,13 @@ func (a *Actor) hitFeedback(attacker *Actor, knockback float32) {
 
 // enterFlinchState is a hit that did not stun: the fighter keeps control and
 // whatever it was doing, and only flickers for a moment.
+//
+// A shove is the exception: a hit before it lands is the answer to it, and the
+// fighter is left standing with the shove not thrown.
 func (a *Actor) enterFlinchState(attacker *Actor) {
+	if a.State == StatePush {
+		a.enterIdleState()
+	}
 	a.hitFeedback(attacker, PunchSpeed)
 	a.FlinchTicks = FlinchHoldTicks
 }
@@ -1198,6 +1251,141 @@ func (a *Actor) Flickering() bool {
 	return true
 }
 
+// crowding returns a living fighter on its feet whose collision box overlaps
+// this one's, in front or behind.
+//
+// Only one on its feet: a shove is a thing done on the ground, to someone on
+// it. A fighter passing through in the air - jumping up past a ledge another
+// stands on, most often - is left to land first. Shoving it out of the air
+// knocked a climber off the same ledge every time it tried it.
+//
+// The fighter the last shove landed on is left alone until the two are apart -
+// while it glides clear, and for good if a wall stops it flush. Nothing else
+// would stop the next tick on its feet from throwing the same shove at the same
+// fighter again, and again, with no other button ever read.
+func (a *Actor) crowding() *Actor {
+	if a.W == nil {
+		return nil
+	}
+	if a.PushStuck != nil && !aabb(a.collisionRect(), a.PushStuck.collisionRect()) {
+		a.PushStuck = nil
+	}
+	for _, other := range a.W.Actors {
+		if other == a || other == a.PushStuck || other.State == StateDeath || !other.OnGround {
+			continue
+		}
+		if aabb(a.collisionRect(), other.collisionRect()) {
+			return other
+		}
+	}
+	return nil
+}
+
+// pushDir is the way a shove moves other: away from the fighter throwing it.
+// Two fighters on the same pixel column have no side to be on, and there the
+// arms decide.
+func (a *Actor) pushDir(other *Actor) int8 {
+	if d := other.Pos.X - a.Pos.X; d != 0 {
+		return facing(d)
+	}
+	return a.Orientation
+}
+
+// enterPushState turns to the crowder and starts the shove, so the arms point
+// the way the crowder will go. It cannot be steered while it plays.
+//
+// The crowder is stunned at once, not when the arms come out. It is usually
+// mid-swing - the lunge of its swings is how it walked in - and that swing
+// would otherwise land during the wind-up, put the shover on guard and cut the
+// shove off before it threw anyone.
+func (a *Actor) enterPushState(other *Actor) {
+	if a.W != nil && a.W.Authority {
+		other.enterShovedState(a)
+	}
+	a.face(a.pushDir(other))
+	a.State = StatePush
+	a.PushDone = false
+	a.Speed.X = 0
+	a.SetAnim("resources/threefour/push.png", AnimOptions{animDuration: PushSeconds, totalFrames: PushFrames, once: true})
+}
+
+// updatePush lands the shove on the frame the arms come out, once, and ends on
+// the animation. The shove is the authority's alone, as a hit is: a client is
+// shown the animation, and the ground it changed hands, by the snapshot.
+//
+// Whoever it lands on is remembered, on a client too, until the two are apart:
+// the crowder glides clear over the next few ticks, a wall can stop it short,
+// and on a client nobody moves until the snapshot says so - and in none of
+// those should the next tick on its feet throw the same shove again.
+func (a *Actor) updatePush() {
+	if a.W != nil && !a.PushDone && a.AnimCurrentFrame >= PushFrame {
+		a.PushDone = true
+		for _, other := range a.W.Actors {
+			if other == a || other.State == StateDeath {
+				continue
+			}
+			if !aabb(a.collisionRect(), other.collisionRect()) {
+				continue
+			}
+			if a.W.Authority {
+				a.shove(other)
+			}
+			a.PushStuck = other
+		}
+	}
+	if a.AnimFinished {
+		a.enterIdleState()
+	}
+}
+
+// shove stuns a fighter and sends it gliding away from the one throwing it.
+//
+// The ground it gives up is a glide it is carried along, not speed it is given:
+// the game moves in whole pixels, truncating every tick, so a speed that slows
+// under a pixel a tick never moves anyone, and the tail of any slide is lost.
+func (a *Actor) shove(other *Actor) {
+	other.enterShovedState(a)
+	other.Speed.X = 0
+	other.ShoveLeft, other.ShoveDir = PushDistance, a.pushDir(other)
+}
+
+// glide carries a shoved fighter one step of the way, easing out: a third of
+// what is left each tick, rounded up, so 16 pixels go 6, 4, 2, 2, 1, 1. Walls
+// are asked the way every other move asks them, and one that stops a step
+// short ends the glide there.
+func (a *Actor) glide() {
+	step := (a.ShoveLeft + 2) / 3
+	fromX := a.Pos.X
+	a.Pos.X += float32(a.ShoveDir) * float32(step)
+	a.blockSides(fromX)
+	if abs(a.Pos.X-fromX) < float32(step) {
+		a.ShoveLeft = 0
+		return
+	}
+	a.ShoveLeft -= step
+}
+
+// enterShovedState is what a shove leaves the fighter it lands on: the lockout
+// and the animation of a stun, so it cannot swing back through the rest of the
+// shove, and none of the hit - no structure, no hit counted, no flash, no
+// hit-stop. Whatever it was doing ends, as a stun ends it. One already stunned
+// is left to finish the stun it has.
+func (a *Actor) enterShovedState(by *Actor) {
+	switch a.State {
+	case StateAttacked:
+		return
+	case StateAttack:
+		a.exitAttackState()
+	case StateBlock:
+		a.exitBlockState()
+	}
+	a.State = StateAttacked
+	a.Attacker = by
+	a.Speed.X = 0 // or a runner stunned mid-stride slides into the shover
+	a.stopFlicker()
+	a.SetAnim("resources/threefour/hit-top.png", AnimOptions{animDuration: 0.3, totalFrames: 4, once: true, reset: true})
+}
+
 // enterDeathState is where a broken structure goes. The fighter stops acting
 // and stops being part of the fight; the world removes it once it has fallen.
 func (a *Actor) enterDeathState(attacker *Actor) {
@@ -1211,6 +1399,9 @@ func (a *Actor) enterDeathState(attacker *Actor) {
 	if attacker != nil {
 		attacker.FreezeTicks = HitStopTicks
 		attacker.restoreEnergy(MaxEnergy) // a kill puts the winner straight back in the fight
+		// and some of the beating it took getting there back. The refill wait is
+		// left alone: the reward is for the kill, not a reason to stop fighting.
+		attacker.restoreStructure(KillStructure)
 	}
 	a.SetAnim("resources/threefour/death_fall.png", AnimOptions{animDuration: 0.6, totalFrames: 9, once: true})
 }
@@ -1277,6 +1468,24 @@ func (a *Actor) updateAttacked() {
 // and interpolation cannot reach hit resolution. Block-all (3) has no attack,
 // and reports none.
 func (a *Actor) attackBoxAt(updown uint8, pos rl.Vector2) (rl.Rectangle, bool) {
+	return a.attackBoxFacing(updown, pos, a.Orientation)
+}
+
+// attackBoxFacing is the box a swing would cover were the fighter facing o. The
+// arm covers the half of the sprite in front of it, so the two facings reach
+// opposite ways from the same position. attackBoxAt is this for the way the
+// fighter is facing now.
+//
+// The box mirrors about the middle of the collision box, not the middle of the
+// 48px sprite frame. Those are not the same point - the collision box is inset
+// 14 and 14 wide, so it sits 3px left of the frame's - and the box used to
+// mirror about the frame while every reach test measured it against the
+// collision box. The 3px went in with one sign facing right and the other
+// facing left, so a swing reached 38px one way and 32px the other, and a
+// fighter standing exactly on another could be hit facing left but not facing
+// right. Mirroring about the box reach is measured against costs the forward
+// swing 3px and gives the backward one 3px, and leaves 35 either way.
+func (a *Actor) attackBoxFacing(updown uint8, pos rl.Vector2, o int8) (rl.Rectangle, bool) {
 	var box rl.Rectangle
 	switch updown {
 	case 0:
@@ -1288,12 +1497,28 @@ func (a *Actor) attackBoxAt(updown uint8, pos rl.Vector2) (rl.Rectangle, bool) {
 	default:
 		return rl.Rectangle{}, false
 	}
+	mid := a.CollisionBox.X + a.CollisionBox.Width/2
 	return rl.Rectangle{
-		X:      pos.X + box.X + 12*float32(a.Orientation+1),
+		X:      pos.X + box.X + mid + (float32(o)-1)*box.Width/2,
 		Y:      pos.Y + box.Y,
 		Width:  box.Width,
 		Height: box.Height,
 	}, true
+}
+
+// swingReachFacing reports whether a swing thrown facing o would meet t: the
+// box this fighter's guard height throws, carried forward by the dash the swing
+// takes, against the box a hit is decided against. The bot's stopping distance
+// and the shove's trigger both ask this, so neither can drift from what reaches.
+func (a *Actor) swingReachFacing(t *Actor, o int8) bool {
+	box, ok := a.attackBoxFacing(a.Updown, a.Pos, o)
+	if !ok {
+		// guarding with block-all: no swing to measure, so measure the one it
+		// would throw the moment it stopped guarding
+		box, _ = a.attackBoxFacing(1, a.Pos, o)
+	}
+	box.X += float32(o) * AttackDash
+	return aabb(box, t.collisionRect())
 }
 
 func (a *Actor) updateAttack() {
@@ -1462,7 +1687,7 @@ func (a *Actor) enterRunJumpState() bool {
 	}
 	a.spendEnergy(EnergyRunJump)
 	a.State = StateRunJump
-	a.SetAnim("resources/threefour/run-jump.png", AnimOptions{animDuration: 0.5, totalFrames: 6, once: true, reset: true})
+	a.SetAnim("resources/threefour/run-jump.png", AnimOptions{animDuration: RunJumpSeconds, totalFrames: RunJumpFrames, once: true, reset: true})
 	return true
 }
 
@@ -1521,7 +1746,7 @@ func (a *Actor) enterFallState() {
 
 func (a *Actor) enterJumpStartState() {
 	a.State = StateJumpStart
-	a.SetAnim("resources/threefour/jump-start.png", AnimOptions{animDuration: 0.7, totalFrames: 13, once: true, animYOffset: -48})
+	a.SetAnim("resources/threefour/jump-start.png", AnimOptions{animDuration: JumpStartSeconds, totalFrames: JumpStartFrames, once: true, animYOffset: -48})
 }
 
 func (a *Actor) Interp(alpha float32) {

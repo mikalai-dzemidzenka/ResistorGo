@@ -29,6 +29,13 @@ const (
 	NetDedicated
 )
 
+// LevelPath is the level the game plays. It is the one level there has ever
+// been, unless a development build was given another with -level: a test course
+// of walls, ledges and holes is worth playing a bot against, and is not worth
+// putting into the level people are actually building. Loading and saving both
+// go through it, so a level opened this way cannot be saved over level_1.json.
+var LevelPath = "level_1.json"
+
 var (
 	Debug                = DevTools
 	GameTimeSec          float64
@@ -59,6 +66,7 @@ var (
 	cursorOwner   *Actor // the local fighter whose energy Cur was last given
 	WhiteShader   rl.Shader
 	OutlineShader rl.Shader
+	RimShader     rl.Shader
 	NetMode       = NetOffline
 	quit          bool
 	drawList      []*Actor
@@ -130,7 +138,7 @@ func Game() {
 	defer shutdownNet()
 
 	LE = NewLevelEditor(39, 83)
-	LE.LoadLevel("level_1.json")
+	LE.LoadLevel(LevelPath)
 
 	for !rl.WindowShouldClose() && !quit {
 		if DevTools && rl.IsKeyPressed(rl.KeyGrave) {
@@ -193,12 +201,20 @@ func loadStyle() {
 	rlg.SetStyle(rlg.DEFAULT, rlg.TEXT_SIZE, 20)
 }
 
-// startOffline starts single player: one authoritative world, the local fighter and a bot.
+// OfflineBots is how many bots a single-player match puts in the level with the
+// local fighter. Each fights whoever is nearest, bot or not, and comes back
+// after RespawnTicks like anyone else, so the count holds for the whole match.
+const OfflineBots = 3
+
+// startOffline starts single player: one authoritative world, the local fighter
+// and OfflineBots bots on the free spawn columns beside it.
 func startOffline() {
 	NetMode = NetOffline
 	CL = NewWorld(true)
-	CL.Spawn(rl.Vector2{X: 50}, false)
 	CL.Local = CL.Spawn(rl.Vector2{}, true)
+	for range OfflineBots {
+		CL.Spawn(CL.spawnPos(), false)
+	}
 	enterLevel()
 }
 
@@ -206,6 +222,9 @@ func enterLevel() {
 	Stage = StageLevel
 	Accumulator = 0
 	Spec = SpecCam{Follow: true, Pos: Cam.Camera2D.Target}
+	// the menu paints the raygui widgets in its own reds (menuWidgetStyle);
+	// the editor and the level HUD get the dark style back
+	loadStyle()
 	rl.DisableCursor()
 }
 
@@ -302,7 +321,8 @@ func runLevel(dt float32) {
 		levelInit = true
 		WhiteShader = rl.LoadShaderFromMemory("", fsWhite)
 		OutlineShader = rl.LoadShaderFromMemory("", fsOutline)
-		LE.LoadLevel("level_1.json")
+		loadRimShader()
+		LE.LoadLevel(LevelPath)
 
 		Sh = loadShaders()
 		// 512 is the resolution every light has always been drawn at; radius,
@@ -381,7 +401,8 @@ func runLevel(dt float32) {
 	}
 	Cam.Update(dt)
 
-	computeLights(LE.lights, LE.areas, LE.ambient, LE.LightOccluders(), Cam.View())
+	occluders := LE.LightOccluders()
+	computeLights(LE.lights, LE.areas, LE.ambient, occluders, Cam.View())
 	rl.BeginTextureMode(ScreenFullTexture)
 	{
 		rl.ClearBackground(rl.Black)
@@ -414,6 +435,24 @@ func runLevel(dt float32) {
 		rl.EndMode2D()
 		compositeLights()
 		rl.BeginMode2D(Cam.View())
+
+		// the rim is light added on top of the lit scene, so the ambient dark
+		// cannot dim it; the overlays below go over it
+		rl.BeginBlendMode(rl.BlendAdditive)
+		for _, a := range drawList {
+			drawRim(a, LE.lights, occluders)
+		}
+		rl.EndBlendMode()
+
+		// A bot's sight is drawn here rather than with the other debug boxes,
+		// which are inside the lit scene: the cone is a faint wash, and
+		// multiplied by the light map it would disappear into any dark corner -
+		// exactly where knowing what the bot can see matters most.
+		if DevTools && Debug {
+			for _, a := range drawList {
+				a.drawSight()
+			}
+		}
 
 		// the attack outline and the structure bars go on top of the lighting,
 		// so it cannot tint them; the outline first, under the bars

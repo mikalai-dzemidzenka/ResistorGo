@@ -184,6 +184,104 @@ void main()
 }
 `
 
+// fsRim lights the ring of empty pixels around a sprite frame on the sides that
+// face each given light.
+//
+// It is an OUTER rim, like fsOutline: it paints the transparent texels that
+// touch the fighter, so no pixel the fighter draws is recoloured. Which way a
+// rim texel faces comes from where the body is next to it, and it is lit by how
+// squarely the opposite direction points at the light. Everything else is
+// discarded, and the pass is drawn additively, so a side facing away is left as
+// the scene drew it.
+//
+// Work is done per texel, not per screen pixel: every screen pixel of one
+// sprite texel gets the same answer at any zoom. The quad is drawn a texel
+// larger than the frame all round, so the ring is not cut off where the sprite
+// reaches the frame's edge; sampling stays clamped to the frame itself.
+//
+// A fighter drawn in two layers is one silhouette here: coverage is the greater
+// of the body sprite's alpha and the top layer's, so the rim runs around the
+// two together and never along the seam between them.
+//
+// Light positions are in the frame's own texels (already mirrored for a fighter
+// facing left); their colours carry their strength.
+const fsRim = `
+#version 330
+
+in vec2 fragTexCoord;
+in vec4 fragColor;
+
+uniform sampler2D texture0;   // the body sprite's sheet
+uniform sampler2D topTexture; // the top layer's sheet, if there is one
+uniform vec2 texelSize;       // one texel of texture0, in texture coordinates
+uniform vec4 frameBounds;     // u0, v0, u1, v1 of this frame within the sheet
+uniform vec2 topTexelSize;    // one texel of topTexture
+uniform vec4 topBounds;       // this frame within the top layer's sheet
+uniform float hasTop;         // 1 when the fighter has a top layer
+uniform float lightCount;     // how many of the entries below are in use
+uniform vec2 lightPos[4];     // in the frame's texels
+uniform vec3 lightColor[4];
+
+out vec4 finalColor;
+
+// alphaAt is how covered the fighter is at a pixel of the frame, counting both
+// layers. Anything outside the frame is empty, so the rim cannot sample the
+// pose next to it.
+float alphaAt(vec2 pixel)
+{
+    vec2 uv = frameBounds.xy + pixel * texelSize;
+    if (uv.x < frameBounds.x || uv.x > frameBounds.z ||
+        uv.y < frameBounds.y || uv.y > frameBounds.w) {
+        return 0.0;
+    }
+    float a = texture(texture0, uv).a;
+    if (hasTop > 0.5) {
+        a = max(a, texture(topTexture, topBounds.xy + pixel * topTexelSize).a);
+    }
+    return a;
+}
+
+void main()
+{
+    // the texel this fragment belongs to, in the frame's own grid
+    vec2 texel = floor((fragTexCoord - frameBounds.xy) / texelSize);
+    vec2 centre = texel + 0.5;
+
+    if (alphaAt(centre) >= 0.5) {
+        discard; // the fighter's own pixel: leave it exactly as it was drawn
+    }
+
+    // towards the body: the neighbours the fighter covers
+    vec2 body = vec2(0.0);
+    body += vec2( 1.0,  0.0) * alphaAt(centre + vec2(1.0, 0.0));
+    body += vec2(-1.0,  0.0) * alphaAt(centre - vec2(1.0, 0.0));
+    body += vec2( 0.0,  1.0) * alphaAt(centre + vec2(0.0, 1.0));
+    body += vec2( 0.0, -1.0) * alphaAt(centre - vec2(0.0, 1.0));
+    if (dot(body, body) < 0.01) {
+        discard; // nothing adjacent, so not part of the ring
+    }
+    vec2 outward = -normalize(body);
+
+    vec3 sum = vec3(0.0);
+    int count = int(lightCount + 0.5);
+    for (int i = 0; i < 4; i++) {
+        if (i >= count) {
+            break;
+        }
+        vec2 toLight = lightPos[i] - centre;
+        if (dot(toLight, toLight) < 1e-4) {
+            continue;
+        }
+        float f = max(dot(outward, normalize(toLight)), 0.0);
+        sum += lightColor[i] * f;
+    }
+    if (max(sum.r, max(sum.g, sum.b)) <= 0.0) {
+        discard;
+    }
+    finalColor = vec4(sum, 1.0);
+}
+`
+
 // ============================================================
 // REDUCTION
 // ============================================================
