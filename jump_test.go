@@ -20,24 +20,22 @@ func TestAnimTableIsAppendOnly(t *testing.T) {
 		"resources/threefour/hit-top.png":    24,
 		"resources/threefour/death_fall.png": 25,
 		"resources/threefour/turnover.png":   45,
+		"resources/threefour/run-jump.png":   46,
+		"resources/threefour/fall.png":       47,
 	} {
 		if got := animID(path); got != want {
 			t.Errorf("%s has id %d, want %d - something was inserted rather than appended", path, got, want)
 		}
 	}
 
-	// the two new ones are on the end, in order, and survive the round trip
-	for i, path := range []string{
-		"resources/threefour/run-jump.png",
-		"resources/threefour/fall.png",
-	} {
-		id := animID(path)
-		if want := uint8(len(animTable) - 2 + i); id != want {
-			t.Errorf("%s has id %d, want %d - it is not at the end of the table", path, id, want)
-		}
-		if back := animPath(id); back != path {
-			t.Errorf("id %d came back as %q, want %q", id, back, path)
-		}
+	// the newest one is on the end, and survives the round trip
+	const newest = "resources/threefour/push.png"
+	id := animID(newest)
+	if want := uint8(len(animTable) - 1); id != want {
+		t.Errorf("%s has id %d, want %d - it is not at the end of the table", newest, id, want)
+	}
+	if back := animPath(id); back != newest {
+		t.Errorf("id %d came back as %q, want %q", id, back, newest)
 	}
 }
 

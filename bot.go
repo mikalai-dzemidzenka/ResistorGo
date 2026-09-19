@@ -867,15 +867,7 @@ func (a *Actor) walkStep(in Input, s step) Input {
 // used to stop at was half again the reach of the arm, which is how a bot could
 // press the attack all match and hit nothing at all.
 func (a *Actor) inSwingRange(t *Actor) bool {
-	o := facing(t.Pos.X - a.Pos.X)
-	box, ok := a.attackBoxFacing(a.Updown, a.Pos, o)
-	if !ok {
-		// guarding with block-all: no swing to measure, so measure the one it
-		// would throw the moment it stopped guarding
-		box, _ = a.attackBoxFacing(1, a.Pos, o)
-	}
-	box.X += float32(o) * AttackDash
-	return aabb(box, t.collisionRect())
+	return a.swingReachFacing(t, facing(t.Pos.X-a.Pos.X))
 }
 
 // tooClose reports the other way a swing misses: not the arm falling short but

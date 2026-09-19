@@ -53,8 +53,10 @@ the decisions below mark what does not.
 
 ### Only from standing
 
-The trigger is `StateIdle` on the ground, not guarding everything, and nothing
-else. The withdrawn version also shoved from `StateRun`, and in the bot course
+The trigger is `StateIdle` on the ground, with no movement key held, not guarding
+everything, and nothing else. The movement key is part of it because
+`StateIdle` is not only standing: it covers walking too, anything below
+`RunReach`, and a fighter walking away from a follower is a chase all the same. The withdrawn version also shoved from `StateRun`, and in the bot course
 test it fired on 142 of 500 ticks: whoever is being followed always has its
 follower behind it. A running fighter has its own answer - it is already moving
 away - so standing is the only state in which being on someone's back is a
@@ -112,20 +114,32 @@ would silently close. 16 sits in the middle and lands the crowder 19 to 29px out
 Both bounds are asserted by a test sweeping every offset in the window, not by
 the comment beside the constant.
 
-### No repeat guard: the turn is the guard
+### The turn guards a bot; a remembered crowder guards a player
 
-A wall can cut the throw short, leaving the crowder where it was. The withdrawn
-design needed an explicit "do not re-enter `StatePush`" guard for that. With the
-turn, the shover ends facing the crowder, and anything overlapping in front is
-inside reach, so `crowding()` is false and no second shove begins:
+A wall can cut the throw short, leaving the crowder where it was. For a bot the
+turn is enough: the shover ends facing the crowder, anything overlapping in
+front is inside reach, and `crowding()` is false:
 
 ```
   |B [==] <-- A [==]     wall stops B; A faces left; B at dx in [-13, -3]
   |                      is inside the left-facing reach (-35, 3)
 ```
 
-This is proven by a test against a wall, which needs a `walls()` helper beside
-`floor()`.
+It is not enough for a player. Standing still, a player faces the mouse again on
+the next tick, and with the mouse still pointing away the same crowder is behind
+again: the shove repeats every 0.35s and no other button is read (found by
+`TestAWallStopsTheThrow` while implementing). So the fighter also remembers, in
+`PushStuck`, a crowder its shove left still overlapping, and `crowding()` skips
+that one until the two are apart.
+
+It is recorded on the landing frame in every world, not only the authority's. A
+client moves nobody, so on a client the crowder is always still overlapping and
+always remembered - which is what stops a predicting client throwing the same
+shove every 0.35s while it waits for the snapshot that parts them.
+
+Alternative rejected: holding the shove's turn until the mouse next crosses
+sides, which would change how a standing player follows the mouse everywhere, not
+only here.
 
 ### Displacement first, then speed, then the wall
 

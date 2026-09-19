@@ -95,6 +95,19 @@ const (
 	StunKnockback   = 150
 	FlinchHoldTicks = 12
 
+	// A shove is what a standing fighter does about another on its back: the
+	// one behind can swing at it and it cannot swing back. It turns on the
+	// crowder and throws it off, costing it nothing but its ground.
+	PushSeconds = 0.35
+	PushFrames  = 7
+	PushFrame   = 3 // the frame both arms are out: where the shove lands
+	// How far the shove moves the crowder. It starts 3 to 13px away, so this
+	// must be at least 11 to clear the 14px overlap and at most 21 to stay
+	// inside the 35px a swing reaches - the middle of that, so a later change
+	// to either width does not quietly throw the crowder out of reach.
+	PushDistance = 16
+	PushSpeed    = PunchSpeed // what it leaves in the shoved fighter, as a hit does
+
 	// One in three: the odds a bot answers a landed hit by moving its guard to
 	// the height that hit it. A feel number, to be turned by eye in play.
 	GuardAdaptOdds = 3
@@ -140,6 +153,7 @@ const (
 	// every state below it for anyone drawing from an older build
 	StateRunJump
 	StateFall
+	StatePush
 	// stateCount is one past the last state. A replicated state is checked
 	// against it, so appending a state cannot leave that check behind - it was
 	// left at the death when the run-jump and the fall were appended, and every
@@ -213,6 +227,8 @@ type Actor struct {
 	EnergyUntouched  uint16  // ticks since an attack last reached it, hit or blocked
 	FlinchTicks      uint8   // ticks a hit that did not stun keeps the fighter flickering
 	SwingHit         bool    // this fighter's current swing has already landed
+	PushDone         bool    // this fighter's current shove has already moved someone
+	PushStuck        *Actor  // a crowder its last shove left still overlapping; not shoved again until apart
 	Dying            bool    // dead and waiting to be taken out of the world
 	DeathTicks       uint16  // ticks since the death animation finished
 	DenyUntil        float64 // game time a refused swing stops flashing; local only, never replicated
@@ -324,6 +340,17 @@ func (a *Actor) Update(dt float32) {
 	a.updateVertSpeed(dt)
 	a.updateFalling()
 
+	// A fighter standing still with another on its back, where the one behind
+	// can swing and it cannot, turns on it and shoves it off. Only standing
+	// still: whoever is walking or running away has a follower behind it by
+	// definition, and is already answering it. A fighter guarding everything
+	// stands its ground instead.
+	if a.State == StateIdle && a.OnGround && a.Updown != 3 && !a.Input.Left && !a.Input.Right {
+		if other := a.crowding(); other != nil {
+			a.enterPushState(other)
+		}
+	}
+
 	switch a.State {
 	case StateClimb:
 		a.Speed = rl.Vector2{}
@@ -383,6 +410,8 @@ func (a *Actor) Update(dt float32) {
 	case StateAttack:
 		a.Speed.X = clamp(a.Speed.X, -AttackDash, AttackDash)
 		a.updateAttack()
+	case StatePush:
+		a.updatePush()
 	case StateAttacked:
 		// no AttackDash cap here: that is the lunge of the fighter doing the
 		// swinging, and capping the one being hit threw StunKnockback away.
@@ -733,7 +762,7 @@ func (a *Actor) DrawAnim() {
 func (a *Actor) updateHorSpeed(dt float32) {
 	var movePressed bool
 	prevOrientation := a.Orientation
-	canMove := a.State != StateAttack && a.State != StateBlock && a.State != StateAttacked && a.Updown != 3
+	canMove := a.State != StateAttack && a.State != StateBlock && a.State != StateAttacked && a.State != StatePush && a.Updown != 3
 	if a.Input.Right && !(a.State == StateTurnover && prevOrientation == 1) && canMove {
 		movePressed = true
 		if abs(a.Speed.X) < 0.001 {
@@ -1178,7 +1207,13 @@ func (a *Actor) hitFeedback(attacker *Actor, knockback float32) {
 
 // enterFlinchState is a hit that did not stun: the fighter keeps control and
 // whatever it was doing, and only flickers for a moment.
+//
+// A shove is the exception: a hit before it lands is the answer to it, and the
+// fighter is left standing with the shove not thrown.
 func (a *Actor) enterFlinchState(attacker *Actor) {
+	if a.State == StatePush {
+		a.enterIdleState()
+	}
 	a.hitFeedback(attacker, PunchSpeed)
 	a.FlinchTicks = FlinchHoldTicks
 }
@@ -1211,6 +1246,99 @@ func (a *Actor) Flickering() bool {
 		return a.AnimCurrentFrame < 2
 	}
 	return true
+}
+
+// crowding returns a living fighter overlapping this one that this one cannot
+// swing at, facing the way it faces. The arm covers the ground in front of the
+// body, so such a fighter is always behind - and from there, facing this one,
+// it can swing at this one's back.
+//
+// A crowder the last shove could not clear - one flush against a wall - is left
+// alone until the two are apart. The shove turns the fighter to face it, which
+// is answer enough for a bot; but a player standing still faces the mouse again
+// the next tick, and with the mouse still pointing away the same crowder would
+// be shoved again, and again, and no other button would ever be read.
+func (a *Actor) crowding() *Actor {
+	if a.W == nil {
+		return nil
+	}
+	if a.PushStuck != nil && !aabb(a.collisionRect(), a.PushStuck.collisionRect()) {
+		a.PushStuck = nil
+	}
+	for _, other := range a.W.Actors {
+		if other == a || other == a.PushStuck || other.State == StateDeath {
+			continue
+		}
+		if aabb(a.collisionRect(), other.collisionRect()) && !a.swingReachFacing(other, a.Orientation) {
+			return other
+		}
+	}
+	return nil
+}
+
+// pushDir is the way a shove moves other: away from the fighter throwing it.
+// The crowder is never on the same column, but a third fighter caught in the
+// shove can be, and there the arms decide.
+func (a *Actor) pushDir(other *Actor) int8 {
+	if d := other.Pos.X - a.Pos.X; d != 0 {
+		return facing(d)
+	}
+	return a.Orientation
+}
+
+// enterPushState turns on the crowder and starts the shove. The turn is always
+// toward it, and never ambiguous: a crowder is at least 3px to one side. It
+// cannot be steered while it plays.
+func (a *Actor) enterPushState(other *Actor) {
+	a.face(a.pushDir(other))
+	a.State = StatePush
+	a.PushDone = false
+	a.Speed.X = 0
+	a.SetAnim("resources/threefour/push.png", AnimOptions{animDuration: PushSeconds, totalFrames: PushFrames, once: true})
+}
+
+// updatePush lands the shove on the frame the arms come out, once, and ends on
+// the animation. The shove is the authority's alone, as a hit is: a client is
+// shown the animation, and the ground it changed hands, by the snapshot.
+//
+// Whoever is still overlapping once it has landed is remembered, on a client
+// too - there nobody moved, and the snapshot is what parts them - so the next
+// tick standing does not throw the same shove at the same fighter again.
+func (a *Actor) updatePush() {
+	if a.W != nil && !a.PushDone && a.AnimCurrentFrame >= PushFrame {
+		a.PushDone = true
+		for _, other := range a.W.Actors {
+			if other == a || other.State == StateDeath {
+				continue
+			}
+			if !aabb(a.collisionRect(), other.collisionRect()) {
+				continue
+			}
+			if a.W.Authority {
+				a.shove(other)
+			}
+			if aabb(a.collisionRect(), other.collisionRect()) {
+				a.PushStuck = other
+			}
+		}
+	}
+	if a.AnimFinished {
+		a.enterIdleState()
+	}
+}
+
+// shove moves a fighter away from the one throwing it.
+//
+// The ground it gives up is a displacement and not only speed: a fighter
+// mid-swing holds its own speed down to the lunge, and would otherwise stand
+// its ground through a shove. The speed is set before the wall is asked, so a
+// wall that cuts the throw short also takes away the speed into it.
+func (a *Actor) shove(other *Actor) {
+	dir := float32(a.pushDir(other))
+	fromX := other.Pos.X
+	other.Pos.X = float32(int(other.Pos.X + dir*PushDistance))
+	other.Speed.X = dir * PushSpeed
+	other.blockSides(fromX)
 }
 
 // enterDeathState is where a broken structure goes. The fighter stops acting
@@ -1331,6 +1459,21 @@ func (a *Actor) attackBoxFacing(updown uint8, pos rl.Vector2, o int8) (rl.Rectan
 		Width:  box.Width,
 		Height: box.Height,
 	}, true
+}
+
+// swingReachFacing reports whether a swing thrown facing o would meet t: the
+// box this fighter's guard height throws, carried forward by the dash the swing
+// takes, against the box a hit is decided against. The bot's stopping distance
+// and the shove's trigger both ask this, so neither can drift from what reaches.
+func (a *Actor) swingReachFacing(t *Actor, o int8) bool {
+	box, ok := a.attackBoxFacing(a.Updown, a.Pos, o)
+	if !ok {
+		// guarding with block-all: no swing to measure, so measure the one it
+		// would throw the moment it stopped guarding
+		box, _ = a.attackBoxFacing(1, a.Pos, o)
+	}
+	box.X += float32(o) * AttackDash
+	return aabb(box, t.collisionRect())
 }
 
 func (a *Actor) updateAttack() {
