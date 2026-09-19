@@ -201,12 +201,20 @@ func loadStyle() {
 	rlg.SetStyle(rlg.DEFAULT, rlg.TEXT_SIZE, 20)
 }
 
-// startOffline starts single player: one authoritative world, the local fighter and a bot.
+// OfflineBots is how many bots a single-player match puts in the level with the
+// local fighter. Each fights whoever is nearest, bot or not, and comes back
+// after RespawnTicks like anyone else, so the count holds for the whole match.
+const OfflineBots = 3
+
+// startOffline starts single player: one authoritative world, the local fighter
+// and OfflineBots bots on the free spawn columns beside it.
 func startOffline() {
 	NetMode = NetOffline
 	CL = NewWorld(true)
-	CL.Spawn(rl.Vector2{X: 50}, false)
 	CL.Local = CL.Spawn(rl.Vector2{}, true)
+	for range OfflineBots {
+		CL.Spawn(CL.spawnPos(), false)
+	}
 	enterLevel()
 }
 
