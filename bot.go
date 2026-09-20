@@ -295,10 +295,26 @@ type botMind struct {
 	patience  uint16 // ticks left to reach the spot, then to stand and look
 	swingWait uint16 // ticks left before it opens another attack
 	chainLeft uint8  // blows still to press in the attack under way
+	// The fight this bot is in: the fighter it is fighting, and which side of
+	// that fighter it is on. It is in the fight whether or not it has a place
+	// at it - a bot with none is waiting in the line on that side.
+	target    *Actor
+	side      int8
+	holdTicks uint16 // ticks it has held its place at the front
+	yieldWait uint16 // ticks it stands off after giving that place up
 }
 
-// forget puts the bot back to having nothing in mind.
+// forget puts the bot back to having nothing in mind. Actor.forget is what the
+// rest of the game calls: a mind cleared here without the place being given up
+// first would leave one of the two places held by a bot that has forgotten it.
 func (m *botMind) forget() { *m = botMind{} }
+
+// forget puts the bot back to having nothing in mind and takes it out of the
+// fight it was in.
+func (a *Actor) forget() {
+	a.releasePlace()
+	a.Bot.forget()
+}
 
 // mark notes where a fighter is being seen right now. Nothing is being searched
 // for while something is in view.
@@ -392,7 +408,9 @@ func (a *Actor) canSee(b *Actor) bool {
 	return !lineBlocked(from, to)
 }
 
-// seen returns the nearest fighter a can see, or nil when it can see none.
+// seen returns the nearest fighter a can see that is not its ally, or nil when
+// it can see none. An ally is never picked, so a bot neither walks up to one nor
+// swings at one - everything it does starts from what this returns.
 func (a *Actor) seen() *Actor {
 	var best *Actor
 	bestD := float32(math.MaxFloat32)
@@ -404,7 +422,7 @@ func (a *Actor) seen() *Actor {
 			// taken out of the world
 			continue
 		}
-		if !a.canSee(b) {
+		if a.allyOf(b) || !a.canSee(b) {
 			continue
 		}
 		to := b.eye()
@@ -731,6 +749,233 @@ func (a *Actor) alerted(attacker *Actor) {
 	a.Bot.mark(attacker.Pos)
 }
 
+// How the crowd arranges itself around a fighter. Feel numbers, like the sight
+// ones, to be turned by eye in play.
+const (
+	// How long a bot keeps its place at the front before handing it on, with
+	// somebody waiting behind it for one: 5 seconds. Set this past the length
+	// of any fight and the line stops advancing, which is the whole of what
+	// turns the rotation off.
+	EngageHoldTicks = 300
+	// How long a bot that has just given its place up stands off before it may
+	// take another: half a second. Without it the bot would take its own place
+	// straight back - it is usually the nearest one to the target, which is
+	// exactly what makes it the first to claim.
+	EngageYieldTicks = 30
+)
+
+// lineFront is how far from the fighter being fought the front of the line
+// stands: past the end of a swing thrown either way, so a bot waiting its turn
+// is out of the fight rather than standing in it with its hands down.
+//
+// Derived from the same boxes the hit test uses - the arm, the lunge every
+// swing takes with it, and the body that arm has to reach - plus the dead zone
+// a bot comes to rest inside, so retuning any of them carries the line along.
+func (a *Actor) lineFront() float32 {
+	return a.AttackBoxMid.Width + AttackDash + a.CollisionBox.Width + botArrived
+}
+
+// lineSpacing is the gap between one waiting bot and the next: a body, and the
+// slack at both ends of the dead zones the two of them come to rest in, so that
+// two bots stopping as far from their spots as botArrived allows still do not
+// stand in one another. Teammates no longer shove each other apart, so this is
+// the only thing keeping a line from collapsing into a pile.
+func (a *Actor) lineSpacing() float32 {
+	return a.CollisionBox.Width + 2*botArrived + 2
+}
+
+// lineRank is where in the line this bot stands: how many bots waiting on the
+// same side of the same fighter are nearer to it than this one.
+//
+// It reads the other bots' recorded fights and their positions, and asks
+// nothing about what any of them can see. Sight sweeps the level for every
+// candidate, and a rank that called it would cost bots times bots times solids
+// every tick.
+//
+// Ties are broken by ID so the order is a total one. Two bots exactly as far
+// out as each other would otherwise both rank first and walk to the same spot.
+func (a *Actor) lineRank(t *Actor, side int8) int {
+	rank := 0
+	d := abs(a.Pos.X - t.Pos.X)
+	for _, b := range a.W.Actors {
+		if b == a || b.Bot.target != t || b.Bot.side != side || b.holdsPlace() {
+			continue
+		}
+		bd := abs(b.Pos.X - t.Pos.X)
+		if bd < d || (bd == d && b.ID < a.ID) {
+			rank++
+		}
+	}
+	return rank
+}
+
+// lineSpot is where the bot at that rank in the line on that side stands.
+func (a *Actor) lineSpot(t *Actor, side int8, rank int) rl.Vector2 {
+	return rl.Vector2{
+		X: t.Pos.X + float32(side)*(a.lineFront()+float32(rank)*a.lineSpacing()),
+		Y: t.Pos.Y,
+	}
+}
+
+// engageStand is how far from the fighter it is fighting a bot holding a place
+// stands: clear of its body, and well inside the reach of a swing, with the
+// dead zone it comes to rest in falling inside that window at both ends.
+func (a *Actor) engageStand() float32 {
+	return a.CollisionBox.Width + botArrived
+}
+
+// engageSpot is the ground a bot holding a place is walking to: that spot on
+// the side of t its place is on.
+//
+// A bot that took the place on the side it was already on is walking where it
+// would have walked anyway - at the fighter - because the swing check stops it
+// the moment it is in reach, long before the spot. The spot only tells when the
+// two differ: a bot that took the far place is sent through and out the other
+// side, which is what puts the second attacker behind the fighter rather than
+// alongside the first.
+func (a *Actor) engageSpot(t *Actor) rl.Vector2 {
+	return rl.Vector2{X: t.Pos.X + float32(a.Bot.side)*a.engageStand(), Y: t.Pos.Y}
+}
+
+// atPlace reports whether the bot is standing on the side its place is on. A
+// bot still crossing over does not stop to swing on the way through.
+func (a *Actor) atPlace(t *Actor) bool {
+	return a.engageSide(t) == a.Bot.side
+}
+
+// crossing reports whether a is a bot walking through b to reach the place it
+// holds on b's far side.
+//
+// The two pass through one another while it is: a shove either way throws the
+// fighter being walked round further off, and since the walk is toward that
+// fighter, the bot spends the rest of the match chasing the one it is trying to
+// get behind and never arrives. It is the one crowd a shove does not part.
+func (a *Actor) crossing(b *Actor) bool {
+	return a.Bot.target == b && a.holdsPlace() && !a.atPlace(b)
+}
+
+// claimPlace puts this bot at one of the two places at t and reports whether it
+// got one. The place on the side the bot is already on is taken first, and the
+// far one only when that is held - which is what sends the second attacker
+// round behind the fighter instead of alongside the first.
+//
+// A bot that gets nothing is still left recorded as fighting t, from the side
+// it is on: that is the line it waits in.
+//
+// Claiming writes into another fighter, so it is the authority's alone, as a
+// shove's displacement is. A predicting client is shown where the bots went.
+func (a *Actor) claimPlace(t *Actor) bool {
+	if a.W == nil || !a.W.Authority {
+		return false
+	}
+	if t == nil || t.State == StateDeath || a.allyOf(t) {
+		a.leaveFight()
+		return false
+	}
+	if a.Bot.target != t {
+		a.leaveFight()
+		a.Bot.target = t
+	}
+	if a.holdsPlace() {
+		// A holder that finds itself on the other side takes the place there
+		// instead, when that one is free. A bot overshoots all the time - the
+		// lunge every swing takes walks it through whoever it is fighting - and
+		// one that turned round and walked back to the side it had claimed
+		// would be walking away from the fight, and would lose sight of it
+		// altogether before it got there. Crossing is for a bot whose own side
+		// is taken, and that place is still held, so a crosser presses on.
+		if s := a.engageSide(t); !a.atPlace(t) && t.Engaged[placeIndex(s)] == nil {
+			a.releasePlace()
+			t.Engaged[placeIndex(s)], a.Bot.side = a, s
+		}
+		return true
+	}
+	side := a.engageSide(t)
+	if a.Bot.yieldWait == 0 {
+		for _, s := range [2]int8{side, -side} {
+			if i := placeIndex(s); t.Engaged[i] == nil {
+				t.Engaged[i], a.Bot.side, a.Bot.holdTicks = a, s, 0
+				return true
+			}
+		}
+	}
+	a.Bot.side = side
+	return false
+}
+
+// waitingBehind reports whether another bot is queued on this bot's side of the
+// fight, waiting for the place it is holding.
+func (a *Actor) waitingBehind(t *Actor) bool {
+	for _, b := range a.W.Actors {
+		if b != a && b.Bot.target == t && b.Bot.side == a.Bot.side && !b.holdsPlace() {
+			return true
+		}
+	}
+	return false
+}
+
+// engage settles whether this bot is one of the two fighting t this tick: it
+// takes a place if there is one to take, and gives its own up once its turn has
+// run and somebody is waiting behind it for one. A bot that has just yielded
+// stands off for a moment, which is what lets the bot behind it step in.
+func (a *Actor) engage(t *Actor) bool {
+	if !a.claimPlace(t) {
+		return false
+	}
+	a.Bot.holdTicks++
+	if a.Bot.holdTicks < EngageHoldTicks || !a.waitingBehind(t) {
+		return true
+	}
+	a.releasePlace()
+	a.Bot.side = a.engageSide(t)
+	a.Bot.yieldWait = EngageYieldTicks
+	return false
+}
+
+// stillInTheFight reports whether the fight this bot is waiting on is still
+// going on: the fighter alive, and as near and as much in the open as sight
+// asks - everything canSee wants except the cone it looks down.
+//
+// A bot stepping back into line turns its back on the fight to walk there,
+// because the engine faces a fighter the way it walks. Without this it would
+// lose sight of the fight on the tick it turned, forget it, and set off to
+// search the ground it was already standing on - then turn, see it, step back,
+// and turn again, for the rest of the match.
+func (a *Actor) stillInTheFight() bool {
+	t := a.Bot.target
+	if t == nil || t.State == StateDeath {
+		return false
+	}
+	from, to := a.eye(), t.eye()
+	dx, dy := to.X-from.X, to.Y-from.Y
+	if dx*dx+dy*dy > SightRange*SightRange {
+		return false
+	}
+	if abs(dy) > abs(dx)*SightSlope {
+		return false
+	}
+	return !lineBlocked(from, to)
+}
+
+// waitInLine is what a bot does about a fight it has no place at: it walks to
+// its spot in the line on its own side, out past the reach of a swing, and
+// holds there facing the fight.
+//
+// It presses nothing. Waiting changes only where the bot walks and whether it
+// swings - the guard goes on drifting, a blow landing on it turns it the same
+// way, and it is hit, shoved and killed as any fighter is.
+func (a *Actor) waitInLine(in Input, t *Actor) Input {
+	side := a.Bot.side
+	s := botStep(a, a.lineSpot(t, side, a.lineRank(t, side)))
+	if s.stop {
+		if dx := t.Pos.X - a.Pos.X; abs(dx) > 1 {
+			a.face(facing(dx))
+		}
+		return in
+	}
+	return a.walkStep(in, s)
+}
+
 // botInput produces the bot's command for this tick (authoritative worlds only).
 //
 // See, then decide, then step. A bot acts on the nearest fighter it can
@@ -764,11 +1009,20 @@ func botInput(a *Actor) Input {
 			in.Updown = uint8(rand.Int() % 3)
 		}
 	}
+	if a.Bot.yieldWait > 0 {
+		a.Bot.yieldWait--
+	}
 
 	if t := a.seen(); t != nil {
 		// Seeing anything at all ends a search before its counter is ever
 		// read: what is there now beats where something used to be.
 		a.Bot.mark(t.Pos)
+		// Two bots fight a fighter and no more, one from either side. Without
+		// a place at this one there is nothing to do but wait for one, in the
+		// line on this bot's own side of it.
+		if !a.engage(t) {
+			return a.waitInLine(in, t)
+		}
 		// In reach of a swing: stop walking into it and start throwing. Reach
 		// is the rectangles, not a distance - a fighter standing on a ledge
 		// overhead is within arm's reach across the floor and nowhere near the
@@ -778,7 +1032,7 @@ func botInput(a *Actor) Input {
 		// Only from its feet: there is no swing in the air to throw, and a bot
 		// that stopped steering mid-jump to press one flew on wherever the arc
 		// was already taking it.
-		if a.OnGround && a.inSwingRange(t) {
+		if a.OnGround && a.atPlace(t) && a.inSwingRange(t) {
 			a.face(facing(t.Pos.X - a.Pos.X))
 			in.Attack = a.pressAttack()
 			return in
@@ -791,10 +1045,23 @@ func botInput(a *Actor) Input {
 			// where it is already standing, so it would stop there for good.
 			return a.walkStep(in, step{dir: facing(t.Pos.X - a.Pos.X)})
 		}
-		return a.walk(in, t.Pos)
+		return a.walk(in, a.engageSpot(t))
 	}
 
-	// Nothing in view. If something was a moment ago, go and look where it was.
+	// Nothing in the cone. A bot that turned its back to step into line has
+	// not lost the fight - turning round is how it walks there - so it goes on
+	// waiting as long as the fight is still there to wait on.
+	if t := a.Bot.target; t != nil && !a.holdsPlace() && a.stillInTheFight() {
+		a.Bot.mark(t.Pos)
+		return a.waitInLine(in, t)
+	}
+
+	// Nothing in view at all. The fight is over as far as this bot is
+	// concerned, so the place goes back: one held at a fighter nobody can see
+	// is a place no other bot can ever take.
+	a.leaveFight()
+
+	// If something was in view a moment ago, go and look where it was.
 	if !a.Bot.searching {
 		if !a.Bot.hasLast {
 			return in // nothing was ever seen: stand
@@ -803,7 +1070,7 @@ func botInput(a *Actor) Input {
 	}
 	a.Bot.patience--
 	if a.Bot.patience == 0 {
-		a.Bot.forget()
+		a.forget()
 		return in
 	}
 	s := botStep(a, a.Bot.lastSeen)

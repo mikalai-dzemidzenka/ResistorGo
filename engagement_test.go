@@ -1,0 +1,484 @@
+package resistor
+
+import (
+	"testing"
+
+	rl "github.com/gen2brain/raylib-go/raylib"
+)
+
+// lineUp puts a player on the floor with n bots lined up to its left, every one
+// of them facing it and far enough back to have to walk in.
+func lineUp(w *World, n int) (*Actor, []*Actor) {
+	floor()
+	p := w.Spawn(rl.Vector2{}, true)
+	p.OnGround = true
+	bots := make([]*Actor, 0, n)
+	for i := range n {
+		b := w.Spawn(rl.Vector2{X: -60 - 30*float32(i)}, false)
+		b.Orientation = 1 // facing +X, where the player is
+		b.OnGround = true
+		bots = append(bots, b)
+	}
+	return p, bots
+}
+
+// runFight drives the world the way runBots does, but holds p still and on its
+// feet, and reports whether any bot without a place ever pressed the attack.
+//
+// The pinning is what makes a line something to measure. Every spot in the line
+// is worked out from where the fighter stands, so a fighter being shoved up and
+// down the level drags the whole line after it and none of the bots ever arrive
+// anywhere. Keeping it on its feet matters for the same reason: a player that
+// goes down takes the fight and every place at it out of the world.
+func runFight(w *World, n int, p *Actor) (swungFromTheLine bool) {
+	at := p.Pos.X
+	for range n {
+		w.Tick++
+		p.Structure, p.HitCount = MaxStructure, 0
+		p.Pos.X, p.Speed.X, p.ShoveLeft = at, 0, 0
+		for _, a := range w.Actors {
+			if !a.IsPlayer {
+				a.Input = botInput(a)
+				if a.Input.Attack && a.Bot.target == p && !a.holdsPlace() {
+					swungFromTheLine = true
+				}
+			}
+			a.Update(float32(FixedTimeStep))
+		}
+	}
+	return swungFromTheLine
+}
+
+// engaged is the bots holding a place at t, and inReach the ones whose swing
+// would land on it from where they stand.
+func engaged(t *Actor) []*Actor {
+	var held []*Actor
+	for _, b := range t.Engaged {
+		if b != nil {
+			held = append(held, b)
+		}
+	}
+	return held
+}
+
+func inReach(w *World, t *Actor) []*Actor {
+	var near []*Actor
+	for _, b := range w.Actors {
+		if b != t && !b.IsPlayer && b.inSwingRange(t) {
+			near = append(near, b)
+		}
+	}
+	return near
+}
+
+// Which side of a fighter another one is on. Two on the same pixel column have
+// no side, and there the facing decides.
+func TestEngageSide(t *testing.T) {
+	w := NewWorld(true)
+	mid := w.Spawn(rl.Vector2{X: 100}, true)
+	left := w.Spawn(rl.Vector2{X: 40}, false)
+	right := w.Spawn(rl.Vector2{X: 160}, false)
+	if got := left.engageSide(mid); got != -1 {
+		t.Errorf("a fighter at 40 is on side %d of one at 100, want -1", got)
+	}
+	if got := right.engageSide(mid); got != 1 {
+		t.Errorf("a fighter at 160 is on side %d of one at 100, want 1", got)
+	}
+	same := w.Spawn(rl.Vector2{X: 100}, false)
+	for _, o := range []int8{-1, 1} {
+		same.Orientation = o
+		if got := same.engageSide(mid); got != o {
+			t.Errorf("on the same column facing %d the side is %d, want %d", o, got, o)
+		}
+	}
+}
+
+// Two places at a fighter and no more: the first bot takes the side it is on,
+// the second is sent round to the far side, and the third gets nothing.
+func TestTwoPlacesOneASide(t *testing.T) {
+	floor()
+	w := NewWorld(true)
+	p := w.Spawn(rl.Vector2{}, true)
+	first := w.Spawn(rl.Vector2{X: -40}, false)
+	second := w.Spawn(rl.Vector2{X: -80}, false)
+	third := w.Spawn(rl.Vector2{X: -120}, false)
+
+	if !first.claimPlace(p) {
+		t.Fatal("the first bot got no place")
+	}
+	if first.Bot.side != -1 || p.Engaged[0] != first {
+		t.Errorf("the first bot took side %d, want the left place", first.Bot.side)
+	}
+	if !second.claimPlace(p) {
+		t.Fatal("the second bot got no place")
+	}
+	if second.Bot.side != 1 || p.Engaged[1] != second {
+		t.Errorf("the second bot took side %d, want the far (right) place", second.Bot.side)
+	}
+	if third.claimPlace(p) {
+		t.Error("a third bot took a place at a fighter that already had two")
+	}
+	if third.Bot.target != p || third.Bot.side != -1 {
+		t.Errorf("the third bot waits at %v on side %d, want the player on its own side",
+			third.Bot.target, third.Bot.side)
+	}
+
+	// Giving one up hands it to the next claimer.
+	first.releasePlace()
+	if p.Engaged[0] != nil {
+		t.Fatal("the left place is still held after it was given up")
+	}
+	if !third.claimPlace(p) || p.Engaged[0] != third {
+		t.Error("the waiting bot did not get the place that came free")
+	}
+}
+
+// No place is ever held at an ally, and none at the dead.
+func TestNoPlaceAtAnAllyOrTheDead(t *testing.T) {
+	floor()
+	w := NewWorld(true)
+	bot := w.Spawn(rl.Vector2{X: -40}, false)
+	mate := w.Spawn(rl.Vector2{}, false)
+	if bot.claimPlace(mate) {
+		t.Error("a bot took a place at its own teammate")
+	}
+	if mate.Engaged[0] != nil || mate.Engaged[1] != nil {
+		t.Error("a teammate has places held at it")
+	}
+	corpse := w.Spawn(rl.Vector2{X: 40}, true)
+	corpse.State = StateDeath
+	if bot.claimPlace(corpse) {
+		t.Error("a bot took a place at a dead fighter")
+	}
+}
+
+// A bot that gives up its search gives up its place with it: a mind cleared
+// without that would leave a place held by a bot that has forgotten it.
+func TestForgettingGivesUpThePlace(t *testing.T) {
+	floor()
+	w := NewWorld(true)
+	p := w.Spawn(rl.Vector2{}, true)
+	bot := w.Spawn(rl.Vector2{X: -40}, false)
+	bot.claimPlace(p)
+	bot.forget()
+	if p.Engaged[0] != nil || p.Engaged[1] != nil {
+		t.Error("a bot that forgot everything is still holding a place")
+	}
+	if bot.Bot.target != nil {
+		t.Error("a bot that forgot everything is still in a fight")
+	}
+}
+
+// A bot dying frees the place it held, and the fighter it held it at losing its
+// life leaves nobody holding one.
+func TestDeathFreesPlaces(t *testing.T) {
+	floor()
+	w := NewWorld(true)
+	p := w.Spawn(rl.Vector2{}, true)
+	holder := w.Spawn(rl.Vector2{X: -40}, false)
+	waiting := w.Spawn(rl.Vector2{X: -80}, false)
+	holder.claimPlace(p)
+	waiting.Bot.target, waiting.Bot.side = p, -1
+
+	w.Kill(holder)
+	w.updateRespawns() // reaps the dying
+	if p.Engaged[placeIndex(-1)] != nil {
+		t.Error("a dead bot is still holding its place")
+	}
+	if !waiting.claimPlace(p) {
+		t.Error("the place a dead bot held did not come free")
+	}
+
+	w.Kill(p)
+	w.updateRespawns()
+	if waiting.Bot.target != nil {
+		t.Errorf("a bot is still fighting a fighter that left the world: %v", waiting.Bot.target)
+	}
+}
+
+// The front of the line stands past the reach of a swing thrown either way,
+// and consecutive spots are a clear body apart.
+func TestLineGeometryClearsTheFight(t *testing.T) {
+	floor()
+	w := NewWorld(true)
+	p := w.Spawn(rl.Vector2{}, true)
+	bot := w.Spawn(rl.Vector2{}, false)
+
+	for _, side := range []int8{-1, 1} {
+		bot.Pos.X = p.Pos.X + float32(side)*bot.lineFront()
+		bot.Orientation = -side
+		bot.checkCollision()
+		p.Orientation = side
+		p.checkCollision()
+		if bot.inSwingRange(p) {
+			t.Errorf("a bot at the front of the line on side %d is in reach of its own swing", side)
+		}
+		if p.inSwingRange(bot) {
+			t.Errorf("a bot at the front of the line on side %d is in reach of the fighter's swing", side)
+		}
+	}
+
+	// Two bots at their spots, each as far off as the dead zone allows and
+	// leaning toward one another, still do not overlap.
+	gap := bot.lineSpacing() - 2*botArrived
+	if gap <= bot.CollisionBox.Width {
+		t.Errorf("the worst-case gap in the line is %v, want more than a body (%v)",
+			gap, bot.CollisionBox.Width)
+	}
+}
+
+// The line is ordered by nearness: the bot closest to the fight stands at the
+// front of it, and the spots step out one spacing at a time.
+func TestLineRankAndSpot(t *testing.T) {
+	floor()
+	w := NewWorld(true)
+	p := w.Spawn(rl.Vector2{}, true)
+	near := w.Spawn(rl.Vector2{X: -60}, false)
+	mid := w.Spawn(rl.Vector2{X: -100}, false)
+	far := w.Spawn(rl.Vector2{X: -140}, false)
+	for _, b := range []*Actor{near, mid, far} {
+		b.Bot.target, b.Bot.side = p, -1
+	}
+	for i, b := range []*Actor{near, mid, far} {
+		if got := b.lineRank(p, -1); got != i {
+			t.Errorf("the bot at %v ranks %d in the line, want %d", b.Pos.X, got, i)
+		}
+	}
+	// A bot holding a place is not in the line at all.
+	near.claimPlace(p)
+	if got := mid.lineRank(p, -1); got != 0 {
+		t.Errorf("with the nearest bot engaged the next ranks %d, want 0", got)
+	}
+
+	for _, side := range []int8{-1, 1} {
+		first := far.lineSpot(p, side, 0)
+		second := far.lineSpot(p, side, 1)
+		if want := p.Pos.X + float32(side)*far.lineFront(); first.X != want {
+			t.Errorf("the front of the line on side %d is at %v, want %v", side, first.X, want)
+		}
+		if got := abs(second.X - first.X); got != far.lineSpacing() {
+			t.Errorf("the spots are %v apart, want %v", got, far.lineSpacing())
+		}
+	}
+}
+
+// Three bots on one player: two fight it, from opposite sides, and the third
+// waits out past the reach of a swing, facing the fight.
+func TestThreeBotsLeaveTwoFighting(t *testing.T) {
+	w := NewWorld(true)
+	p, bots := lineUp(w, 3)
+	swung := runFight(w, 600, p)
+
+	if swung {
+		t.Error("a bot with no place at the fight threw a swing at it")
+	}
+	if held := engaged(p); len(held) != 2 {
+		t.Fatalf("%d bots hold a place at the player, want 2", len(held))
+	}
+	if p.Engaged[0] == nil || p.Engaged[1] == nil {
+		t.Error("the two engaged bots are not one a side")
+	}
+	if left, right := p.Engaged[0], p.Engaged[1]; left != nil && right != nil {
+		if left.Pos.X > p.Pos.X {
+			t.Errorf("the bot in the left place stands at %v, right of the player at %v", left.Pos.X, p.Pos.X)
+		}
+		if right.Pos.X < p.Pos.X {
+			t.Errorf("the bot in the right place stands at %v, left of the player at %v", right.Pos.X, p.Pos.X)
+		}
+	}
+	if near := inReach(w, p); len(near) > 2 {
+		t.Errorf("%d bots are in swing range of the player, want no more than 2", len(near))
+	}
+
+	var waiting *Actor
+	for _, b := range bots {
+		if !b.holdsPlace() {
+			waiting = b
+		}
+	}
+	if waiting == nil {
+		t.Fatal("no bot is waiting in line")
+	}
+	if waiting.inSwingRange(p) || p.inSwingRange(waiting) {
+		t.Error("the waiting bot is standing inside the fight")
+	}
+	if want := facing(p.Pos.X - waiting.Pos.X); waiting.Orientation != want {
+		t.Errorf("the waiting bot faces %d, want %d - toward the fight", waiting.Orientation, want)
+	}
+}
+
+// Bots waiting on one side stand apart rather than in a pile.
+func TestTheLineIsNotAPile(t *testing.T) {
+	w := NewWorld(true)
+	p, bots := lineUp(w, 5)
+	runFight(w, 600, p)
+
+	// One line at a time. A bot on its way round to the far side walks the
+	// length of the other side to get there, and passing through the line it
+	// is leaving is not the pile this is about.
+	lines := map[int8][]*Actor{}
+	for _, b := range bots {
+		if !b.holdsPlace() && b.Bot.target == p {
+			lines[b.Bot.side] = append(lines[b.Bot.side], b)
+		}
+	}
+	if len(lines[-1])+len(lines[1]) < 2 {
+		t.Fatalf("%d bots are waiting in line, want at least 2", len(lines[-1])+len(lines[1]))
+	}
+	for side, waiting := range lines {
+		for i, a := range waiting {
+			for _, b := range waiting[i+1:] {
+				if aabb(a.collisionRect(), b.collisionRect()) {
+					t.Errorf("two bots waiting on side %d stand in one another, at %v and %v",
+						side, a.Pos.X, b.Pos.X)
+				}
+			}
+		}
+	}
+}
+
+// Waiting changes only where a bot walks and whether it swings: it is hit as
+// any fighter is, and its guard goes on drifting.
+func TestAWaitingBotIsStillAFighter(t *testing.T) {
+	w := NewWorld(true)
+	p, bots := lineUp(w, 3)
+	runFight(w, 600, p)
+
+	var waiting *Actor
+	for _, b := range bots {
+		if !b.holdsPlace() {
+			waiting = b
+		}
+	}
+	if waiting == nil {
+		t.Fatal("no bot is waiting in line")
+	}
+
+	// The guard goes on drifting while it waits. Only the ticks it spends
+	// waiting count: a bot that takes a place and starts swinging holds its
+	// guard still on purpose, and that is the swing's doing, not the line's.
+	drifted, waited := false, 0
+	updown := waiting.Updown
+	for range 600 {
+		w.Tick++
+		p.Structure, p.HitCount = MaxStructure, 0
+		p.Pos.X, p.Speed.X, p.ShoveLeft = 0, 0, 0
+		for _, a := range w.Actors {
+			if !a.IsPlayer {
+				a.Input = botInput(a)
+			}
+			a.Update(float32(FixedTimeStep))
+		}
+		if waiting.holdsPlace() {
+			continue
+		}
+		waited++
+		if waiting.Updown != updown {
+			drifted = true
+		}
+	}
+	if waited < 100 {
+		t.Fatalf("the bot only waited %d of 600 ticks, too few to say anything about its guard", waited)
+	}
+	if !drifted {
+		t.Error("a waiting bot's guard never moved")
+	}
+
+	before := waiting.Structure
+	waiting.takeHit(p)
+	if waiting.Structure >= before {
+		t.Error("a waiting bot shrugged a hit off")
+	}
+}
+
+// Walking the fight out of sight frees both places.
+func TestLosingSightFreesThePlace(t *testing.T) {
+	w := NewWorld(true)
+	p, _ := lineUp(w, 2)
+	runFight(w, 300, p)
+	if len(engaged(p)) == 0 {
+		t.Fatal("no bot ever took a place")
+	}
+	p.Pos.X = 5000 // out of range of every cone
+	runFight(w, 60, p)
+	if held := engaged(p); len(held) != 0 {
+		t.Errorf("%d places are still held at a fighter nobody can see", len(held))
+	}
+}
+
+// The places are the authority's: a predicting client claims none.
+func TestAClientClaimsNoPlace(t *testing.T) {
+	floor()
+	cl := NewWorld(false)
+	p := cl.Spawn(rl.Vector2{}, true)
+	p.OnGround = true
+	for i := range 3 {
+		b := cl.Spawn(rl.Vector2{X: -60 - 40*float32(i)}, false)
+		b.Orientation, b.OnGround = 1, true
+	}
+	for range 300 {
+		cl.Tick++
+		for _, a := range cl.Actors {
+			if !a.IsPlayer {
+				a.Input = botInput(a)
+			}
+			a.Update(float32(FixedTimeStep))
+			for _, e := range a.Engaged {
+				if e != nil {
+					t.Fatal("a place was claimed on a predicting client")
+				}
+			}
+		}
+	}
+}
+
+// A turn at the front runs out: with somebody waiting behind it, the holder
+// steps back and the bot behind it steps in.
+func TestTheLineAdvances(t *testing.T) {
+	floor()
+	w := NewWorld(true)
+	p := w.Spawn(rl.Vector2{}, true)
+	holder := w.Spawn(rl.Vector2{X: -40}, false)
+	waiting := w.Spawn(rl.Vector2{X: -80}, false)
+	holder.claimPlace(p)
+	waiting.Bot.target, waiting.Bot.side = p, -1
+
+	for range EngageHoldTicks {
+		if !holder.engage(p) {
+			break
+		}
+	}
+	if holder.holdsPlace() {
+		t.Fatal("the holder kept its place past its turn with a bot waiting")
+	}
+	if holder.Bot.yieldWait == 0 {
+		t.Error("the bot that gave its place up did not stand off")
+	}
+	if !waiting.claimPlace(p) {
+		t.Fatal("the waiting bot did not get the place")
+	}
+	// And the bot that stepped back cannot take it straight back.
+	if holder.claimPlace(p) {
+		t.Error("the bot that just yielded took a place again at once")
+	}
+}
+
+// With nobody waiting, a holder keeps its place however long the fight runs.
+func TestAHolderAloneKeepsItsPlace(t *testing.T) {
+	floor()
+	w := NewWorld(true)
+	p := w.Spawn(rl.Vector2{}, true)
+	holder := w.Spawn(rl.Vector2{X: -40}, false)
+	for range EngageHoldTicks * 2 {
+		if !holder.engage(p) {
+			t.Fatal("a holder with nobody waiting gave its place up")
+		}
+	}
+}
+
+// Nothing about the line goes over the wire.
+func TestPlacesAreNotReplicated(t *testing.T) {
+	if actorRecSize != 46 {
+		t.Errorf("the replicated actor record is %d bytes, want the 46 it was before the line", actorRecSize)
+	}
+}

@@ -106,6 +106,13 @@ const (
 	// inside the 35px a swing reaches.
 	PushDistance = 16
 
+	// Teams: fighters on the same one are allies - a bot does not pick an ally to
+	// fight, and a swing passes through one. NoTeam is nobody's ally, not even
+	// another fighter with no team, which is what a human is: every bot attacks
+	// it, and humans can still fight each other. Every bot starts on BotTeam.
+	NoTeam  = 0
+	BotTeam = 1
+
 	// One in three: the odds a bot answers a landed hit by moving its guard to
 	// the height that hit it. A feel number, to be turned by eye in play.
 	GuardAdaptOdds = 3
@@ -233,6 +240,13 @@ type Actor struct {
 	DeathTicks       uint16  // ticks since the death animation finished
 	DenyUntil        float64 // game time a refused swing stops flashing; local only, never replicated
 	Owner            uint16  // network player this fighter belongs to; 0 for bots
+	Team             uint8   // fighters on the same team do not fight; NoTeam is on nobody's
+	// The two places at this fighter: the bot fighting it from the left, and
+	// the one fighting it from the right. Two bots engage a fighter and no
+	// more; the rest wait in line. Like the bot's mind below, this is worked
+	// out by whichever world is simulating the match and is neither replicated
+	// nor rewound - a client is told where the bots went, not whose turn it is.
+	Engaged [2]*Actor
 	// What the bot has in mind. Never replicated and never rewound: it is
 	// worked out afresh by whichever world is actually simulating the match,
 	// and a client is told what the bot did, not what it was thinking. Zero is
@@ -284,6 +298,7 @@ func NewActor(pos rl.Vector2, isPlayer bool) *Actor {
 			0, 24, 24, 6,
 		},
 		IsPlayer:        isPlayer,
+		Team:            teamFor(isPlayer),
 		Anim:            "resources/threefour/updown.png",
 		AnimTotalFrames: 1,
 		AnimDuration:    1,
@@ -291,6 +306,70 @@ func NewActor(pos rl.Vector2, isPlayer bool) *Actor {
 		PrevUpdown:      2,
 		Updown:          0,
 	}
+}
+
+// teamFor is the team a fighter starts on: every bot on BotTeam, every human on
+// none.
+func teamFor(isPlayer bool) uint8 {
+	if isPlayer {
+		return NoTeam
+	}
+	return BotTeam
+}
+
+// allyOf reports whether a and b are on the same team.
+func (a *Actor) allyOf(b *Actor) bool {
+	return a.Team != NoTeam && a.Team == b.Team
+}
+
+// placeIndex is which of a fighter's two places belongs to a side: 0 for the
+// left, 1 for the right.
+func placeIndex(side int8) int {
+	if side < 0 {
+		return 0
+	}
+	return 1
+}
+
+// engageSide is which side of t this fighter is on. Two fighters on the same
+// pixel column have no side to be on, and there the facing decides - the same
+// answer pushDir gives a shove thrown at that distance.
+func (a *Actor) engageSide(t *Actor) int8 {
+	if d := a.Pos.X - t.Pos.X; d != 0 {
+		return facing(d)
+	}
+	return a.Orientation
+}
+
+// holdsPlace reports whether this bot is standing in the place it last took.
+// The fighter's own pair is the only record of who holds what; the bot's side
+// only says which of the two to look in, so the two cannot drift apart.
+func (a *Actor) holdsPlace() bool {
+	t := a.Bot.target
+	return t != nil && t.Engaged[placeIndex(a.Bot.side)] == a
+}
+
+// releasePlace gives up the place this bot holds, if it holds one.
+//
+// It does not forget the target. A bot whose turn at the front is over is still
+// fighting the same fighter - it goes to the back of the line and waits for
+// another - and leaveFight is what ends that.
+func (a *Actor) releasePlace() {
+	t := a.Bot.target
+	if t == nil {
+		return
+	}
+	if i := placeIndex(a.Bot.side); t.Engaged[i] == a {
+		t.Engaged[i] = nil
+	}
+	a.Bot.holdTicks = 0
+}
+
+// leaveFight gives up both the place and the fighter it was held at: this bot
+// is no longer in that fight at all, at the front of it or in the line.
+func (a *Actor) leaveFight() {
+	a.releasePlace()
+	a.Bot.target, a.Bot.side = nil, 0
 }
 
 // Update advances the actor by one fixed tick using a.Input.
@@ -340,11 +419,12 @@ func (a *Actor) Update(dt float32) {
 	a.updateVertSpeed(dt)
 	a.updateFalling()
 
-	// Two fighters cannot stand in one another: whichever is on its feet and free
-	// - standing, walking or running - turns on the other and shoves it off. One
-	// already swinging, blocking, stunned or still flinching from a hit finishes
-	// that first, and one guarding everything stands its ground. The first to
-	// qualify shoves, and the stun it throws keeps the other from shoving back.
+	// Two fighters who are not allies cannot stand in one another: whichever is
+	// on its feet and free - standing, walking or running - turns on the other
+	// and shoves it off. One already swinging, blocking, stunned or still
+	// flinching from a hit finishes that first, and one guarding everything
+	// stands its ground. The first to qualify shoves, and the stun it throws
+	// keeps the other from shoving back.
 	if (a.State == StateIdle || a.State == StateRun) && a.OnGround && a.Updown != 3 && a.FlinchTicks == 0 {
 		if other := a.crowding(); other != nil {
 			a.enterPushState(other)
@@ -1254,6 +1334,13 @@ func (a *Actor) Flickering() bool {
 // crowding returns a living fighter on its feet whose collision box overlaps
 // this one's, in front or behind.
 //
+// Never a teammate: a shove is something done to an enemy, and fighters on one
+// team walk through one another rather than throw each other off. Bots hold
+// formation and move as a crowd, which shoving them apart never let them do.
+//
+// Never a bot on its way round to the far side of this one either, nor the
+// fighter it is walking round - see Actor.crossing.
+//
 // Only one on its feet: a shove is a thing done on the ground, to someone on
 // it. A fighter passing through in the air - jumping up past a ledge another
 // stands on, most often - is left to land first. Shoving it out of the air
@@ -1271,7 +1358,10 @@ func (a *Actor) crowding() *Actor {
 		a.PushStuck = nil
 	}
 	for _, other := range a.W.Actors {
-		if other == a || other == a.PushStuck || other.State == StateDeath || !other.OnGround {
+		if other == a || other == a.PushStuck || other.State == StateDeath || !other.OnGround || a.allyOf(other) {
+			continue
+		}
+		if a.crossing(other) || other.crossing(a) {
 			continue
 		}
 		if aabb(a.collisionRect(), other.collisionRect()) {
@@ -1321,7 +1411,10 @@ func (a *Actor) updatePush() {
 	if a.W != nil && !a.PushDone && a.AnimCurrentFrame >= PushFrame {
 		a.PushDone = true
 		for _, other := range a.W.Actors {
-			if other == a || other.State == StateDeath {
+			if other == a || other.State == StateDeath || a.allyOf(other) {
+				continue
+			}
+			if a.crossing(other) || other.crossing(a) {
 				continue
 			}
 			if !aabb(a.collisionRect(), other.collisionRect()) {
@@ -1344,7 +1437,9 @@ func (a *Actor) updatePush() {
 // the game moves in whole pixels, truncating every tick, so a speed that slows
 // under a pixel a tick never moves anyone, and the tail of any slide is lost.
 func (a *Actor) shove(other *Actor) {
-	other.enterShovedState(a)
+	if !a.allyOf(other) {
+		other.enterShovedState(a)
+	}
 	other.Speed.X = 0
 	other.ShoveLeft, other.ShoveDir = PushDistance, a.pushDir(other)
 }
@@ -1532,8 +1627,8 @@ func (a *Actor) updateAttack() {
 	// lands on a given fighter at most once
 	if a.W.Authority && !a.SwingHit {
 		for _, actor := range a.W.Actors {
-			if a == actor || actor.State == StateDeath || actor.State == StateAttacked {
-				continue
+			if a == actor || actor.State == StateDeath || actor.State == StateAttacked || a.allyOf(actor) {
+				continue // an ally is passed through: no hit, no block
 			}
 			r2 := actor.collisionRect()
 			if !aabb(r1, r2) {

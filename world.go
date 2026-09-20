@@ -32,6 +32,7 @@ type pendingSpawn struct {
 	due      uint32
 	isPlayer bool
 	owner    uint16
+	team     uint8 // the team it comes back on, the one it died on
 }
 
 func NewWorld(authority bool) *World {
@@ -57,6 +58,16 @@ func (w *World) Remove(a *Actor) {
 		if b.Attacker == a {
 			b.Attacker = nil
 		}
+		// A place held at a fighter that has left the world, or held by one,
+		// is a place no other bot could ever take.
+		for i, e := range b.Engaged {
+			if e == a {
+				b.Engaged[i] = nil
+			}
+		}
+		if b.Bot.target == a {
+			b.Bot.target, b.Bot.side = nil, 0
+		}
 	}
 	if w.Local == a {
 		w.Local = nil
@@ -76,7 +87,7 @@ func (w *World) Kill(a *Actor) {
 	}
 	a.Dying = true
 	w.dying = append(w.dying, a)
-	w.pending = append(w.pending, pendingSpawn{due: w.Tick + RespawnTicks, isPlayer: a.IsPlayer, owner: a.Owner})
+	w.pending = append(w.pending, pendingSpawn{due: w.Tick + RespawnTicks, isPlayer: a.IsPlayer, owner: a.Owner, team: a.Team})
 }
 
 // reap takes the fighters that died during the last tick out of the world.
@@ -107,7 +118,7 @@ func (w *World) updateRespawns() {
 			continue
 		}
 		a := w.Spawn(w.spawnPos(), s.isPlayer)
-		a.Owner = s.owner
+		a.Owner, a.Team = s.owner, s.team
 		if OnFighterRespawned != nil {
 			OnFighterRespawned(s.owner, a)
 		}
