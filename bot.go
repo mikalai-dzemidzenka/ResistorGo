@@ -281,6 +281,18 @@ const (
 	// this. It does not drift mid-chain - changing height there throws a
 	// transition animation that costs more time than the change is worth.
 	BotGuardDriftOdds = 61
+	// What a bot adds to that wait when it is not fighting alone: both places
+	// at the fighter taken, one attacker either side of it.
+	//
+	// Two bots pressing at the rate one presses at is twice the pressure
+	// arriving on a fighter that can only guard one height at a time, and from
+	// two sides at once. There is no answer to it but to hold block-all and do
+	// nothing else, which is not a fight. Spaced out this far the two of them
+	// together throw about what one alone does, so the second attacker changes
+	// where the pressure comes from rather than how much of it there is - and
+	// the gap between two blows is long enough to step into.
+	BotCrowdedWaitTicks  = 30
+	BotCrowdedWaitSpread = 30
 )
 
 // botMind is everything a bot carries from one tick to the next: where it last
@@ -1034,7 +1046,7 @@ func botInput(a *Actor) Input {
 		// was already taking it.
 		if a.OnGround && a.atPlace(t) && a.inSwingRange(t) {
 			a.face(facing(t.Pos.X - a.Pos.X))
-			in.Attack = a.pressAttack()
+			in.Attack = a.pressAttack(t)
 			return in
 		}
 		if a.tooClose(t) {
@@ -1167,7 +1179,11 @@ func (a *Actor) tooClose(t *Actor) bool {
 // pressure back is the pool: opening costs a reserve the bot keeps, and a chain
 // runs only while there is still something to spend, because swinging stops the
 // refill outright and a bot that never let go would spend the match empty.
-func (a *Actor) pressAttack() bool {
+//
+// The other thing that holds it back is company. A bot with somebody fighting
+// alongside it leaves a longer gap before opening, so that two attackers are
+// two directions the pressure comes from rather than twice as much of it.
+func (a *Actor) pressAttack(t *Actor) bool {
 	if a.State == StateAttack {
 		// One press per blow: while one is queued the answer for this blow is
 		// already given, and pressing again every tick of it is what turned a
@@ -1182,8 +1198,23 @@ func (a *Actor) pressAttack() bool {
 		return false
 	}
 	a.Bot.swingWait = BotSwingWaitTicks + uint16(rand.Int()%BotSwingWaitSpread)
+	if t != nil && t.engagedBy() > 1 {
+		a.Bot.swingWait += BotCrowdedWaitTicks + uint16(rand.Int()%BotCrowdedWaitSpread)
+	}
 	a.Bot.chainLeft = uint8(rand.Int() % BotChainBlows) // the blows after this one
 	return true
+}
+
+// engagedBy is how many bots are fighting this fighter: how many of the two
+// places at it are held.
+func (a *Actor) engagedBy() int {
+	n := 0
+	for _, b := range a.Engaged {
+		if b != nil {
+			n++
+		}
+	}
+	return n
 }
 
 // facing is the way to turn to look at something dx away.

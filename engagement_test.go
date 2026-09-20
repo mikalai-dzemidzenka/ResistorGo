@@ -290,20 +290,37 @@ func TestThreeBotsLeaveTwoFighting(t *testing.T) {
 		t.Errorf("%d bots are in swing range of the player, want no more than 2", len(near))
 	}
 
-	var waiting *Actor
-	for _, b := range bots {
-		if !b.holdsPlace() {
-			waiting = b
+	// And the line does settle: at some point a bot with no place stands at its
+	// spot, out of reach of the fight and facing it. Asked of one instant this
+	// would be asking the wrong question - the line advances, and a bot that
+	// has just given its place up is walking to the back of it with its back to
+	// the fight, which is the line working rather than failing.
+	settled := false
+	for range 600 {
+		w.Tick++
+		p.Structure, p.HitCount = MaxStructure, 0
+		p.Pos.X, p.Speed.X, p.ShoveLeft = 0, 0, 0
+		for _, a := range w.Actors {
+			if !a.IsPlayer {
+				a.Input = botInput(a)
+			}
+			a.Update(float32(FixedTimeStep))
+		}
+		for _, b := range bots {
+			if b.holdsPlace() || b.Bot.target != p {
+				continue
+			}
+			spot := b.lineSpot(p, b.Bot.side, b.lineRank(p, b.Bot.side))
+			atSpot := abs(b.Pos.X-spot.X) <= botArrived
+			clear := !b.inSwingRange(p) && !p.inSwingRange(b)
+			looking := b.Orientation == facing(p.Pos.X-b.Pos.X)
+			if atSpot && clear && looking {
+				settled = true
+			}
 		}
 	}
-	if waiting == nil {
-		t.Fatal("no bot is waiting in line")
-	}
-	if waiting.inSwingRange(p) || p.inSwingRange(waiting) {
-		t.Error("the waiting bot is standing inside the fight")
-	}
-	if want := facing(p.Pos.X - waiting.Pos.X); waiting.Orientation != want {
-		t.Errorf("the waiting bot faces %d, want %d - toward the fight", waiting.Orientation, want)
+	if !settled {
+		t.Error("no bot ever stood at its spot in the line, clear of the fight and facing it")
 	}
 }
 
@@ -480,5 +497,87 @@ func TestAHolderAloneKeepsItsPlace(t *testing.T) {
 func TestPlacesAreNotReplicated(t *testing.T) {
 	if actorRecSize != 46 {
 		t.Errorf("the replicated actor record is %d bytes, want the 46 it was before the line", actorRecSize)
+	}
+}
+
+// Company slows the pressure down: a bot fighting alongside another leaves a
+// longer gap before it opens an attack than one fighting alone ever does.
+func TestABotAlongsideAnotherWaitsLonger(t *testing.T) {
+	floor()
+	w := NewWorld(true)
+	p := w.Spawn(rl.Vector2{}, true)
+	solo := w.Spawn(rl.Vector2{X: -40}, false)
+
+	// Alone: one place held, and nothing drawn may reach the crowded floor.
+	solo.claimPlace(p)
+	loneWorst := uint16(0)
+	for range 500 {
+		solo.Bot.swingWait = 0
+		if !solo.pressAttack(p) {
+			t.Fatal("a bot with a full pool refused to open an attack")
+		}
+		loneWorst = max(loneWorst, solo.Bot.swingWait)
+	}
+
+	// With company: the other place taken too.
+	mate := w.Spawn(rl.Vector2{X: 40}, false)
+	mate.claimPlace(p)
+	if p.engagedBy() != 2 {
+		t.Fatalf("%d bots hold a place at the player, want 2", p.engagedBy())
+	}
+	crowdedBest := uint16(1 << 15)
+	for range 500 {
+		solo.Bot.swingWait = 0
+		if !solo.pressAttack(p) {
+			t.Fatal("a bot with a full pool refused to open an attack")
+		}
+		crowdedBest = min(crowdedBest, solo.Bot.swingWait)
+	}
+	if crowdedBest <= loneWorst {
+		t.Errorf("the shortest wait with company is %d, the longest alone %d - they overlap",
+			crowdedBest, loneWorst)
+	}
+}
+
+// The same thing end to end: two bots on one player throw fewer swings each
+// than a bot fighting that player on its own.
+func TestTwoAttackersThrowLessEach(t *testing.T) {
+	swings := func(bots int) int {
+		floor()
+		w := NewWorld(true)
+		p := w.Spawn(rl.Vector2{}, true)
+		p.OnGround = true
+		side := []float32{-40, 40}
+		for i := range bots {
+			b := w.Spawn(rl.Vector2{X: side[i]}, false)
+			b.Orientation, b.OnGround = int8(facing(-side[i])), true
+		}
+		thrown := 0
+		for range 1800 {
+			w.Tick++
+			p.Structure, p.HitCount = MaxStructure, 0
+			p.Pos.X, p.Speed.X, p.ShoveLeft = 0, 0, 0
+			for _, a := range w.Actors {
+				if a.IsPlayer {
+					a.Update(float32(FixedTimeStep))
+					continue
+				}
+				a.Input = botInput(a)
+				if a.Input.Attack {
+					thrown++
+				}
+				a.Update(float32(FixedTimeStep))
+			}
+		}
+		return thrown
+	}
+	alone, pair := swings(1), swings(2)
+	// Per bot, with room for the draw: two together must not press anything
+	// like twice as hard as one does.
+	if pair >= 2*alone {
+		t.Errorf("two bots threw %d swings, one alone threw %d - the pair press no less each", pair, alone)
+	}
+	if pair == 0 || alone == 0 {
+		t.Fatalf("nothing was thrown at all: %d alone, %d as a pair", alone, pair)
 	}
 }
