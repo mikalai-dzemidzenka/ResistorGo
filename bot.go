@@ -293,6 +293,21 @@ const (
 	// the gap between two blows is long enough to step into.
 	BotCrowdedWaitTicks  = 30
 	BotCrowdedWaitSpread = 30
+	// The beat one attacker leaves behind it before the other may open: a
+	// third of a second, counted from the end of the attack and not its start.
+	//
+	// The crowd wait above spaces the pair out on average, and that is all it
+	// can do - each bot counts its own gap and neither consults the other, so
+	// nothing stops the two of them arriving in the same handful of ticks. A
+	// fighter with one guard has no answer to that: it reads a height, commits
+	// to it, and is hit by the other before the block has played. So the turn
+	// is held rather than spaced. While one bot is attacking the fighter is
+	// its alone, and stays its alone for this long after.
+	//
+	// Long enough to be a gap worth the name. Hit-stop alone is six ticks, and
+	// moving the guard costs another six, so anything much shorter than this
+	// hands the fighter a read it has no time to answer.
+	BotTurnBeatTicks = 20
 )
 
 // botMind is everything a bot carries from one tick to the next: where it last
@@ -307,6 +322,7 @@ type botMind struct {
 	patience  uint16 // ticks left to reach the spot, then to stand and look
 	swingWait uint16 // ticks left before it opens another attack
 	chainLeft uint8  // blows still to press in the attack under way
+	turnLeft  uint16 // ticks the fighter is still this bot's alone to swing at
 	// The fight this bot is in: the fighter it is fighting, and which side of
 	// that fighter it is on. It is in the fight whether or not it has a place
 	// at it - a bot with none is waiting in the line on that side.
@@ -1030,6 +1046,16 @@ func (a *Actor) waitInLine(in Input, t *Actor) Input {
 // fighter's command and face refuses a dead turn, so this is not what keeps the
 // body still - it is that a corpse has no business seeing.
 func botInput(a *Actor) Input {
+	// The turn runs whatever else is happening, which is why it is here and
+	// not below with the rest of the thinking. It is held up for as long as
+	// the bot is swinging and runs down once it stops, so a bot killed or
+	// stunned in the middle of an attack lets the fighter go a beat later
+	// rather than holding it for the rest of the match.
+	if a.State == StateAttack {
+		a.Bot.turnLeft = BotTurnBeatTicks
+	} else if a.Bot.turnLeft > 0 {
+		a.Bot.turnLeft--
+	}
 	if a.State == StateDeath {
 		return Input{}
 	}
@@ -1209,9 +1235,11 @@ func (a *Actor) tooClose(t *Actor) bool {
 // runs only while there is still something to spend, because swinging stops the
 // refill outright and a bot that never let go would spend the match empty.
 //
-// The other thing that holds it back is company. A bot with somebody fighting
-// alongside it leaves a longer gap before opening, so that two attackers are
-// two directions the pressure comes from rather than twice as much of it.
+// The other thing that holds it back is company, in two ways. A bot with
+// somebody fighting alongside it leaves a longer gap before opening, so that
+// two attackers are two directions the pressure comes from rather than twice
+// as much of it; and it waits for its turn, so that whatever the gaps work out
+// to, the two of them never arrive together.
 func (a *Actor) pressAttack(t *Actor) bool {
 	if a.State == StateAttack {
 		// One press per blow: while one is queued the answer for this blow is
@@ -1223,7 +1251,7 @@ func (a *Actor) pressAttack(t *Actor) bool {
 		a.Bot.chainLeft--
 		return true
 	}
-	if a.Bot.swingWait > 0 || a.Energy < BotOpenSwings*EnergySwing {
+	if a.Bot.swingWait > 0 || a.Energy < BotOpenSwings*EnergySwing || !a.turnToSwing(t) {
 		return false
 	}
 	a.Bot.swingWait = BotSwingWaitTicks + uint16(rand.Int()%BotSwingWaitSpread)
@@ -1231,6 +1259,36 @@ func (a *Actor) pressAttack(t *Actor) bool {
 		a.Bot.swingWait += BotCrowdedWaitTicks + uint16(rand.Int()%BotCrowdedWaitSpread)
 	}
 	a.Bot.chainLeft = uint8(rand.Int() % BotChainBlows) // the blows after this one
+	// Refused a turn costs nothing and arms nothing: a bot whose turn is not
+	// up leaves early, above, with its wait untouched, so it opens the moment
+	// the fighter comes free rather than starting its gap over.
+	a.Bot.turnLeft = BotTurnBeatTicks
+	return true
+}
+
+// turnToSwing reports whether the fighter is this bot's to open an attack on:
+// whether every other bot in the fight has let go of it.
+//
+// The turn is taken at the press and not at the state change. A bot that
+// watched for StateAttack on the others would read it a tick late - a press
+// this tick is what puts a bot there on the next - and two bots pressing on
+// the same tick is the one overlap this is here to stop.
+//
+// It asks the fight and not the two places, because the two can differ for a
+// moment: a bot that yields its place mid-swing is still swinging, and the bot
+// that steps into that place must wait for the blow all the same.
+//
+// A bot with the fighter to itself is never refused - nobody else is in the
+// fight to hold a turn - so this costs a lone attacker nothing.
+func (a *Actor) turnToSwing(t *Actor) bool {
+	if t == nil || a.W == nil {
+		return true
+	}
+	for _, b := range a.W.Actors {
+		if b != a && b.Bot.target == t && b.Bot.turnLeft > 0 {
+			return false
+		}
+	}
 	return true
 }
 

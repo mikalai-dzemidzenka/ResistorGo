@@ -599,15 +599,22 @@ func TestABotAlongsideAnotherWaitsLonger(t *testing.T) {
 // The same thing end to end: each of two bots fighting one player opens fewer
 // attacks than a bot with that player to itself.
 //
-// Averaged over several fights, because one fight says very little. A fight is
-// chaotic - shoves, crossings, a bot walking back into range - and the count
+// Averaged over a good many fights, because one fight says very little. A fight
+// is chaotic - shoves, crossings, a bot walking back into range - and the count
 // from a single run of this swings by half either way whatever the wait is set
 // to. What is exact is the wait itself, which TestABotAlongsideAnotherWaitsLonger
 // pins down; this is here to show it survives contact.
+//
+// Twenty-four of them, where six used to do. Taking turns tidied the crowd up:
+// two bots that no longer swing into one another are shoved, stunned and
+// knocked out of position far less, so each of a pair now gets more openings in
+// than it did - around seven in ten of what one alone manages, where it was
+// nearer five. The gap is still there and still the wait's doing, but it is no
+// longer wide enough to read off six fights.
 func TestTwoAttackersOpenLessEach(t *testing.T) {
 	opensPerBot := func(bots int) float64 {
 		total := 0
-		const fights = 6
+		const fights = 24
 		for range fights {
 			floor()
 			w := NewWorld(true)
@@ -652,4 +659,113 @@ func TestTwoAttackersOpenLessEach(t *testing.T) {
 			paired, alone)
 	}
 	t.Logf("openings a fight per bot: %.1f alone, %.1f paired", alone, paired)
+}
+
+// One attacker at a time. Opening an attack takes the fighter for the length of
+// the swing and a beat after it, and the bot at the other place is refused for
+// as long as that turn runs.
+func TestOpeningAnAttackTakesTheTurn(t *testing.T) {
+	floor()
+	w := NewWorld(true)
+	p := w.Spawn(rl.Vector2{}, true)
+	left := w.Spawn(rl.Vector2{X: -40}, false)
+	right := w.Spawn(rl.Vector2{X: 40}, false)
+	left.claimPlace(p)
+	right.claimPlace(p)
+	if p.engagedBy() != 2 {
+		t.Fatalf("%d bots hold a place at the player, want 2", p.engagedBy())
+	}
+
+	// Nothing is held against the first to press: a free turn and a full pool.
+	if !left.pressAttack(p) {
+		t.Fatal("a bot with a free turn and a full pool refused to open an attack")
+	}
+	if left.Bot.turnLeft == 0 {
+		t.Fatal("opening an attack took no turn")
+	}
+
+	// The other place is refused for every tick of it. The wait is cleared each
+	// time round, so the turn is the only thing that can be doing the refusing.
+	for left.Bot.turnLeft > 0 {
+		right.Bot.swingWait = 0
+		if right.pressAttack(p) {
+			t.Fatalf("the other attacker opened with %d ticks of the turn left", left.Bot.turnLeft)
+		}
+		if right.Bot.swingWait != 0 {
+			t.Fatal("a refused turn armed the wait: the bot would start its gap over")
+		}
+		left.Bot.turnLeft--
+	}
+	right.Bot.swingWait = 0
+	if !right.pressAttack(p) {
+		t.Error("the other attacker did not open once the turn had run out")
+	}
+}
+
+// The turn is held up while the swing plays and runs down once it stops, so a
+// bot that is killed or stunned mid-attack lets the fighter go a beat later
+// rather than keeping it for the rest of the match.
+func TestTheTurnOutlastsTheSwingAndNoMore(t *testing.T) {
+	floor()
+	w := NewWorld(true)
+	b := w.Spawn(rl.Vector2{X: -40}, false)
+
+	b.State = StateAttack
+	b.Bot.turnLeft = 1
+	botInput(b)
+	if b.Bot.turnLeft != BotTurnBeatTicks {
+		t.Errorf("a swinging bot's turn is %d ticks, want it held at %d", b.Bot.turnLeft, BotTurnBeatTicks)
+	}
+
+	b.State = StateAttacked // cut down mid-swing
+	for range BotTurnBeatTicks {
+		botInput(b)
+	}
+	if b.Bot.turnLeft != 0 {
+		t.Errorf("%d ticks of turn left a beat after the swing stopped, want none", b.Bot.turnLeft)
+	}
+}
+
+// The same thing end to end: over a long fight two bots never have attacks in
+// the air at the same time.
+//
+// Counted over every bot rather than over the two places, because the two can
+// differ for a moment - a bot that yields its place mid-swing is still swinging
+// - and the whole point is that no two blows overlap, whoever is holding what.
+func TestTwoAttackersNeverSwingTogether(t *testing.T) {
+	floor()
+	w := NewWorld(true)
+	p := w.Spawn(rl.Vector2{}, true)
+	p.OnGround = true
+	for _, x := range []float32{-40, 40} {
+		b := w.Spawn(rl.Vector2{X: x}, false)
+		b.Orientation, b.OnGround = facing(-x), true
+	}
+
+	swings := 0
+	for tick := range 3000 {
+		w.Tick++
+		p.Structure, p.HitCount = MaxStructure, 0
+		p.Pos.X, p.Speed.X, p.ShoveLeft = 0, 0, 0
+		for _, a := range w.Actors {
+			if !a.IsPlayer {
+				a.Input = botInput(a)
+			}
+			a.Update(float32(FixedTimeStep))
+		}
+		inTheAir := 0
+		for _, a := range w.Actors {
+			if !a.IsPlayer && a.State == StateAttack {
+				inTheAir++
+			}
+		}
+		if inTheAir > 1 {
+			t.Fatalf("tick %d: %d attacks in the air at once", tick, inTheAir)
+		}
+		swings += inTheAir
+	}
+	if swings == 0 {
+		t.Fatal("nothing was swung at all over the whole fight")
+	}
+	t.Logf("%d ticks of swing over 3000", swings)
 }

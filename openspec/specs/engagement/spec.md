@@ -62,6 +62,44 @@ own accord.
 - **WHEN** a waiting bot takes a place that has been given up
 - **THEN** it SHALL close on the target and fight it as the previous holder did
 
+### Requirement: The crowd swings in turn
+
+At most one attack SHALL be in the air at any one fighter at a time. A bot
+SHALL NOT open an attack on a fighter while another bot in that fight is
+attacking it, and SHALL NOT open one for a bounded beat after that attack ends.
+A bot fighting a fighter alone SHALL be held back by none of this.
+
+A fighter guards at one height, and two blows arriving together can be answered
+only by guarding everything, which is not a fight. Spacing the two attackers
+apart makes that rare; taking turns makes it impossible.
+
+#### Scenario: One attack in the air
+
+- **WHEN** two bots are engaged with one fighter and one of them is attacking it
+- **THEN** the other SHALL NOT open an attack on it
+
+#### Scenario: The beat after the blow
+
+- **WHEN** a bot's attack on a fighter ends
+- **THEN** no other bot in that fight SHALL open an attack on that fighter until
+  the beat has run out
+
+#### Scenario: A chain is one turn
+
+- **WHEN** a bot carries its attack on into a further blow
+- **THEN** that blow SHALL NOT wait for a turn of its own
+
+#### Scenario: A lone attacker waits for nobody
+
+- **WHEN** a bot is the only one fighting a fighter
+- **THEN** it SHALL open attacks as it would with no crowd at all
+
+#### Scenario: Waiting for a turn costs no more than the turn
+
+- **WHEN** a bot is refused a turn
+- **THEN** it SHALL open its attack as soon as the fighter comes free, rather
+  than beginning its own gap between attacks over again
+
 ### Requirement: A bot crosses to the free side
 
 A bot that wants a place SHALL take the one on the side of the target it is
