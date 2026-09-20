@@ -314,6 +314,8 @@ type botMind struct {
 	side      int8
 	holdTicks uint16 // ticks it has held its place at the front
 	yieldWait uint16 // ticks it stands off after giving that place up
+	sway      int8   // pixels off its spot in the line it is standing just now
+	swayWait  uint16 // ticks before it shifts to another
 }
 
 // forget puts the bot back to having nothing in mind. Actor.forget is what the
@@ -774,6 +776,17 @@ const (
 	// straight back - it is usually the nearest one to the target, which is
 	// exactly what makes it the first to claim.
 	EngageYieldTicks = 30
+	// How far either side of its spot a waiting bot drifts, and how long it
+	// settles on one drift before shifting to another: three quarters of a
+	// second, plus up to a second and a half more.
+	//
+	// It has to be more than botArrived or it would never be walked at all -
+	// a goal inside the dead zone is a goal the bot is already standing on -
+	// so the shortest shift this can ask for is still a couple of steps. The
+	// line makes room for it at both ends: see lineFront and lineSpacing.
+	LineSway       = 10
+	LineSwayTicks  = 45
+	LineSwaySpread = 90
 )
 
 // lineFront is how far from the fighter being fought the front of the line
@@ -783,17 +796,21 @@ const (
 // Derived from the same boxes the hit test uses - the arm, the lunge every
 // swing takes with it, and the body that arm has to reach - plus the dead zone
 // a bot comes to rest inside, so retuning any of them carries the line along.
+//
+// The drift is added on top, so that a bot swaying its whole allowance toward
+// the fight is still no nearer than the reach those boxes work out.
 func (a *Actor) lineFront() float32 {
-	return a.AttackBoxMid.Width + AttackDash + a.CollisionBox.Width + botArrived
+	return a.AttackBoxMid.Width + AttackDash + a.CollisionBox.Width + botArrived + LineSway
 }
 
-// lineSpacing is the gap between one waiting bot and the next: a body, and the
-// slack at both ends of the dead zones the two of them come to rest in, so that
-// two bots stopping as far from their spots as botArrived allows still do not
-// stand in one another. Teammates no longer shove each other apart, so this is
-// the only thing keeping a line from collapsing into a pile.
+// lineSpacing is the gap between one waiting bot and the next: a body, the
+// slack at both ends of the dead zones the two of them come to rest in, and
+// the drift both of them are shifting about within, so that two bots leaning
+// as far toward one another as all three allow still do not stand in one
+// another. Teammates no longer shove each other apart, so this is the only
+// thing keeping a line from collapsing into a pile.
 func (a *Actor) lineSpacing() float32 {
-	return a.CollisionBox.Width + 2*botArrived + 2
+	return a.CollisionBox.Width + 2*botArrived + 2*LineSway + 2
 }
 
 // lineRank is where in the line this bot stands: how many bots waiting on the
@@ -978,7 +995,19 @@ func (a *Actor) stillInTheFight() bool {
 // way, and it is hit, shoved and killed as any fighter is.
 func (a *Actor) waitInLine(in Input, t *Actor) Input {
 	side := a.Bot.side
-	s := botStep(a, a.lineSpot(t, side, a.lineRank(t, side)))
+	// Nobody waits for a fight standing perfectly still. The spot is where it
+	// belongs in the line; the drift is where it is standing about within it,
+	// shifted every second or so, and drawn per bot so a line of them does not
+	// sway as one body.
+	if a.Bot.swayWait > 0 {
+		a.Bot.swayWait--
+	} else {
+		a.Bot.sway = int8(rand.Int()%(2*LineSway+1) - LineSway)
+		a.Bot.swayWait = LineSwayTicks + uint16(rand.Int()%LineSwaySpread)
+	}
+	spot := a.lineSpot(t, side, a.lineRank(t, side))
+	spot.X += float32(a.Bot.sway)
+	s := botStep(a, spot)
 	if s.stop {
 		if dx := t.Pos.X - a.Pos.X; abs(dx) > 1 {
 			a.face(facing(dx))

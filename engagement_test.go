@@ -204,8 +204,11 @@ func TestLineGeometryClearsTheFight(t *testing.T) {
 	p := w.Spawn(rl.Vector2{}, true)
 	bot := w.Spawn(rl.Vector2{}, false)
 
+	// Measured at the worst the drift allows: a bot swaying its whole
+	// allowance toward the fight, and stopped at the near edge of its dead
+	// zone on top of that.
 	for _, side := range []int8{-1, 1} {
-		bot.Pos.X = p.Pos.X + float32(side)*bot.lineFront()
+		bot.Pos.X = p.Pos.X + float32(side)*(bot.lineFront()-LineSway-botArrived)
 		bot.Orientation = -side
 		bot.checkCollision()
 		p.Orientation = side
@@ -218,12 +221,53 @@ func TestLineGeometryClearsTheFight(t *testing.T) {
 		}
 	}
 
-	// Two bots at their spots, each as far off as the dead zone allows and
-	// leaning toward one another, still do not overlap.
-	gap := bot.lineSpacing() - 2*botArrived
+	// Two bots at their spots, each drifted its whole allowance and stopped as
+	// far off as the dead zone allows, both leaning toward one another, still
+	// do not overlap.
+	gap := bot.lineSpacing() - 2*botArrived - 2*LineSway
 	if gap <= bot.CollisionBox.Width {
 		t.Errorf("the worst-case gap in the line is %v, want more than a body (%v)",
 			gap, bot.CollisionBox.Width)
+	}
+}
+
+// A bot waiting its turn shifts about rather than standing to attention, and
+// stays clear of the fight while it does.
+func TestAWaitingBotDoesNotStandStill(t *testing.T) {
+	w := NewWorld(true)
+	p, bots := lineUp(w, 3)
+	runFight(w, 400, p) // let the line form
+
+	seen := map[float32]bool{}
+	for range 900 {
+		w.Tick++
+		p.Structure, p.HitCount = MaxStructure, 0
+		p.Pos.X, p.Speed.X, p.ShoveLeft = 0, 0, 0
+		for _, a := range w.Actors {
+			if !a.IsPlayer {
+				a.Input = botInput(a)
+			}
+			a.Update(float32(FixedTimeStep))
+		}
+		for _, b := range bots {
+			if b.holdsPlace() || b.Bot.target != p {
+				continue
+			}
+			seen[b.Pos.X] = true
+			// Only once it has got where it is drifting to. A bot that has
+			// just given its place up starts from inside the fight and walks
+			// out of it, which is the changeover, not the drift.
+			spot := b.lineSpot(p, b.Bot.side, b.lineRank(p, b.Bot.side))
+			if abs(b.Pos.X-(spot.X+float32(b.Bot.sway))) > botArrived {
+				continue
+			}
+			if b.inSwingRange(p) || p.inSwingRange(b) {
+				t.Fatalf("a waiting bot drifted into the fight, at %v", b.Pos.X)
+			}
+		}
+	}
+	if len(seen) < 3 {
+		t.Errorf("the waiting bots stood on %d different spots over 15 seconds, want several", len(seen))
 	}
 }
 
@@ -278,12 +322,16 @@ func TestThreeBotsLeaveTwoFighting(t *testing.T) {
 	if p.Engaged[0] == nil || p.Engaged[1] == nil {
 		t.Error("the two engaged bots are not one a side")
 	}
+	// Only of a bot that has got to its place. One still crossing is on the
+	// wrong side by definition - walking through the player is how it gets to
+	// the other side of it - and atPlace is the question the bot itself asks
+	// before it will stop and swing.
 	if left, right := p.Engaged[0], p.Engaged[1]; left != nil && right != nil {
-		if left.Pos.X > p.Pos.X {
-			t.Errorf("the bot in the left place stands at %v, right of the player at %v", left.Pos.X, p.Pos.X)
+		if left.atPlace(p) && left.Pos.X > p.Pos.X {
+			t.Errorf("the bot at the left place stands at %v, right of the player at %v", left.Pos.X, p.Pos.X)
 		}
-		if right.Pos.X < p.Pos.X {
-			t.Errorf("the bot in the right place stands at %v, left of the player at %v", right.Pos.X, p.Pos.X)
+		if right.atPlace(p) && right.Pos.X < p.Pos.X {
+			t.Errorf("the bot at the right place stands at %v, left of the player at %v", right.Pos.X, p.Pos.X)
 		}
 	}
 	if near := inReach(w, p); len(near) > 2 {
@@ -311,7 +359,7 @@ func TestThreeBotsLeaveTwoFighting(t *testing.T) {
 				continue
 			}
 			spot := b.lineSpot(p, b.Bot.side, b.lineRank(p, b.Bot.side))
-			atSpot := abs(b.Pos.X-spot.X) <= botArrived
+			atSpot := abs(b.Pos.X-spot.X) <= botArrived+LineSway
 			clear := !b.inSwingRange(p) && !p.inSwingRange(b)
 			looking := b.Orientation == facing(p.Pos.X-b.Pos.X)
 			if atSpot && clear && looking {
@@ -333,11 +381,20 @@ func TestTheLineIsNotAPile(t *testing.T) {
 	// One line at a time. A bot on its way round to the far side walks the
 	// length of the other side to get there, and passing through the line it
 	// is leaving is not the pile this is about.
+	// Bots that have arrived at the spot they are drifting to. One still
+	// walking is in transit - crossing the line it is leaving, or stepping
+	// back after giving its place up - and two bodies passing one another is
+	// not the pile this is about.
 	lines := map[int8][]*Actor{}
 	for _, b := range bots {
-		if !b.holdsPlace() && b.Bot.target == p {
-			lines[b.Bot.side] = append(lines[b.Bot.side], b)
+		if b.holdsPlace() || b.Bot.target != p {
+			continue
 		}
+		spot := b.lineSpot(p, b.Bot.side, b.lineRank(p, b.Bot.side))
+		if abs(b.Pos.X-(spot.X+float32(b.Bot.sway))) > botArrived {
+			continue
+		}
+		lines[b.Bot.side] = append(lines[b.Bot.side], b)
 	}
 	if len(lines[-1])+len(lines[1]) < 2 {
 		t.Fatalf("%d bots are waiting in line, want at least 2", len(lines[-1])+len(lines[1]))
@@ -539,45 +596,60 @@ func TestABotAlongsideAnotherWaitsLonger(t *testing.T) {
 	}
 }
 
-// The same thing end to end: two bots on one player throw fewer swings each
-// than a bot fighting that player on its own.
-func TestTwoAttackersThrowLessEach(t *testing.T) {
-	swings := func(bots int) int {
-		floor()
-		w := NewWorld(true)
-		p := w.Spawn(rl.Vector2{}, true)
-		p.OnGround = true
-		side := []float32{-40, 40}
-		for i := range bots {
-			b := w.Spawn(rl.Vector2{X: side[i]}, false)
-			b.Orientation, b.OnGround = int8(facing(-side[i])), true
-		}
-		thrown := 0
-		for range 1800 {
-			w.Tick++
-			p.Structure, p.HitCount = MaxStructure, 0
-			p.Pos.X, p.Speed.X, p.ShoveLeft = 0, 0, 0
-			for _, a := range w.Actors {
-				if a.IsPlayer {
+// The same thing end to end: each of two bots fighting one player opens fewer
+// attacks than a bot with that player to itself.
+//
+// Averaged over several fights, because one fight says very little. A fight is
+// chaotic - shoves, crossings, a bot walking back into range - and the count
+// from a single run of this swings by half either way whatever the wait is set
+// to. What is exact is the wait itself, which TestABotAlongsideAnotherWaitsLonger
+// pins down; this is here to show it survives contact.
+func TestTwoAttackersOpenLessEach(t *testing.T) {
+	opensPerBot := func(bots int) float64 {
+		total := 0
+		const fights = 6
+		for range fights {
+			floor()
+			w := NewWorld(true)
+			p := w.Spawn(rl.Vector2{}, true)
+			p.OnGround = true
+			side := []float32{-40, 40}
+			for i := range bots {
+				b := w.Spawn(rl.Vector2{X: side[i]}, false)
+				b.Orientation, b.OnGround = int8(facing(-side[i])), true
+			}
+			for range 1800 {
+				w.Tick++
+				p.Structure, p.HitCount = MaxStructure, 0
+				p.Pos.X, p.Speed.X, p.ShoveLeft = 0, 0, 0
+				for _, a := range w.Actors {
+					if a.IsPlayer {
+						a.Update(float32(FixedTimeStep))
+						continue
+					}
+					// Openings only. A chain blow is queued mid-swing and the
+					// crowd wait has no say in it.
+					wasSwinging := a.State == StateAttack
+					a.Input = botInput(a)
+					if a.Input.Attack && !wasSwinging {
+						total++
+					}
 					a.Update(float32(FixedTimeStep))
-					continue
 				}
-				a.Input = botInput(a)
-				if a.Input.Attack {
-					thrown++
-				}
-				a.Update(float32(FixedTimeStep))
 			}
 		}
-		return thrown
+		return float64(total) / float64(fights*bots)
 	}
-	alone, pair := swings(1), swings(2)
-	// Per bot, with room for the draw: two together must not press anything
-	// like twice as hard as one does.
-	if pair >= 2*alone {
-		t.Errorf("two bots threw %d swings, one alone threw %d - the pair press no less each", pair, alone)
+	alone, paired := opensPerBot(1), opensPerBot(2)
+	if alone == 0 || paired == 0 {
+		t.Fatalf("nothing was opened at all: %v alone, %v paired", alone, paired)
 	}
-	if pair == 0 || alone == 0 {
-		t.Fatalf("nothing was thrown at all: %d alone, %d as a pair", alone, pair)
+	// A wait of 40-83 ticks against 10-23 should cut the rate hard, but travel
+	// and recovery are in the cycle too and the wait runs down during them, so
+	// the margin asked for here is well short of what the constants alone say.
+	if paired >= 0.85*alone {
+		t.Errorf("each of a pair opened %.1f attacks a fight, one alone %.1f - the pair press no less each",
+			paired, alone)
 	}
+	t.Logf("openings a fight per bot: %.1f alone, %.1f paired", alone, paired)
 }
