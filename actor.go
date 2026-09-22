@@ -15,7 +15,14 @@ const (
 	MaxSpeed        = 320
 	PunchSpeed      = 50
 	AttackDash      = 4
-	StepHeight      = 4 // a rise no taller than this is walked onto; anything taller is a wall
+	// AttackMoveSpeed is how fast a fighter can move while it swings, either
+	// way, without turning: about 6 px over a low swing, enough to take or give
+	// up the edge of a reach and not enough to walk out of a fight.
+	AttackMoveSpeed = 20
+	// WalkStopSpeed is where a fighter walking on its own with no key held
+	// stops, rather than sliding on down through the slowest speeds.
+	WalkStopSpeed = 60
+	StepHeight    = 4 // a rise no taller than this is walked onto; anything taller is a wall
 	// The run-jump leaves the ground on the third frame of its animation: the
 	// frame the fighter pushes off on. The two before it are the anticipation,
 	// drawn rather than spent in a state of its own.
@@ -91,8 +98,11 @@ const (
 	// along.
 	EnergyRunJump = MaxEnergy / 3
 
-	StunEveryHits   = 3
-	StunKnockback   = 150
+	StunEveryHits = 3
+	// StunKnockback throws a stunned fighter about 20 px. It was 150 while
+	// position was cut to whole pixels, which lost part of every tick of the
+	// throw; with the fraction kept, 150 throws 33 px.
+	StunKnockback   = 107
 	FlinchHoldTicks = 12
 
 	// A shove is what a standing fighter does about another on its back: the
@@ -508,7 +518,7 @@ func (a *Actor) Update(dt float32) {
 			a.enterAttackState()
 		}
 	case StateAttack:
-		a.Speed.X = clamp(a.Speed.X, -AttackDash, AttackDash)
+		a.Speed.X = clamp(a.Speed.X, -AttackMoveSpeed, AttackMoveSpeed)
 		a.updateAttack()
 	case StatePush:
 		a.updatePush()
@@ -576,9 +586,12 @@ func (a *Actor) Update(dt float32) {
 		}
 	}
 
+	// X keeps its fraction from tick to tick, so any speed moves the fighter;
+	// it is rounded to a whole pixel only where it is drawn. Cutting it to a
+	// whole pixel here stopped everything under 60 px/s, and cutting toward
+	// zero made a walk faster one way than the other.
 	fromX := a.Pos.X
 	a.Pos.X += a.Speed.X * dt
-	a.Pos.X = float32(int(a.Pos.X))
 	a.blockSides(fromX)
 	if a.ShoveLeft > 0 {
 		a.glide()
@@ -834,7 +847,10 @@ func (a *Actor) DrawAnim() {
 func (a *Actor) updateHorSpeed(dt float32) {
 	var movePressed bool
 	prevOrientation := a.Orientation
-	canMove := a.State != StateAttack && a.State != StateBlock && a.State != StateAttacked && a.State != StatePush && a.State != StateClash && a.Updown != 3
+	canMove := a.State != StateBlock && a.State != StateAttacked && a.State != StatePush && a.State != StateClash && a.Updown != 3
+	// a swinging fighter moves, slowly (the attack case caps it), but keeps
+	// facing the way it swings
+	turn := a.State != StateAttack
 	if a.Input.Right && !(a.State == StateTurnover && prevOrientation == 1) && canMove {
 		movePressed = true
 		if abs(a.Speed.X) < 0.001 {
@@ -842,7 +858,9 @@ func (a *Actor) updateHorSpeed(dt float32) {
 		} else {
 			a.Speed.X -= a.Acc * dt
 		}
-		a.face(-1)
+		if turn {
+			a.face(-1)
+		}
 	}
 	if a.Input.Left && !(a.State == StateTurnover && prevOrientation == -1) && canMove {
 		movePressed = true
@@ -851,7 +869,9 @@ func (a *Actor) updateHorSpeed(dt float32) {
 		} else {
 			a.Speed.X += a.Acc * dt
 		}
-		a.face(1)
+		if turn {
+			a.face(1)
+		}
 	}
 	if a.State == StateIdle || a.State == StateAttack && a.AnimCurrentFrame == 0 {
 		if a.IsPlayer {
@@ -869,6 +889,13 @@ func (a *Actor) updateHorSpeed(dt float32) {
 
 	if !movePressed {
 		a.Speed.X = moveTo0(a.Speed.X, a.Friction*dt) // friction
+		// a walk let go of stops at the pace the old whole-pixel floor stopped
+		// it at; a speed something else gave the fighter - a flinch, a shove -
+		// runs out under friction instead
+		own := (a.State == StateIdle || a.State == StateRun) && a.FlinchTicks == 0 && a.ShoveLeft == 0
+		if own && abs(a.Speed.X) < WalkStopSpeed {
+			a.Speed.X = 0
+		}
 	}
 	a.Speed.X = clamp(a.Speed.X, -MaxSpeed, MaxSpeed)
 }

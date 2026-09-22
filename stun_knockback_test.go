@@ -32,10 +32,10 @@ func travel(a *Actor, n int) float32 {
 // the StateAttacked arm meant it never moved at all.
 //
 // The distance is absolute rather than measured against a flinch. A flinch
-// travels 0 px today - PunchSpeed is 50, which is 0.833 px per tick, under the
-// whole-pixel truncation Update does every tick - so "further than a flinch"
-// would pass on a one-pixel throw. That is its own bug and its own change; this
-// test must not be able to pass because of it.
+// once travelled 0 px - PunchSpeed is 50, which is under a pixel a tick, and
+// position used to be cut to whole pixels every tick - so "further than a
+// flinch" would have passed on a one-pixel throw. This test must not be able
+// to pass because of a broken flinch.
 func TestStunCarriesTheFighterARealDistance(t *testing.T) {
 	w, att := knocked(t, 1)
 	stunned := w.Spawn(rl.Vector2{X: 200}, false)
@@ -81,10 +81,10 @@ func TestStunThrowFollowsTheAttackersFacing(t *testing.T) {
 	}
 }
 
-// The other half: AttackDash is the lunge cap of the fighter doing the swinging,
-// and that one stays. This is what says the right of the two identical lines
-// was removed.
-func TestAttackerIsStillCappedToTheDash(t *testing.T) {
+// The other half: the fighter doing the swinging stays capped, now at the slow
+// pace it may move while swinging. This is what says the right of the two
+// identical lines was removed.
+func TestAttackerIsStillCappedWhileSwinging(t *testing.T) {
 	floor()
 	w := NewWorld(true)
 	a := w.Spawn(rl.Vector2{}, false) // alone: nothing for the swing to hit
@@ -98,7 +98,7 @@ func TestAttackerIsStillCappedToTheDash(t *testing.T) {
 	if a.State != StateAttack {
 		t.Fatalf("the fighter left StateAttack: %d", a.State)
 	}
-	if abs(a.Speed.X) > AttackDash {
-		t.Errorf("an attacking fighter's speed is %v, want it held to the dash cap %v", a.Speed.X, float32(AttackDash))
+	if abs(a.Speed.X) > AttackMoveSpeed {
+		t.Errorf("an attacking fighter's speed is %v, want it held to the swing's cap %v", a.Speed.X, float32(AttackMoveSpeed))
 	}
 }
