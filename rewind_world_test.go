@@ -308,3 +308,46 @@ func TestTheLineAtAFightIsAsItWas(t *testing.T) {
 		}
 	}
 }
+
+// A long match can be rewound a minute and no further: the oldest frame held
+// is the one RewindFrames steps back, and seeking past it stops there.
+func TestTheRecordingHoldsAMinute(t *testing.T) {
+	rewindMatch(t)
+	ticks(RewindFrames + 500)
+	newest := CL.Tick
+	rewindCursor = rewindHead
+	rewindSeek(-10 * RewindFrames)
+	restoreFrame(CL)
+	if want := newest - (RewindFrames - 1); CL.Tick != want {
+		t.Errorf("rewound as far as it goes to tick %d, want %d: a minute of steps back from %d", CL.Tick, want, newest)
+	}
+	if held := rewindHead - rewindOldest() + 1; held != RewindFrames {
+		t.Errorf("%d frames held, want %d", held, RewindFrames)
+	}
+}
+
+// Once the minute has filled, the recording stops growing: a slot's storage
+// is reused from one lap to the next.
+func TestTheRecordingStopsGrowing(t *testing.T) {
+	pl := rewindMatch(t)
+	pl.Team = BotTeam // nobody fights, so nobody dies and the world stays four
+	for range 3 {
+		CL.Spawn(CL.spawnPos(), false)
+	}
+	held := func() (n int) {
+		for i := range rewindFrames {
+			f := &rewindFrames[i]
+			n += cap(f.actors) + cap(f.dying) + cap(f.pending)
+		}
+		return n
+	}
+	ticks(RewindFrames)
+	after1 := held()
+	if after1 < 4*RewindFrames {
+		t.Fatalf("after a lap the recording holds room for %d fighters, want at least 4 a frame", after1)
+	}
+	ticks(2 * RewindFrames)
+	if after3 := held(); after3 != after1 {
+		t.Errorf("the recording holds room for %d fighters after three laps, %d after one", after3, after1)
+	}
+}

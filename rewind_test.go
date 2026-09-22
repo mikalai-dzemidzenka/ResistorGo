@@ -175,41 +175,175 @@ func TestScrubDirection(t *testing.T) {
 	}
 }
 
-// scrubbed runs one second of mouse movement as n rendered frames and reports
-// how far the playhead travelled.
-func scrubbed(t *testing.T, frames int, dx float32) int {
+// drag enters the mode on a full recording, with the playhead at the live edge
+// or, from the start, at the oldest frame, and moves the mouse by dx every
+// rendered frame for the given seconds at fps. It reports how many frames the
+// playhead covered.
+func drag(t *testing.T, fromOldest bool, seconds float64, fps int, dx float32) int {
 	t.Helper()
 	ResetTime()
 	recordFrames(RewindFrames)
 	UpdateTime(true, 0, 0) // enter the mode
+	if fromOldest {
+		rewindCursor = rewindOldest()
+	}
 	from := rewindCursor
-	dt := float32(1.0) / float32(frames)
-	for i := 0; i < frames; i++ {
+	dt := float32(1) / float32(fps)
+	for range int(seconds * float64(fps)) {
 		UpdateTime(false, dx, dt)
 	}
 	return rewindCursor - from
 }
 
-// The scrub rate is fixed: it does not depend on the frame rate, and it is the
-// same in both directions.
-func TestScrubRateIsFixed(t *testing.T) {
-	slow, fast := scrubbed(t, 60, -8), scrubbed(t, 150, -8)
-	if slow != fast {
-		t.Errorf("one second of rewinding covered %d frames at 60 fps and %d at 150 fps", -slow, -fast)
+// covered is what the ramp should cover over n fixed steps from rest.
+func covered(n int) (f int) {
+	for held := range n {
+		f += scrubRate(held)
 	}
-	if want := -60 * ScrubFrames; slow != want {
-		t.Errorf("one second of rewinding covered %d frames, want %d", slow, want)
+	return f
+}
+
+// The rate starts at ScrubFrames, rises in whole frames and never falls, and
+// holds at ScrubFramesMax from the end of the ramp on.
+func TestScrubRate(t *testing.T) {
+	if got := scrubRate(0); got != ScrubFrames {
+		t.Errorf("rate from rest is %d, want %d", got, ScrubFrames)
 	}
-	if forward := scrubbed(t, 60, 8); forward != 0 {
-		t.Errorf("scrubbing forward from the live edge moved %d frames, want none", forward)
+	for _, held := range []int{ScrubRampSteps, ScrubRampSteps + 1, 10 * ScrubRampSteps} {
+		if got := scrubRate(held); got != ScrubFramesMax {
+			t.Errorf("rate after %d steps is %d, want %d", held, got, ScrubFramesMax)
+		}
+	}
+	for held := 1; held <= ScrubRampSteps; held++ {
+		if scrubRate(held) < scrubRate(held-1) {
+			t.Fatalf("the rate fell from %d to %d at step %d", scrubRate(held-1), scrubRate(held), held)
+		}
 	}
 }
 
-// A sweep and a drag of the same duration cover the same ground.
+// Neither the frame rate nor the direction changes how far a drag goes.
+func TestScrubIsTheSameAtAnyFrameRateAndEitherWay(t *testing.T) {
+	slow, fast := drag(t, false, 3, 60, -8), drag(t, false, 3, 150, -8)
+	if slow != fast {
+		t.Errorf("three seconds of rewinding covered %d frames at 60 fps and %d at 150 fps", -slow, -fast)
+	}
+	if want := -covered(3 * 60); slow != want {
+		t.Errorf("three seconds of rewinding covered %d frames, want %d", -slow, -want)
+	}
+	back, forward := drag(t, false, 2, 60, -8), drag(t, true, 2, 60, 8)
+	if -back != forward {
+		t.Errorf("two seconds covered %d frames rewinding and %d replaying forward", -back, forward)
+	}
+	if edge := drag(t, false, 1, 60, 8); edge != 0 {
+		t.Errorf("scrubbing forward from the live edge moved %d frames, want none", edge)
+	}
+}
+
+// A sweep and a drag of the same duration, each from rest, cover the same
+// ground: the ramp counts time, not distance.
 func TestScrubSpeedOfHandDoesNotMatter(t *testing.T) {
-	sweep, drag := scrubbed(t, 60, -40), scrubbed(t, 60, -2)
-	if sweep != drag {
-		t.Errorf("a fast sweep covered %d frames and a slow drag %d", -sweep, -drag)
+	sweep, slow := drag(t, false, 1, 60, -40), drag(t, false, 1, 60, -2)
+	if sweep != slow {
+		t.Errorf("a fast sweep covered %d frames and a slow drag %d", -sweep, -slow)
+	}
+}
+
+// A short drag steps slowly; holding it ramps up to the full rate and reaches
+// a minute back in about five seconds.
+func TestScrubRamps(t *testing.T) {
+	if short := -drag(t, false, 0.25, 60, -8); short >= 60 {
+		t.Errorf("a quarter-second drag covered %d frames, want under a second of play", short)
+	}
+	ResetTime()
+	recordFrames(RewindFrames)
+	UpdateTime(true, 0, 0)
+	perSecond := make([]int, 4)
+	for s := range perSecond {
+		from := rewindCursor
+		for range 60 {
+			UpdateTime(false, -8, 1.0/60)
+		}
+		perSecond[s] = from - rewindCursor
+	}
+	if !(perSecond[0] < perSecond[1] && perSecond[1] < perSecond[2]) {
+		t.Errorf("frames covered per second %v, want them rising through the first two", perSecond)
+	}
+	if want := ScrubFramesMax * 60; perSecond[2] != want || perSecond[3] != want {
+		t.Errorf("frames covered per second %v, want %d once the ramp is done", perSecond, want)
+	}
+	if far := -drag(t, false, 5, 60, -8); far < RewindFrames-1 {
+		t.Errorf("five seconds of dragging reached %d frames back, want the whole minute", far)
+	}
+}
+
+// scrubFor moves the mouse by dx for n rendered frames at 60 fps and reports
+// the frames the playhead covered over them.
+func scrubFor(n int, dx float32) int {
+	from := rewindCursor
+	for range n {
+		UpdateTime(false, dx, 1.0/60)
+	}
+	return rewindCursor - from
+}
+
+// Reversing, or stopping for longer than the grace, starts the ramp over; a
+// single dropped mouse report does neither. Each is judged over the next ten
+// frames rather than one: a rendered frame does not line up with a fixed step,
+// so any single frame may cover one step or none.
+func TestScrubRampStartsOver(t *testing.T) {
+	// three seconds of ramp covers about 2000 frames: from the live edge there
+	// is room to rewind that and more, and from the middle room to turn back
+	enter := func(middle bool) {
+		ResetTime()
+		recordFrames(RewindFrames)
+		UpdateTime(true, 0, 0)
+		if middle {
+			rewindCursor = rewindOldest() + RewindFrames/2
+		}
+	}
+
+	enter(true)
+	scrubFor(180, -8)
+	if got, max := scrubFor(10, 8), 10*scrubRate(10); got == 0 || got > max {
+		t.Errorf("reversing after three seconds covered %d frames in ten, want no more than %d", got, max)
+	}
+
+	enter(false)
+	scrubFor(180, -8)
+	still := rewindCursor
+	scrubFor(30, 0) // half a second still
+	if rewindCursor != still {
+		t.Errorf("time moved while the mouse was still")
+	}
+	if got, max := -scrubFor(10, -8), 10*scrubRate(10); got == 0 || got > max {
+		t.Errorf("rewinding again after a pause covered %d frames in ten, want no more than %d", got, max)
+	}
+
+	enter(false)
+	scrubFor(180, -8)
+	if moved := scrubFor(1, 0); moved != 0 {
+		t.Errorf("a dropped report moved time %d frames", moved)
+	}
+	if got, min := -scrubFor(10, -8), 9*ScrubFramesMax; got < min {
+		t.Errorf("after a dropped report the drag covered %d frames in ten, want it to carry on at %d a step", got, ScrubFramesMax)
+	}
+}
+
+// Sensor noise neither moves time nor winds the ramp up.
+func TestScrubJitterDoesNothing(t *testing.T) {
+	ResetTime()
+	recordFrames(RewindFrames)
+	UpdateTime(true, 0, 0)
+	from := rewindCursor
+	for i := range 180 {
+		dx := float32(0.3)
+		if i%2 == 0 {
+			dx = -0.3
+		}
+		UpdateTime(false, dx, 1.0/60)
+	}
+	if rewindCursor != from || scrubHeld != 0 {
+		t.Errorf("jitter moved time %d frames and wound the ramp to %d", rewindCursor-from, scrubHeld)
 	}
 }
 
