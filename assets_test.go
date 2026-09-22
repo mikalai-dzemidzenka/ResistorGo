@@ -27,14 +27,20 @@ func TestEveryLoadedAssetIsEmbedded(t *testing.T) {
 	}
 }
 
-// The unused music tracks are 28 MB; embedding the directory wholesale would
-// quadruple the binary for nothing.
-func TestOnlyTheMenuTrackIsEmbedded(t *testing.T) {
+// The unused music tracks are about 25 MB; embedding the directory wholesale
+// would triple the binary for nothing. Only the menu's and the level's go in.
+func TestOnlyTheTracksPlayedAreEmbedded(t *testing.T) {
 	entries, err := assetFS.ReadDir("resources/music")
 	if err != nil {
 		t.Fatalf("ReadDir: %v", err)
 	}
-	if len(entries) != 1 || "resources/music/"+entries[0].Name() != menuMusicPath {
-		t.Errorf("embedded music = %v, want only %s", entries, menuMusicPath)
+	want := map[string]bool{menuMusicPath: true, levelMusicPath: true}
+	for _, e := range entries {
+		if !want["resources/music/"+e.Name()] {
+			t.Errorf("%s is embedded but never played", e.Name())
+		}
+	}
+	if len(entries) != len(want) {
+		t.Errorf("embedded music = %v, want only %s and %s", entries, menuMusicPath, levelMusicPath)
 	}
 }

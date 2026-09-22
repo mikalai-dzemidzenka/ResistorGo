@@ -8,83 +8,176 @@ import (
 )
 
 const (
-	menuMusicPath = "resources/music/Neon Sprint.mp3"
-	musicFadeSec  = 0.6
+	menuMusicPath  = "resources/music/Neon Sprint.mp3"
+	levelMusicPath = "resources/music/Final Run (1).mp3"
+	musicFadeSec   = 0.6
+	// LevelMusicDuck is how loud the level track plays while the match is held -
+	// time manipulation or edit mode - against its full volume.
+	LevelMusicDuck = 0.3
 )
 
-var (
-	menuMusic  rl.Music
-	musicReady bool
-	musicFade  float32 // 1 in the menu, 0 in a match
+// A musicTrack is one looping track, faded in and out by the stage.
+type musicTrack struct {
+	path  string
+	music rl.Music
+	ready bool
+	fade  float32 // 0..1, times the volume setting
+	// rewind makes the track stop at silence rather than pause, so the next
+	// time it is wanted it plays from the top.
+	rewind  bool
+	stopped bool
 
 	// The mp3 decoder streams straight out of the embedded bytes instead of
 	// copying them, so the buffer has to stay alive and unmoved until the
 	// stream is unloaded.
-	menuMusicData []byte
-	menuMusicPin  runtime.Pinner
+	data []byte
+	pin  runtime.Pinner
+}
+
+var (
+	menuTrack  = &musicTrack{path: menuMusicPath}
+	levelTrack = &musicTrack{path: levelMusicPath, rewind: true}
 )
 
-// initAudio opens the audio device and loads the menu track. Everything is
-// guarded: a machine with no audio output runs silently instead of failing.
+// load opens the track's stream. A track that cannot be loaded stays silent.
+func (t *musicTrack) load() {
+	t.data = asset(t.path)
+	t.pin.Pin(&t.data[0])
+	t.music = rl.LoadMusicStreamFromMemory(path.Ext(t.path), t.data, int32(len(t.data)))
+	if !rl.IsMusicValid(t.music) {
+		t.pin.Unpin()
+		t.data = nil
+		return
+	}
+	t.music.Looping = true
+	t.ready = true
+	t.stopped = true
+}
+
+func (t *musicTrack) unload() {
+	if !t.ready {
+		return
+	}
+	rl.UnloadMusicStream(t.music)
+	t.ready = false
+	t.pin.Unpin()
+	t.data = nil
+}
+
+// initAudio opens the audio device and loads the tracks, starting the menu's.
+// Everything is guarded: a machine with no audio output runs silently instead
+// of failing.
 func initAudio() {
 	rl.InitAudioDevice()
 	if !rl.IsAudioDeviceReady() {
 		return
 	}
-	menuMusicData = asset(menuMusicPath)
-	menuMusicPin.Pin(&menuMusicData[0])
-	menuMusic = rl.LoadMusicStreamFromMemory(path.Ext(menuMusicPath), menuMusicData, int32(len(menuMusicData)))
-	if !rl.IsMusicValid(menuMusic) {
-		menuMusicPin.Unpin()
-		menuMusicData = nil
-		return
-	}
-	menuMusic.Looping = true
-	musicReady = true
+	menuTrack.load()
+	levelTrack.load()
+	menuTrack.fade = 1
 	applyMusicVolume()
-	rl.PlayMusicStream(menuMusic)
+	if menuTrack.ready {
+		rl.PlayMusicStream(menuTrack.music)
+		menuTrack.stopped = false
+	}
 }
 
 func closeAudio() {
-	if musicReady {
-		rl.UnloadMusicStream(menuMusic)
-		musicReady = false
-		menuMusicPin.Unpin()
-		menuMusicData = nil
-	}
+	menuTrack.unload()
+	levelTrack.unload()
 	if rl.IsAudioDeviceReady() {
 		rl.CloseAudioDevice()
 	}
 }
 
 func applyMusicVolume() {
-	if !musicReady {
-		return
+	for _, t := range []*musicTrack{menuTrack, levelTrack} {
+		if t.ready {
+			rl.SetMusicVolume(t.music, t.fade*float32(Cfg.MusicVolume)/100)
+		}
 	}
-	rl.SetMusicVolume(menuMusic, musicFade*float32(Cfg.MusicVolume)/100)
 }
 
-// updateAudio keeps the stream fed and fades the music with the stage. It must
-// run every frame, in every stage, or the music buffer starves.
-func updateAudio(dt float32) {
-	if !musicReady {
-		return
-	}
-	want := float32(0)
-	if Stage == StageMainMenu {
-		want = 1
-	}
-	musicFade = moveTo(musicFade, dt/musicFadeSec, want)
-	applyMusicVolume()
-
-	if musicFade == 0 {
-		if rl.IsMusicStreamPlaying(menuMusic) {
-			rl.PauseMusicStream(menuMusic)
+// musicTargets is how loud each track is heading, before the volume setting:
+// the menu's on the menu, the level's in a match, ducked while the match is
+// held.
+func musicTargets(stage int, held bool) (menu, level float32) {
+	switch stage {
+	case StageMainMenu:
+		return 1, 0
+	case StageLevel:
+		if held {
+			return 0, LevelMusicDuck
 		}
+		return 0, 1
+	}
+	return 0, 0
+}
+
+// A playback is what to do to a track's stream this frame.
+type playback int
+
+const (
+	keepPlaying playback = iota
+	keepSilent
+	pausePlayback
+	stopPlayback
+	startPlayback
+	resumePlayback
+)
+
+// nextPlayback decides what a track's stream does at this fade. A silent track
+// pauses, or stops if it rewinds; a track fading in plays from the top if it
+// was stopped and resumes if it was paused.
+func nextPlayback(rewind, stopped, playing bool, fade float32) playback {
+	if fade == 0 {
+		switch {
+		case rewind && !stopped:
+			return stopPlayback
+		case !rewind && playing:
+			return pausePlayback
+		}
+		return keepSilent
+	}
+	switch {
+	case stopped:
+		return startPlayback
+	case !playing:
+		return resumePlayback
+	}
+	return keepPlaying
+}
+
+// step fades the track toward target and keeps its stream fed.
+func (t *musicTrack) step(dt, target float32) {
+	if !t.ready {
 		return
 	}
-	if !rl.IsMusicStreamPlaying(menuMusic) {
-		rl.ResumeMusicStream(menuMusic)
+	t.fade = moveTo(t.fade, dt/musicFadeSec, target)
+	switch nextPlayback(t.rewind, t.stopped, rl.IsMusicStreamPlaying(t.music), t.fade) {
+	case stopPlayback:
+		rl.StopMusicStream(t.music)
+		t.stopped = true
+		return
+	case pausePlayback:
+		rl.PauseMusicStream(t.music)
+		return
+	case keepSilent:
+		return
+	case startPlayback:
+		rl.PlayMusicStream(t.music)
+		t.stopped = false
+	case resumePlayback:
+		rl.ResumeMusicStream(t.music)
 	}
-	rl.UpdateMusicStream(menuMusic)
+	rl.UpdateMusicStream(t.music)
+}
+
+// updateAudio keeps the streams fed and fades the tracks with the stage. It
+// must run every frame, in every stage, or the music buffers starve.
+func updateAudio(dt float32) {
+	menu, level := musicTargets(Stage, matchHeld())
+	menuTrack.step(dt, menu)
+	levelTrack.step(dt, level)
+	applyMusicVolume()
 }
