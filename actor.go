@@ -178,6 +178,10 @@ const (
 	EvNoEnergy
 )
 
+// Time manipulation records a fighter by copying its value, and restores it by
+// copying that back. So an Actor holds no slice or map, and no pointer to
+// anything that changes, other than the fighters and world it belongs to: a
+// recorded frame would share it with the live match.
 type Actor struct {
 	ID               uint16
 	W                *World
@@ -192,7 +196,6 @@ type Actor struct {
 	Friction         float32
 	Orientation      int8
 	State            ActorState
-	RewindData       [RewindFrames]ActorRewindFrame
 	CollisionBox     rl.Rectangle
 	AttackBoxHigh    rl.Rectangle
 	AttackBoxMid     rl.Rectangle
@@ -244,12 +247,14 @@ type Actor struct {
 	// The two places at this fighter: the bot fighting it from the left, and
 	// the one fighting it from the right. Two bots engage a fighter and no
 	// more; the rest wait in line. Like the bot's mind below, this is worked
-	// out by whichever world is simulating the match and is neither replicated
-	// nor rewound - a client is told where the bots went, not whose turn it is.
+	// out by whichever world is simulating the match and is never replicated -
+	// a client is told where the bots went, not whose turn it is. Time
+	// manipulation records and restores it with the rest of the fighter.
 	Engaged [2]*Actor
-	// What the bot has in mind. Never replicated and never rewound: it is
-	// worked out afresh by whichever world is actually simulating the match,
-	// and a client is told what the bot did, not what it was thinking. Zero is
+	// What the bot has in mind. Never replicated: it is worked out afresh by
+	// whichever world is actually simulating the match, and a client is told
+	// what the bot did, not what it was thinking. Time manipulation records and
+	// restores it with the rest of the fighter. Zero is
 	// a bot with nothing in mind, so a fighter spawning or respawning starts
 	// with a clean one for free.
 	Bot botMind
@@ -584,28 +589,6 @@ func animFrame(once, reverse bool, start, total uint8, duration, elapsed float64
 	return start + frame, false
 }
 
-// recordRewind writes the actor's state into the frame the recording is open
-// on. Called once per live fixed step, before the step runs.
-func (a *Actor) recordRewind() {
-	a.RewindData[rewindSlot(rewindHead)] = ActorRewindFrame{
-		Pos:         a.Pos,
-		Speed:       a.Speed,
-		Orientation: a.Orientation,
-		Anim:        a.Anim,
-		AnimFrame:   a.AnimCurrentFrame,
-	}
-}
-
-// restoreRewind puts the actor back onto the frame the playhead is on. The
-// previous position goes with it: nothing is in motion on a recorded frame, so
-// there is nothing to interpolate from.
-func (a *Actor) restoreRewind() {
-	data := a.RewindData[rewindSlot(rewindCursor)]
-	a.Pos = data.Pos
-	a.PrevPos = data.Pos
-	a.Speed = data.Speed
-	a.Orientation = data.Orientation
-}
 func (a *Actor) UpdatePhysics() {}
 
 // drawPos is the sprite's position rounded to whole world pixels. Interpolation
@@ -620,15 +603,10 @@ func (a *Actor) Draw() {
 	if a.deathHidden() {
 		return
 	}
-	if TimeShowsHistory() {
-		tex, src, pos := a.spriteDraw()
-		rl.DrawTextureRec(tex, src, pos, rl.White)
+	if a.AnimOnce {
+		a.DrawAnimOnce()
 	} else {
-		if a.AnimOnce {
-			a.DrawAnimOnce()
-		} else {
-			a.DrawAnim()
-		}
+		a.DrawAnim()
 	}
 
 	if DevTools && Debug {
@@ -736,18 +714,8 @@ func (a *Actor) DrawFrame() {
 // spriteDraw is the texture, source rectangle and position this fighter's
 // sprite is drawn with on this frame. The outline and rim passes draw the same
 // sprite a second time, so they must read it from one place or they would drift
-// and trace a pose the fighter is not in. While time shows history it is the
-// recorded frame.
+// and trace a pose the fighter is not in.
 func (a *Actor) spriteDraw() (rl.Texture2D, rl.Rectangle, rl.Vector2) {
-	if TimeShowsHistory() {
-		data := a.RewindData[rewindSlot(rewindCursor)]
-		return resources[data.Anim], rl.Rectangle{
-			X:      float32(data.AnimFrame) * 48,
-			Y:      0,
-			Width:  48 * float32(a.Orientation),
-			Height: 48,
-		}, a.drawPos()
-	}
 	tex := resources[a.Anim]
 	pos := a.drawPos()
 	height := float32(48)
@@ -792,11 +760,10 @@ func (a *Actor) topAnim() (string, bool) {
 // same frame of the top layer's sheet, at the same place as the body. The
 // drawing and the rim both take it from here, so the rim cannot trace a
 // silhouette the fighter is not showing. ok is false when the fighter has no
-// top layer, and while time shows history - a recorded frame holds the body
-// animation alone.
+// top layer.
 func (a *Actor) topDraw() (tex rl.Texture2D, src rl.Rectangle, pos rl.Vector2, ok bool) {
 	anim, has := a.topAnim()
-	if !has || TimeShowsHistory() {
+	if !has {
 		return tex, src, pos, false
 	}
 	tex, ok = resources[anim]
