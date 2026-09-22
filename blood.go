@@ -288,6 +288,7 @@ func (b *bloodState) watch(w *World) {
 			if n := bled(was, a); n > 0 {
 				r := a.collisionRect()
 				b.spray(rl.Vector2{X: r.X + r.Width/2, Y: r.Y + r.Height/2}, sprayDir(a), n)
+				punchHeard() // a blow that spills blood is a blow that is heard
 			}
 		}
 	}

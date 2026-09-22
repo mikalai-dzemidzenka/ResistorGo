@@ -1,6 +1,13 @@
 package resistor
 
-import "testing"
+import (
+	"go/ast"
+	"go/parser"
+	"go/token"
+	"testing"
+
+	rl "github.com/gen2brain/raylib-go/raylib"
+)
 
 // Both tracks the game plays are in the binary.
 func TestMusicIsEmbedded(t *testing.T) {
@@ -55,6 +62,87 @@ func TestNextPlayback(t *testing.T) {
 	} {
 		if got := nextPlayback(c.rewind, c.stopped, c.playing, c.fade); got != c.want {
 			t.Errorf("%s: %d, want %d", c.name, got, c.want)
+		}
+	}
+}
+
+// Both punches are in the binary.
+func TestPunchesAreEmbedded(t *testing.T) {
+	for _, p := range punchPaths {
+		if len(asset(p)) == 0 {
+			t.Errorf("%s is empty", p)
+		}
+	}
+}
+
+// A punch plays on its voices in turn, so the one before is left to finish.
+func TestPunchVoicesTakeTurns(t *testing.T) {
+	p := &punchSound{voices: make([]rl.Sound, PunchVoices)}
+	for want := range 2 * PunchVoices {
+		if got := p.nextVoice(); got != want%PunchVoices {
+			t.Fatalf("punch %d went to voice %d, want %d", want, got, want%PunchVoices)
+		}
+	}
+}
+
+// The audio draws only from its own random source, as the blood does: the bots
+// draw from the global one.
+func TestAudioHasItsOwnRandom(t *testing.T) {
+	f, err := parser.ParseFile(token.NewFileSet(), "audio.go", nil, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ast.Inspect(f, func(n ast.Node) bool {
+		sel, ok := n.(*ast.SelectorExpr)
+		if !ok {
+			return true
+		}
+		if pkg, ok := sel.X.(*ast.Ident); ok && pkg.Name == "rand" && sel.Sel.Name != "New" && sel.Sel.Name != "NewSource" && sel.Sel.Name != "Rand" {
+			t.Errorf("audio.go calls the global rand.%s", sel.Sel.Name)
+		}
+		return true
+	})
+}
+
+// A landed hit is heard once, whether it flinches, stuns or kills; a blocked
+// blow, block-all, a clash and a shove are silent.
+func TestAPunchIsHeardWhenAHitLands(t *testing.T) {
+	heard := 0
+	onPunch = func() { heard++ }
+	t.Cleanup(func() { onPunch = nil })
+	listen := func(blow func(w *World, def, att *Actor), prep ...func(*Actor)) int {
+		heard = 0
+		bleeding(t, blow, prep...)
+		return heard
+	}
+	for name, blow := range map[string]func(w *World, def, att *Actor){
+		"a flinch": func(w *World, def, att *Actor) { def.takeHit(att) },
+		"a stun": func(w *World, def, att *Actor) {
+			def.HitCount = StunEveryHits - 1
+			def.takeHit(att)
+		},
+		"a kill": func(w *World, def, att *Actor) {
+			def.Structure = 1
+			def.takeHit(att)
+		},
+	} {
+		if n := listen(blow); n != 1 {
+			t.Errorf("%s was heard %d times, want once", name, n)
+		}
+	}
+	guardAll := func(def *Actor) { def.Updown = 3 }
+	hurt := func(def *Actor) { def.Structure = MaxStructure - 1 }
+	for name, c := range map[string]struct {
+		blow func(w *World, def, att *Actor)
+		prep []func(*Actor)
+	}{
+		"a guarded block": {func(w *World, def, att *Actor) { def.Updown = att.Updown; def.confirmBlock(att) }, []func(*Actor){hurt}},
+		"block-all":       {func(w *World, def, att *Actor) { def.confirmBlock(att) }, []func(*Actor){guardAll}},
+		"a clash":         {func(w *World, def, att *Actor) { startClash(att, def) }, nil},
+		"a shove":         {func(w *World, def, att *Actor) { def.enterShovedState(att) }, nil},
+	} {
+		if n := listen(c.blow, c.prep...); n != 0 {
+			t.Errorf("%s was heard %d times, want silence", name, n)
 		}
 	}
 }
