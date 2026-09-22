@@ -3,12 +3,24 @@ package resistor
 import rl "github.com/gen2brain/raylib-go/raylib"
 
 const (
-	// RewindFrames is how many fixed steps of history every actor keeps.
-	RewindFrames = 256
+	// RewindFrames is how many fixed steps of the match the recording holds:
+	// the last minute. A frame of the single-player match is a couple of KB,
+	// so a minute held as it is costs a few MB and needs no compression.
+	RewindFrames = 60 * 60
 	// ScrubFrames is how many recorded frames one fixed step of scrubbing
-	// covers. It is the same in both directions, so 2 means time runs at twice
-	// the speed it was recorded at whichever way it is going.
-	ScrubFrames = 2
+	// covers when the mouse starts moving. It is the same in both directions,
+	// so 2 means time runs at twice the speed it was recorded at whichever way
+	// it is going. Keeping on the same way ramps it up to ScrubFramesMax over
+	// ScrubRampSteps fixed steps, so a minute back is a few seconds' drag while
+	// a short one still steps slowly enough to pick out a frame.
+	ScrubFrames    = 2
+	ScrubFramesMax = 16
+	ScrubRampSteps = 120 // two seconds
+	// ScrubRampGrace is how long, in seconds, the mouse must be still before the
+	// ramp starts over. A mouse polled more slowly than the screen is drawn
+	// reports no movement on some frames while the hand is moving; those frames
+	// pause time, as any still frame does, but must not drop the speed.
+	ScrubRampGrace = 0.1
 	// ScrubDeadZone is the horizontal mouse movement, in pixels for one frame,
 	// below which the mouse counts as still. Anything the hand actually does
 	// moves at least a whole pixel; this only swallows sub-pixel sensor noise.
@@ -36,6 +48,11 @@ var (
 	// mouse is still.
 	ScrubDir int
 	scrubAcc float64
+	// The ramp: fixed steps scrubbed in the current direction, the direction
+	// they were scrubbed in, and how long the mouse has been still.
+	scrubHeld  int
+	scrubLast  int
+	scrubStill float32
 )
 
 // The recorded history is a window on a ring buffer: rewindHead is the newest
@@ -160,13 +177,14 @@ func TimeShowsHistory() bool {
 // match starts with no history, and holds none of the old match's fighters.
 func ResetTime() {
 	TimeMode, ScrubDir, scrubAcc = TimeOff, 0, 0
+	resetScrubRamp()
 	rewindHead, rewindCount, rewindCursor = 0, 0, 0
 	rewindFrames = [RewindFrames]worldFrame{}
 }
 
 // scrubDirection turns one frame of horizontal mouse movement into a direction
-// of travel. Only the direction matters: the rate is fixed, so how fast the
-// hand moves does not change how fast time does.
+// of travel. Only the direction matters: the rate comes from how long the hand
+// has kept moving, so how fast it moves does not change how fast time does.
 func scrubDirection(dx float32) int {
 	switch {
 	case dx > ScrubDeadZone:
@@ -197,6 +215,7 @@ func UpdateTime(pressed bool, dx, dt float32) bool {
 			clearLatchedInput()
 		}
 		ScrubDir, scrubAcc = 0, 0
+		resetScrubRamp()
 		return false
 	}
 	if TimeMode == TimeOff {
@@ -205,19 +224,40 @@ func UpdateTime(pressed bool, dx, dt float32) bool {
 	if ScrubDir = scrubDirection(dx); ScrubDir == 0 {
 		TimeMode = TimePaused
 		scrubAcc = 0
+		if scrubStill += dt; scrubStill >= ScrubRampGrace {
+			scrubHeld = 0
+		}
 		return false
 	}
 	TimeMode = TimeScrubbing
+	scrubStill = 0
+	if ScrubDir != scrubLast {
+		scrubHeld, scrubLast = 0, ScrubDir
+	}
 
-	// Scrub in the same fixed quanta the simulation runs in, so the rate does
-	// not depend on the frame rate.
+	// Scrub in the same fixed quanta the simulation runs in, and ramp by
+	// counting them, so neither the rate nor its rise depends on the frame rate.
 	scrubAcc += float64(dt)
 	moved := false
 	for scrubAcc >= FixedTimeStep {
 		scrubAcc -= FixedTimeStep
-		moved = rewindSeek(ScrubDir*ScrubFrames) || moved
+		moved = rewindSeek(ScrubDir*scrubRate(scrubHeld)) || moved
+		scrubHeld++
 	}
 	return moved
+}
+
+// scrubRate is how many recorded frames the next fixed step of scrubbing
+// covers, after held steps in the same direction: ScrubFrames to begin with,
+// rising evenly to ScrubFramesMax after ScrubRampSteps, in whole frames.
+func scrubRate(held int) int {
+	return ScrubFrames + (ScrubFramesMax-ScrubFrames)*min(held, ScrubRampSteps)/ScrubRampSteps
+}
+
+// resetScrubRamp starts the ramp over: the next movement scrubs from the
+// starting speed.
+func resetScrubRamp() {
+	scrubHeld, scrubLast, scrubStill = 0, 0, 0
 }
 
 // timeModeName labels the mode for the debug overlay.
