@@ -30,9 +30,9 @@
 
 - [x] 5.1 Run `go test ./...` and `go test -tags release ./...` and confirm both pass.
 - [x] 5.2 Build with `./build.ps1` to a scratch `-Out`, and with `./build.ps1 -Linux`, and confirm both pack.
-- [ ] 5.3 In `go run ./cmd`: place a red light and a dim white one, move and resize them, save, restart, and confirm they are back and lit as set — the `Color and intensity`, `Save` and `Quit without saving` scenarios. Covered by `add-lit-areas` 6.8.
-- [ ] 5.4 Place a row of lights far from the start, walk the camera to them and back, and confirm the light at the edge of the screen neither pops in nor out, and that the frame rate with them off screen matches the frame rate without them — the `At the edge of the screen` and `Many lights` scenarios. Covered by `add-lit-areas` 6.9.
-- [ ] 5.5 Host a match from a development build with a moved light and join it from the release build: the join is not refused — the `A changed light` scenario. Covered by `add-lit-areas` 6.10.
+- [x] 5.3 In `go run ./cmd`: place a red light and a dim white one, move and resize them, save, restart, and confirm they are back and lit as set — the `Color and intensity`, `Save` and `Quit without saving` scenarios. Covered by `add-lit-areas` 6.8.
+- [x] 5.4 Place a row of lights far from the start, walk the camera to them and back, and confirm the light at the edge of the screen neither pops in nor out, and that the frame rate with them off screen matches the frame rate without them — the `At the edge of the screen` and `Many lights` scenarios. Covered by `add-lit-areas` 6.9.
+- [x] 5.5 Host a match from a development build with a moved light and join it from the release build: the join is not refused — the `A changed light` scenario. Covered by `add-lit-areas` 6.10.
 
 ## 6. Level tests that survive editing the level
 

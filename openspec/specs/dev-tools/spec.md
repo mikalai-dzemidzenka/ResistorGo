@@ -45,7 +45,9 @@ While edit mode is on, the match SHALL be paused: no fighter physics, no animati
 - **THEN** the match resumes at normal speed with no jump in fighter positions
 
 ### Requirement: The editor takes input only in edit mode
-Outside edit mode the level editor SHALL take no input: the left mouse button SHALL only attack, and the right mouse button and Tab SHALL do nothing to the level. In edit mode the left mouse button SHALL place the selected object at the grid cell under the cursor, the right mouse button SHALL delete the object there, and Tab SHALL open the object picker.
+Outside edit mode the level editor SHALL take no input: the left mouse button SHALL only attack, the right mouse button and Tab SHALL do nothing to the level, and a file dropped on the window SHALL do nothing.
+
+In edit mode Tab SHALL open the object picker, and the editor SHALL have four tools with exactly one of them active, switched explicitly by the player: the place tool, the rect tool, the light tool and the area tool. With the place tool the left mouse button SHALL place the selected object at the grid cell under the cursor and the right mouse button SHALL delete the object there. With the rect tool the left mouse button SHALL select an object and shape rectangles only, and SHALL neither place nor delete an object. With the light tool the mouse SHALL place, select, shape and remove lights only, and SHALL neither place, delete nor select an object. With the area tool the mouse SHALL place, select, shape and remove lit areas only, and SHALL neither place, delete nor select an object, nor touch a light. One click SHALL never act as two tools at once.
 
 #### Scenario: Attacking does not edit
 - **WHEN** the player attacks many times in a single-player match, with the debug overlay on
@@ -55,12 +57,28 @@ Outside edit mode the level editor SHALL take no input: the left mouse button SH
 - **WHEN** the player right-clicks with the cursor over the floor, outside edit mode
 - **THEN** the floor tile is still there
 
+#### Scenario: A dropped file in play does nothing
+- **WHEN** the player drops an image on the window outside edit mode
+- **THEN** nothing is imported, the level is unchanged, and the match continues
+
 #### Scenario: Editing
-- **WHEN** the player, in edit mode, left-clicks an empty grid cell and right-clicks an existing tile
+- **WHEN** the player, in edit mode with the place tool, left-clicks an empty grid cell and right-clicks an existing tile
 - **THEN** the selected object appears in the empty cell and the existing tile is removed
 
+#### Scenario: The rect tool does not place
+- **WHEN** the player, in edit mode with the rect tool, left-clicks an empty grid cell and then a tile's rectangle
+- **THEN** no object is placed, and the click on the rectangle selects and shapes it
+
+#### Scenario: The light tool does not touch tiles
+- **WHEN** the player, in edit mode with the light tool, left-clicks a tile and right-clicks another
+- **THEN** a light is placed where the first click was, and both tiles are unchanged
+
+#### Scenario: Light clicks in play do nothing
+- **WHEN** the player left-clicks and right-clicks on a light's center outside edit mode
+- **THEN** the light is unchanged, and the left click is an attack
+
 ### Requirement: Saving the level is explicit
-The level file SHALL be written only when the player presses Ctrl+S in edit mode. Quitting the game SHALL NOT write it. Edits SHALL survive leaving and re-entering edit mode for the rest of the session, and unsaved edits SHALL be lost when the game quits.
+The level file and the editor's palette defaults file SHALL be written only when the player presses Ctrl+S in edit mode. Quitting the game SHALL NOT write either of them. Edits SHALL survive leaving and re-entering edit mode for the rest of the session, and unsaved edits SHALL be lost when the game quits. A placement, a deletion and a rectangle edit SHALL all count as an edit on these terms.
 
 #### Scenario: Save
 - **WHEN** the player places a tile in edit mode and presses Ctrl+S
@@ -74,6 +92,10 @@ The level file SHALL be written only when the player presses Ctrl+S in edit mode
 - **WHEN** the player places a tile, leaves edit mode, plays, and enters edit mode again
 - **THEN** the tile is still there and still unsaved
 
+#### Scenario: A rectangle edit is an edit
+- **WHEN** the player reshapes a tile's collision rectangle in edit mode and presses Ctrl+S
+- **THEN** the level file on disk contains the reshaped rectangle
+
 ### Requirement: Edit mode is visible
 While edit mode is on, the screen SHALL say so, and SHALL say when there are edits that have not been saved.
 
@@ -86,7 +108,7 @@ While edit mode is on, the screen SHALL say so, and SHALL say when there are edi
 - **THEN** the screen shows that there are unsaved edits, until Ctrl+S is pressed
 
 ### Requirement: A release build carries no developer tools
-A release build SHALL contain no edit mode, no level editor input or GUI, no debug overlay, and no network-simulation keys, and SHALL never write the level file. The keys that open these tools in a development build — F2, the `` ` `` key, Tab in the editor's sense, and F5 to F8 — SHALL do nothing in a release build.
+A release build SHALL contain no edit mode, no level editor input or GUI, no debug overlay, no network-simulation keys and no texture import, and SHALL never write the level file or the editor's palette defaults file. The keys that open these tools in a development build — F2, the `` ` `` key, Tab in the editor's sense, the editor's tool keys, and F5 to F8 — SHALL do nothing in a release build, and a file dropped on its window SHALL do nothing. A release build SHALL use only the block textures it was built with and SHALL NOT look for block textures on disk.
 
 #### Scenario: Keys do nothing
 - **WHEN** a player of a release build presses F2, `` ` ``, and F5 to F8 during a match
@@ -94,7 +116,15 @@ A release build SHALL contain no edit mode, no level editor input or GUI, no deb
 
 #### Scenario: Never writes the level
 - **WHEN** a player of a release build plays a match, attacking and right-clicking throughout, and quits
-- **THEN** no level file has been written anywhere
+- **THEN** no level file and no palette defaults file has been written anywhere
+
+#### Scenario: Dropping art does nothing
+- **WHEN** a player of a release build drops a PNG on the window during a match
+- **THEN** nothing is imported, nothing is copied anywhere, and the match continues
+
+#### Scenario: Ignores textures on disk
+- **WHEN** a release build is started with an extra PNG beside its other block textures on disk
+- **THEN** it plays with the textures it was built with and that file is never read
 
 ### Requirement: A release build plays the embedded level
 A release build SHALL load the level embedded in the binary and SHALL ignore any level file on disk, when running as a game and when running as a dedicated server. Its level fingerprint SHALL therefore be the same as every other copy of the same release.
