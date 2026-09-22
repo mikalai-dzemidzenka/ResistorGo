@@ -15,6 +15,13 @@ const (
 	ScrubDeadZone = 0.5
 )
 
+// In a single-player match TimeKey toggles time manipulation and RestartKey
+// starts the level over.
+const (
+	TimeKey    = rl.KeyT
+	RestartKey = rl.KeyR
+)
+
 // Time-manipulation mode. Off is normal play; on, the match is either held on
 // one recorded frame or travelling through the recording.
 const (
@@ -121,16 +128,16 @@ func scrubDirection(dx float32) int {
 	return 0
 }
 
-// UpdateTime advances time manipulation by one rendered frame: R toggles the
+// UpdateTime advances time manipulation by one rendered frame: TimeKey toggles the
 // mode, and while it is on the horizontal mouse movement dx scrubs through the
 // recording. It reports whether the playhead moved, in which case the caller
 // restores the world onto it. Input is passed in rather than read here so the
 // state machine can be tested without a window.
-func UpdateTime(rPressed bool, dx, dt float32) bool {
+func UpdateTime(pressed bool, dx, dt float32) bool {
 	if Editing {
-		rPressed = false // edit mode holds the match; time manipulation waits
+		pressed = false // edit mode holds the match; time manipulation waits
 	}
-	if rPressed {
+	if pressed {
 		if TimeMode == TimeOff {
 			TimeMode = TimePaused
 		} else {

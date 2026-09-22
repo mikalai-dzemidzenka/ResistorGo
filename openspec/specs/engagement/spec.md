@@ -199,7 +199,10 @@ decides and not this capability.
 ### Requirement: A place is given up
 
 A bot SHALL give up its place when it dies, when the fighter it held the place
-at dies, when it loses its target, and when it takes a different target. A bot
+at dies, when it loses its target, and when it takes a different target. Both a
+death's releases SHALL happen as the fighter falls, not when its body leaves the
+world: a body that stays on the floor SHALL hold no place and SHALL have none
+held at it. A bot
 SHALL also give up its place after holding it for a bounded time while another
 bot is waiting on that side, and SHALL then go to the back of that line.
 
@@ -213,6 +216,12 @@ bot is waiting on that side, and SHALL then go to the back of that line.
 
 - **WHEN** the fighter the places belong to dies
 - **THEN** no bot SHALL be left holding a place at it
+
+#### Scenario: A body left lying holds nothing
+
+- **WHEN** a bot dies in a match that leaves the bodies on the floor
+- **THEN** the place it held SHALL come free for the bots waiting behind it, and
+  no bot SHALL be left holding a place at the body
 
 #### Scenario: Losing sight frees the place
 

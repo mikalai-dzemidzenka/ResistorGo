@@ -769,3 +769,90 @@ func TestTwoAttackersNeverSwingTogether(t *testing.T) {
 	}
 	t.Logf("%d ticks of swing over 3000", swings)
 }
+
+// A body that stays on the floor - single player keeps them - must not keep
+// its place in the fight with it: the bots waiting behind it for a turn at the
+// front would wait out the match.
+func TestABodyLeftLyingHoldsNoPlace(t *testing.T) {
+	floor()
+	w := NewWorld(true)
+	w.BotsStayDead = true
+	p := w.Spawn(rl.Vector2{}, true)
+	holder := w.Spawn(rl.Vector2{X: -40}, false)
+	waiting := w.Spawn(rl.Vector2{X: -80}, false)
+	holder.claimPlace(p)
+	waiting.Bot.target, waiting.Bot.side = p, -1
+
+	holder.Structure = HitStructure
+	holder.enterDeathState(nil)
+	for range DeathFlickerTicks + RespawnTicks + 60 {
+		w.Tick++
+		w.updateRespawns()
+		holder.Update(float32(FixedTimeStep))
+	}
+	if w.ByID(holder.ID) != holder {
+		t.Fatalf("the body left the world: nothing to test")
+	}
+	if p.Engaged[placeIndex(-1)] == holder {
+		t.Error("the body is still holding its place at the fighter it died fighting")
+	}
+	if !waiting.claimPlace(p) {
+		t.Error("the bot behind it never got a turn at the front")
+	}
+	if holder.Bot.target != nil {
+		t.Errorf("the body is still fighting %v", holder.Bot.target)
+	}
+}
+
+// The two places at a fighter that dies are given up as it falls, so the bots
+// that were on it are free to go and fight somebody else.
+func TestABodyReleasesItsOwnAttackers(t *testing.T) {
+	floor()
+	w := NewWorld(true)
+	w.BotsStayDead = true
+	victim := w.Spawn(rl.Vector2{}, false)
+	att := w.Spawn(rl.Vector2{X: -40}, false)
+	att.Team = NoTeam // or the two of them are allies and neither engages
+	att.claimPlace(victim)
+	if !att.holdsPlace() {
+		t.Fatalf("the attacker never took a place")
+	}
+
+	victim.enterDeathState(att)
+	if victim.engagedBy() != 0 {
+		t.Errorf("%d bots are still recorded as fighting the body", victim.engagedBy())
+	}
+	if att.claimPlace(victim) {
+		t.Error("a bot took a place at a body")
+	}
+	if att.Bot.target != nil {
+		t.Errorf("the attacker is still fighting the body")
+	}
+}
+
+// The whole point, from the crowd's side: with the bodies left lying, a line
+// of bots keeps two of its own on the fighter as the ones at the front fall.
+func TestTheLineFillsThePlaceOfTheFallen(t *testing.T) {
+	w := NewWorld(true)
+	w.BotsStayDead = true
+	p, _ := lineUp(w, 3)
+
+	runFight(w, 240, p)
+	if len(engaged(p)) != 2 {
+		t.Fatalf("%d bots fighting before the death, want 2", len(engaged(p)))
+	}
+	fallen := engaged(p)[0]
+	fallen.Structure = HitStructure
+	fallen.enterDeathState(p)
+
+	runFight(w, 240, p)
+	held := engaged(p)
+	if len(held) != 2 {
+		t.Fatalf("%d bots fighting after the death, want 2: the line did not step in", len(held))
+	}
+	for _, b := range held {
+		if b == fallen {
+			t.Error("the body is one of the two fighting")
+		}
+	}
+}

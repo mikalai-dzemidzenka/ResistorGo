@@ -7,22 +7,22 @@ Lets a single player stop the match, travel through the last few seconds of it w
 ## Requirements
 
 ### Requirement: Entering and leaving the mode
-In a single-player match, R SHALL toggle time-manipulation mode: pressing it while the mode is off turns it on, pressing it while the mode is on turns it off. Holding R SHALL have no effect beyond the press that started it. Leaving the mode SHALL resume the match from the frame currently shown. The mode SHALL NOT be available in a network match, where R SHALL do nothing.
+In a single-player match, T SHALL toggle time-manipulation mode: pressing it while the mode is off turns it on, pressing it while the mode is on turns it off. Holding T SHALL have no effect beyond the press that started it. Leaving the mode SHALL resume the match from the frame currently shown. The mode SHALL NOT be available in a network match, where T SHALL do nothing.
 
 #### Scenario: Press to enter
-- **WHEN** the player presses R during a single-player match
+- **WHEN** the player presses T during a single-player match
 - **THEN** time-manipulation mode turns on and the match pauses on the current frame
 
 #### Scenario: Press again to leave
-- **WHEN** the player presses R while the mode is on
+- **WHEN** the player presses T while the mode is on
 - **THEN** the mode turns off and the match continues from the frame that was on screen, at normal speed
 
 #### Scenario: Holding does not rewind
-- **WHEN** the player presses R and keeps it held without moving the mouse
+- **WHEN** the player presses T and keeps it held without moving the mouse
 - **THEN** the match stays paused on the frame it entered on and time does not move in either direction
 
 #### Scenario: Not available online
-- **WHEN** the player presses R while connected to a server, as a fighter or as a spectator
+- **WHEN** the player presses T while connected to a server, as a fighter or as a spectator
 - **THEN** nothing happens and the match continues uninterrupted
 
 ### Requirement: Entering pauses the match

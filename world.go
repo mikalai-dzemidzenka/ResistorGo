@@ -11,10 +11,14 @@ type World struct {
 	Tick      uint32
 	Authority bool // resolves hits and blocks; false for a client's predicted world
 	Local     *Actor
-	History   *LagHistory // server only
-	nextID    uint16
-	pending   []pendingSpawn
-	dying     []*Actor
+	// BotsStayDead leaves a fallen bot lying where it fell for the rest of the
+	// match: no flicker, no removal, no return. Single player sets it; the
+	// level is cleared by beating the bots, and R starts it over.
+	BotsStayDead bool
+	History      *LagHistory // server only
+	nextID       uint16
+	pending      []pendingSpawn
+	dying        []*Actor
 }
 
 var SV, CL *World
@@ -134,6 +138,9 @@ func (w *World) spawnPos() rl.Vector2 {
 		lo, hi := x+14, x+28
 		free := true
 		for _, a := range w.Actors {
+			if a.State == StateDeath {
+				continue // a body on the floor is in nobody's way
+			}
 			r := a.collisionRect()
 			if r.X < hi && r.X+r.Width > lo {
 				free = false

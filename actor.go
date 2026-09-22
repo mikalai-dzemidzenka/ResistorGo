@@ -1491,6 +1491,13 @@ func (a *Actor) enterDeathState(attacker *Actor) {
 	a.AnimWhite = false
 	a.Speed = rl.Vector2{}
 	a.AttackQueued, a.BufAttack, a.BufJump = false, false, false
+	// The fallen are out of every fight at once: the place this one held at
+	// whoever it was fighting, and the two at itself that its own attackers
+	// hold. Waiting for the removal to do it leaves a body that stays on the
+	// floor holding a place forever, and the bots behind it waiting forever
+	// for a turn at the front that never comes.
+	a.leaveFight()
+	a.Engaged = [2]*Actor{}
 	if attacker != nil {
 		attacker.FreezeTicks = HitStopTicks
 		attacker.restoreEnergy(MaxEnergy) // a kill puts the winner straight back in the fight
@@ -1502,9 +1509,10 @@ func (a *Actor) enterDeathState(attacker *Actor) {
 }
 
 // updateDeath plays the fall out, then counts the flicker off before the
-// authority takes the body out of the world. A client waits to be told.
+// authority takes the body out of the world. A client waits to be told. A bot
+// in a world where bots stay dead stops at the end of the fall, and lies there.
 func (a *Actor) updateDeath() {
-	if !a.AnimFinished {
+	if !a.AnimFinished || a.W != nil && a.W.BotsStayDead && !a.IsPlayer {
 		return
 	}
 	a.DeathTicks++
