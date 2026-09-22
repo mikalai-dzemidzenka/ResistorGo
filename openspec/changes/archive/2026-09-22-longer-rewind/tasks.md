@@ -46,7 +46,7 @@
 
 ## 3. The spec's purpose, and the whole
 
-- [ ] 3.1 On archiving, change the Purpose in
+- [x] 3.1 On archiving, change the Purpose in
       `openspec/specs/time-manipulation/spec.md` from "the last few seconds"
       to "the last minute" - a delta cannot carry a Purpose change
 - [x] 3.2 Run `go test ./...` and `go vet .`; verify only the known flaky
