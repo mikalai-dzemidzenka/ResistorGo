@@ -7,11 +7,11 @@ Defines how the main menu is laid out and presented: the animated wireframe scen
 ## Requirements
 
 ### Requirement: Pixel-art menu scene
-The animated menu scene (background line fan and the wireframe head, jab, kick and martelo models) SHALL be rendered into a texture smaller than the window and shown upscaled with nearest-neighbour filtering, so it keeps a blocky pixel look. The on-screen size of one scene pixel SHALL be a single setting that divides the window evenly, and SHALL be large enough to stay visibly pixelated. Changing it SHALL change only the pixel density, not the size or position of anything in the scene.
+The animated menu scene (background line fan and the wireframe head, jab, kick and martelo models) SHALL be rendered into a texture smaller than the virtual screen and drawn into the virtual screen upscaled with nearest-neighbour filtering, so it keeps a blocky pixel look. The on-screen size of one scene pixel SHALL be a single setting that divides the virtual screen evenly, and SHALL be large enough to stay visibly pixelated. Changing it SHALL change only the pixel density, not the size or position of anything in the scene.
 
 #### Scenario: Scene is upscaled, not re-rendered at window size
-- **WHEN** the main menu is shown in the default 1280x720 window at the default scene pixel size of 4
-- **THEN** the scene is rendered at 320x180 and each scene pixel appears as a 4x4 block of identical screen pixels
+- **WHEN** the main menu is shown at the default scene pixel size of 4
+- **THEN** the scene is rendered at 320x180 and each scene pixel appears as a 4x4 block in the 1280x720 virtual screen
 
 #### Scenario: Models are detailed enough to read
 - **WHEN** the head model is shown after it has faded in
@@ -47,11 +47,15 @@ The "RESISTOR" logo SHALL be drawn at a whole-number scale (at least 1), with ne
 - **THEN** every letter of the logo is visible, and the logo is drawn at 2x (418x56 pixels) inside the menu panel, centred over the buttons
 
 ### Requirement: Menu widgets fit inside the menu panel
-On every menu screen (Main, Host Game, Join Game, Connecting), every button, text field, spinner and label SHALL be fully inside the menu panel, with at least 16 pixels to the left and bottom edges of the window. The error message SHALL start at the left edge of the label column. Widgets and the error message SHALL NOT overlap the logo. The order of the entries on each screen SHALL NOT change.
+On every menu screen (Main, Host Game, Join Game, Options, Connecting), every button, text field, spinner, slider, selector and label SHALL be fully inside the menu panel, with at least 16 pixels to the left and bottom edges of the virtual screen. The error message SHALL start at the left edge of the label column. Widgets and the error message SHALL NOT overlap the logo. The order of the entries on each screen SHALL NOT change.
 
 #### Scenario: Host screen fits
-- **WHEN** the user opens the Host Game screen in the default 1280x720 window
-- **THEN** the Port, Max players, Bots and Max spectators rows with their labels, and the Start and Back buttons, are all fully visible inside the menu panel, and Back ends at least 16 pixels above the bottom of the window
+- **WHEN** the user opens the Host Game screen
+- **THEN** the Port, Max players, Bots and Max spectators rows with their labels, and the Start and Back buttons, are all fully visible inside the menu panel, and Back ends at least 16 pixels above the bottom of the virtual screen
+
+#### Scenario: Options screen fits
+- **WHEN** the user opens the Options screen
+- **THEN** the fullscreen, window size and music volume rows with their labels, and the Back button, are all fully visible inside the menu panel
 
 #### Scenario: Error message placement
 - **WHEN** hosting fails with an error

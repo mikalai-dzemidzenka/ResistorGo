@@ -25,3 +25,7 @@
 - [x] 4.2 Capture the menu at several moments, one of them mid colour change, on the Main, Host Game with an error shown, Join Game and Options screens. Check with a pixel script that every pixel of every capture is one of the 64 Endesga 64 colours. Capture a single-player match and check that its pixels are still from the level palette.
 - [x] 4.3 Capture the menu ten seconds apart and check that the skyline is at the same place in both and the horizon is level, so the background is not moving. Check that no pixel of the window is left uncovered by the background.
 - [ ] 4.4 Tune the cycle speed and the ramp entries by eye in the running game, and record any values that change in design.md.
+
+## Before archiving
+
+- [ ] Merge the `main-menu` delta by hand, not by replacing blocks: `add-menu-music-and-options` (archived 2026-09-23) rewrote "Pixel-art menu scene" and "Menu widgets fit inside the menu panel" after this delta was written - the virtual screen instead of the window, and the Options screen with its fullscreen, window size and music volume rows. Keep those edits alongside this change's; verify with `openspec validate --specs --strict`
