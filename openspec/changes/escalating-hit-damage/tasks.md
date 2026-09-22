@@ -30,3 +30,7 @@
 - [ ] 5.1 Play a local match (`go run ./cmd`): take a run of hits and confirm the bar drops further each time, that six in a row ends it, and that blocking once puts the next hit back to a small step.
 - [ ] 5.2 Confirm in play that block-all breaks a run as well as a matching guard, and that walking away long enough to start recovering does too.
 - [ ] 5.3 Play a networked match against the dedicated server (`go run ./cmd -dedicated` plus a client): confirm the bar drops by the same amount on both screens under `F5`–`F8` latency simulation, with no correction spike as a run escalates, and that an older client is refused at the handshake.
+
+## Before archiving
+
+- [ ] Merge the `structure` delta by hand, not by replacing the block: `move-while-swinging` (archived 2026-09-23) rewrote "A landed hit costs structure and flinches" after this delta was written. Keep its knockback paragraph ("The knockback SHALL move the fighter ...") and its two scenarios (`The small knockback actually moves the fighter`, `A flinch stays smaller than a stun`) alongside this change's edits; verify with `openspec validate --specs --strict`

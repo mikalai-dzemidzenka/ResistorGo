@@ -24,3 +24,7 @@
 - [ ] 4.1 Play a local match (`go run ./cmd`): take a hit while running and confirm the run continues and the fighter flashes, then take the third hit and confirm the hit animation plays and control is lost.
 - [ ] 4.2 Confirm in play that the flash never sticks: swing, block and jump out of a flinch, and die during one, checking the fighter is drawn normally afterwards in each case.
 - [ ] 4.3 Play a networked match against the dedicated server (`go run ./cmd -dedicated` plus a client): confirm a remote fighter's flinches and stuns look the same on the client as they do on the host, with `F5`–`F8` latency simulation on.
+
+## Before archiving
+
+- [ ] Merge the `structure` delta by hand, not by replacing the block: `move-while-swinging` (archived 2026-09-23) rewrote "A landed hit costs structure and flinches" after this delta was written. Keep its knockback paragraph ("The knockback SHALL move the fighter ...") and its two scenarios (`The small knockback actually moves the fighter`, `A flinch stays smaller than a stun`) alongside this change's edits; verify with `openspec validate --specs --strict`

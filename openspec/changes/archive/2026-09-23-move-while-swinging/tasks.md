@@ -57,7 +57,7 @@
 
 - [x] 4.1 Run `go test ./...` and `go test -tags release ./...`; verify only
       the known flaky engagement and spectator tests ever fail
-- [ ] 4.2 Once archived, drop `flinch-knockback-is-lost-to-rounding`: this
+- [x] 4.2 Once archived, drop `flinch-knockback-is-lost-to-rounding`: this
       change carries its requirement and settles its open question
 
 ## 5. In the game
