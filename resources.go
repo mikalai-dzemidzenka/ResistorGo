@@ -71,6 +71,8 @@ var animTable = []string{
 	"resources/threefour/run-jump.png",
 	"resources/threefour/fall.png",
 	"resources/threefour/push.png",
+	"resources/threefour/battle-low-1-left.png",
+	"resources/threefour/battle-low-1-right.png",
 }
 
 var animIDs = func() map[string]uint8 {

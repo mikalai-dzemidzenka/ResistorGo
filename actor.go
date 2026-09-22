@@ -106,6 +106,19 @@ const (
 	// inside the 35px a swing reaches.
 	PushDistance = 16
 
+	// A clash is two fighters opening low swings at each other in the same
+	// instant: instead of one guarding the other, the two trade blows in a
+	// short exchange both play together. The window is in world ticks, and
+	// well inside the ~13 ticks a low swing takes to reach its hit frame.
+	ClashWindowTicks = 6 // 100 ms
+	ClashStructure   = 0.5
+	ClashSeconds     = 0.7 // to be tuned by eye in play
+	ClashLeftFrames  = 9
+	ClashRightFrames = 10
+	// ClashGap is how far apart the two stand while clashing, the distance the
+	// two sheets' blows are drawn to meet at. A feel number, tuned in play.
+	ClashGap = 24
+
 	// Teams: fighters on the same one are allies - a bot does not pick an ally to
 	// fight, and a swing passes through one. NoTeam is nobody's ally, not even
 	// another fighter with no team, which is what a human is: every bot attacks
@@ -159,6 +172,7 @@ const (
 	StateRunJump
 	StateFall
 	StatePush
+	StateClash
 	// stateCount is one past the last state. A replicated state is checked
 	// against it, so appending a state cannot leave that check behind - it was
 	// left at the death when the run-jump and the fall were appended, and every
@@ -235,6 +249,7 @@ type Actor struct {
 	EnergyUntouched  uint16  // ticks since an attack last reached it, hit or blocked
 	FlinchTicks      uint8   // ticks a hit that did not stun keeps the fighter flickering
 	SwingHit         bool    // this fighter's current swing has already landed
+	SwingTick        uint32  // the world tick this fighter last opened a swing; the authority's alone
 	PushDone         bool    // this fighter's current shove has already moved someone
 	PushStuck        *Actor  // the fighter its last shove landed on; not shoved again until the two are apart
 	ShoveLeft        uint8   // pixels a shove still has to carry this fighter
@@ -497,6 +512,13 @@ func (a *Actor) Update(dt float32) {
 		a.updateAttack()
 	case StatePush:
 		a.updatePush()
+	case StateClash:
+		// the exchange is played out, not steered: nothing asked for during it
+		// is carried out, then or after
+		a.Speed.X = 0
+		if a.AnimFinished {
+			a.endClash()
+		}
 	case StateAttacked:
 		// no AttackDash cap here: that is the lunge of the fighter doing the
 		// swinging, and capping the one being hit threw StunKnockback away.
@@ -812,7 +834,7 @@ func (a *Actor) DrawAnim() {
 func (a *Actor) updateHorSpeed(dt float32) {
 	var movePressed bool
 	prevOrientation := a.Orientation
-	canMove := a.State != StateAttack && a.State != StateBlock && a.State != StateAttacked && a.State != StatePush && a.Updown != 3
+	canMove := a.State != StateAttack && a.State != StateBlock && a.State != StateAttacked && a.State != StatePush && a.State != StateClash && a.Updown != 3
 	if a.Input.Right && !(a.State == StateTurnover && prevOrientation == 1) && canMove {
 		movePressed = true
 		if abs(a.Speed.X) < 0.001 {
@@ -1059,6 +1081,9 @@ func (a *Actor) enterAttackState() bool {
 	}
 	a.spendEnergy(EnergySwing)
 	a.State = StateAttack
+	if a.W != nil {
+		a.SwingTick = a.W.Tick
+	}
 	a.stopFlicker()
 	a.SwingHit = false
 	a.Events |= EvAttackStart
@@ -1097,11 +1122,12 @@ func (a *Actor) restoreStructure(amount float32) {
 // animation is what carries the fighter over the ledge it grabbed, and one that
 // turned halfway up would mantle one way while facing the other. A broken
 // fighter has stopped being part of the fight, so nothing it can still see
-// turns it: the fall would spin on the spot while it played out. Every turn a
+// turns it: the fall would spin on the spot while it played out. A clash is
+// played out facing the other fighter, whatever either one asks. Every turn a
 // player or a bot asks for goes through here so the rule cannot be missed by a
 // new caller.
 func (a *Actor) face(orientation int8) {
-	if a.State == StateClimb || a.State == StateDeath {
+	if a.State == StateClimb || a.State == StateDeath || a.State == StateClash {
 		return
 	}
 	a.Orientation = orientation
@@ -1325,7 +1351,7 @@ func (a *Actor) crowding() *Actor {
 		a.PushStuck = nil
 	}
 	for _, other := range a.W.Actors {
-		if other == a || other == a.PushStuck || other.State == StateDeath || !other.OnGround || a.allyOf(other) {
+		if other == a || other == a.PushStuck || other.State == StateDeath || other.State == StateClash || !other.OnGround || a.allyOf(other) {
 			continue
 		}
 		if a.crossing(other) || other.crossing(a) {
@@ -1598,12 +1624,23 @@ func (a *Actor) updateAttack() {
 	}
 	r1, _ := a.attackBoxAt(a.Updown, a.Pos)
 
+	// An opening low swing answered by another in time is a clash, not a hit
+	// and a block. It is looked for before the hits, or the answering fighter
+	// would already be thrown into a block by the time it is asked.
+	if a.W.Authority && a.openingLowSwing() {
+		for _, actor := range a.W.Actors {
+			if tryClash(a, actor) {
+				return
+			}
+		}
+	}
+
 	// only the authoritative world decides hits and blocks, and one swing
 	// lands on a given fighter at most once
 	if a.W.Authority && !a.SwingHit {
 		for _, actor := range a.W.Actors {
-			if a == actor || actor.State == StateDeath || actor.State == StateAttacked || a.allyOf(actor) {
-				continue // an ally is passed through: no hit, no block
+			if a == actor || actor.State == StateDeath || actor.State == StateAttacked || actor.State == StateClash || a.allyOf(actor) {
+				continue // an ally, or a clash, is passed through: no hit, no block
 			}
 			r2 := actor.collisionRect()
 			if !aabb(r1, r2) {
@@ -1702,6 +1739,11 @@ func (a *Actor) updateAttack() {
 }
 
 func (a *Actor) updateBlock() {
+	// a low swing asked for from the block a low swing threw it into, in time,
+	// is an answer to that swing: the two clash
+	if a.Input.Attack && a.Attacker != nil && tryClash(a.Attacker, a) {
+		return
+	}
 	if a.Attacker == nil {
 		a.exitBlockState()
 		a.enterIdleState()
