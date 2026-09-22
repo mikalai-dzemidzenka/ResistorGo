@@ -65,11 +65,11 @@
 
 ## 5. In the game
 
-- [ ] 5.1 Build with `build.ps1`; in single player, stand at arm's length from
+- [x] 5.1 Build with `build.ps1`; in single player, stand at arm's length from
       a bot and swing low as it swings low; tune `ClashGap` until the punch
       and the knee meet, and `ClashSeconds` until the exchange reads at speed
-- [ ] 5.2 Try the window by hand: a clash when pressing just after a bot's low
+- [x] 5.2 Try the window by hand: a clash when pressing just after a bot's low
       swing starts, none when noticeably late; tune `ClashWindowTicks` if it
       feels off
-- [ ] 5.3 With two bots on the player, clash with one while the other swings;
+- [x] 5.3 With two bots on the player, clash with one while the other swings;
       verify its swing passes through and neither fighter flashes
