@@ -237,6 +237,7 @@ func loadTexBytes(name string, data []byte) bool {
 	}
 	img := rl.LoadImageFromMemory(path.Ext(name), data, int32(len(data)))
 	resources[name] = rl.LoadTextureFromImage(img)
+	texMasks[name] = maskOf(img)
 	rl.UnloadImage(img)
 	return true
 }
