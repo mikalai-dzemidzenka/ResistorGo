@@ -29,3 +29,7 @@
 - [ ] 5.1 Run the game. Check: menu music plays and loops; the music fades out when Single Player starts and fades back in on Escape to the menu; the menu and level look unchanged at 1280x720.
 - [ ] 5.2 Open Options. Check that each control applies at once: the volume slider changes the playing music without a restart; the window size list resizes the window and the game fills it; fullscreen fills the monitor letterboxed. Check that buttons still activate under the cursor in fullscreen and at 1920x1080, and that the in-level attack cursor still tracks the mouse.
 - [ ] 5.3 Set volume 30 and fullscreen on, leave Options, restart the game, and check it starts fullscreen at volume 30. Delete `settings.json`, restart, and check it starts with defaults. Put malformed text in `settings.json`, restart, and check it still starts.
+
+## Superseded in part
+
+- [ ] Its "Music stops during a match" requirement (the level left silent) is replaced by `level-music`, which plays a level track during a match. Archive this change before `level-music`, whose delta then becomes a MODIFIED of that requirement
