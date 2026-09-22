@@ -36,3 +36,7 @@
 - [ ] 5.4 Confirm a stun still locks out in play: take the third hit of a run, click during the freeze, and confirm nothing comes out during or at the end of the stun.
 - [ ] 5.5 Confirm chaining feels unchanged: run a few chains with no hit involved and check the click still registers from anywhere in the swing, not only late in it.
 - [ ] 5.6 Play a networked match against the dedicated server (`go run ./cmd -dedicated` plus a client): confirm a click during hit-stop produces one attack on both screens with no correction spike, under `F5`–`F8` latency simulation, and that an older client is refused at the handshake.
+
+## Before archiving
+
+- [ ] Merge the `structure` delta by hand, not by replacing the block: `move-while-swinging` (archived 2026-09-23) rewrote "A landed hit costs structure and flinches" after this delta was written. Keep its knockback paragraph ("The knockback SHALL move the fighter ...") and its two scenarios (`The small knockback actually moves the fighter`, `A flinch stays smaller than a stun`) alongside this change's edits; verify with `openspec validate --specs --strict`

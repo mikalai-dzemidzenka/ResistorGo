@@ -1,3 +1,8 @@
+> **Superseded (2026-09-23).** Settled by `move-while-swinging`, which took the
+> second option - horizontal position keeps its fraction - and carries this
+> change's `structure` requirement and scenarios. Archived without syncing its
+> delta, which that change already applied.
+
 ## Why
 
 A flinch does not move a fighter. *A landed hit costs structure and flinches* promises "a small knockback", and its scenario says the fighter "is knocked back slightly". It travels zero pixels.
