@@ -209,6 +209,7 @@ const OfflineBots = 3
 // startOffline starts single player: one authoritative world, the local fighter
 // and OfflineBots bots on the free spawn columns beside it.
 func startOffline() {
+	clearBlood()
 	NetMode = NetOffline
 	CL = newOfflineWorld()
 	enterLevel()
@@ -230,6 +231,7 @@ func newOfflineWorld() *World {
 // the match it recorded.
 func restartOffline() {
 	ResetTime()
+	clearBlood()
 	clearLatchedInput()
 	startOffline()
 }
@@ -257,6 +259,7 @@ func leaveMatch(reason string, screen int) {
 	CL, SV = nil, nil
 	NetMode = NetOffline
 	ResetTime()
+	clearBlood()
 	Editing = false
 	Stage = StageMainMenu
 	menuScreen = screen
@@ -384,6 +387,7 @@ func runLevel(dt float32) {
 			return
 		}
 	}
+	updateBlood(CL, LE.solids, LE.objectsIndexed, dt)
 	w := CL
 	local := w.Local
 
@@ -428,6 +432,8 @@ func runLevel(dt float32) {
 		rl.BeginMode2D(Cam.View())
 
 		LE.Draw() // TODO sort objects with actors
+		view := viewRect(Cam.View(), float32(ScreenFullTexture.Texture.Width), float32(ScreenFullTexture.Texture.Height))
+		drawStains(w, view) // on the level, under the fighters, lit like both
 
 		// sort a copy: the simulation order of w.Actors must stay stable
 		drawList = append(drawList[:0], w.Actors...)
@@ -445,6 +451,7 @@ func runLevel(dt float32) {
 				a.Draw()
 			}
 		}
+		drawDroplets(view) // over the fighters, still in the lit scene
 		if DevTools && Debug && Srv != nil {
 			for _, r := range Srv.LastRewound {
 				rl.DrawRectangleLinesEx(r, 1, rl.Orange)
