@@ -65,13 +65,13 @@
 
 ## 4. In the game
 
-- [ ] 4.1 Build with `build.ps1`; in single player, beat a bot, press T, scrub
+- [x] 4.1 Build with `build.ps1`; in single player, beat a bot, press T, scrub
       back to before its last hit, press T; verify it stands and fights on
       without teleporting or falling
-- [ ] 4.2 Die, respawn, rewind past the death and resume; verify you play the
+- [x] 4.2 Die, respawn, rewind past the death and resume; verify you play the
       old fighter, the camera follows it, and the energy cursor is its own
-- [ ] 4.3 Scrub back and forth across a kill and a respawn; verify fighters
+- [x] 4.3 Scrub back and forth across a kill and a respawn; verify fighters
       appear and vanish on the frames they entered and left, and no hit sound
       or flash replays when scrubbing over a hit
-- [ ] 4.4 Press R while the mode is on and after a resume; verify the level
+- [x] 4.4 Press R while the mode is on and after a resume; verify the level
       restarts cleanly with no history
