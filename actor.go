@@ -106,6 +106,26 @@ const (
 	// inside the 35px a swing reaches.
 	PushDistance = 16
 
+	// A clash is two fighters opening low swings at each other in the same
+	// instant: instead of one guarding the other, the two trade blows in a
+	// short exchange both play together. The window is in world ticks, and
+	// well inside the ~13 ticks a low swing takes to reach its hit frame.
+	ClashWindowTicks = 6 // 100 ms
+	ClashStructure   = 0.5
+	ClashSeconds     = 0.7 // to be tuned by eye in play
+	ClashLeftFrames  = 9
+	ClashRightFrames = 10
+	// ClashGap is how far apart the two stand while clashing, the distance the
+	// two sheets' blows are drawn to meet at. A feel number, tuned in play.
+	ClashGap = 24
+
+	// Teams: fighters on the same one are allies - a bot does not pick an ally to
+	// fight, and a swing passes through one. NoTeam is nobody's ally, not even
+	// another fighter with no team, which is what a human is: every bot attacks
+	// it, and humans can still fight each other. Every bot starts on BotTeam.
+	NoTeam  = 0
+	BotTeam = 1
+
 	// One in three: the odds a bot answers a landed hit by moving its guard to
 	// the height that hit it. A feel number, to be turned by eye in play.
 	GuardAdaptOdds = 3
@@ -152,6 +172,7 @@ const (
 	StateRunJump
 	StateFall
 	StatePush
+	StateClash
 	// stateCount is one past the last state. A replicated state is checked
 	// against it, so appending a state cannot leave that check behind - it was
 	// left at the death when the run-jump and the fall were appended, and every
@@ -171,6 +192,10 @@ const (
 	EvNoEnergy
 )
 
+// Time manipulation records a fighter by copying its value, and restores it by
+// copying that back. So an Actor holds no slice or map, and no pointer to
+// anything that changes, other than the fighters and world it belongs to: a
+// recorded frame would share it with the live match.
 type Actor struct {
 	ID               uint16
 	W                *World
@@ -185,7 +210,6 @@ type Actor struct {
 	Friction         float32
 	Orientation      int8
 	State            ActorState
-	RewindData       [RewindFrames]ActorRewindFrame
 	CollisionBox     rl.Rectangle
 	AttackBoxHigh    rl.Rectangle
 	AttackBoxMid     rl.Rectangle
@@ -225,6 +249,7 @@ type Actor struct {
 	EnergyUntouched  uint16  // ticks since an attack last reached it, hit or blocked
 	FlinchTicks      uint8   // ticks a hit that did not stun keeps the fighter flickering
 	SwingHit         bool    // this fighter's current swing has already landed
+	SwingTick        uint32  // the world tick this fighter last opened a swing; the authority's alone
 	PushDone         bool    // this fighter's current shove has already moved someone
 	PushStuck        *Actor  // the fighter its last shove landed on; not shoved again until the two are apart
 	ShoveLeft        uint8   // pixels a shove still has to carry this fighter
@@ -233,9 +258,18 @@ type Actor struct {
 	DeathTicks       uint16  // ticks since the death animation finished
 	DenyUntil        float64 // game time a refused swing stops flashing; local only, never replicated
 	Owner            uint16  // network player this fighter belongs to; 0 for bots
-	// What the bot has in mind. Never replicated and never rewound: it is
-	// worked out afresh by whichever world is actually simulating the match,
-	// and a client is told what the bot did, not what it was thinking. Zero is
+	Team             uint8   // fighters on the same team do not fight; NoTeam is on nobody's
+	// The two places at this fighter: the bot fighting it from the left, and
+	// the one fighting it from the right. Two bots engage a fighter and no
+	// more; the rest wait in line. Like the bot's mind below, this is worked
+	// out by whichever world is simulating the match and is never replicated -
+	// a client is told where the bots went, not whose turn it is. Time
+	// manipulation records and restores it with the rest of the fighter.
+	Engaged [2]*Actor
+	// What the bot has in mind. Never replicated: it is worked out afresh by
+	// whichever world is actually simulating the match, and a client is told
+	// what the bot did, not what it was thinking. Time manipulation records and
+	// restores it with the rest of the fighter. Zero is
 	// a bot with nothing in mind, so a fighter spawning or respawning starts
 	// with a clean one for free.
 	Bot botMind
@@ -284,6 +318,7 @@ func NewActor(pos rl.Vector2, isPlayer bool) *Actor {
 			0, 24, 24, 6,
 		},
 		IsPlayer:        isPlayer,
+		Team:            teamFor(isPlayer),
 		Anim:            "resources/threefour/updown.png",
 		AnimTotalFrames: 1,
 		AnimDuration:    1,
@@ -291,6 +326,70 @@ func NewActor(pos rl.Vector2, isPlayer bool) *Actor {
 		PrevUpdown:      2,
 		Updown:          0,
 	}
+}
+
+// teamFor is the team a fighter starts on: every bot on BotTeam, every human on
+// none.
+func teamFor(isPlayer bool) uint8 {
+	if isPlayer {
+		return NoTeam
+	}
+	return BotTeam
+}
+
+// allyOf reports whether a and b are on the same team.
+func (a *Actor) allyOf(b *Actor) bool {
+	return a.Team != NoTeam && a.Team == b.Team
+}
+
+// placeIndex is which of a fighter's two places belongs to a side: 0 for the
+// left, 1 for the right.
+func placeIndex(side int8) int {
+	if side < 0 {
+		return 0
+	}
+	return 1
+}
+
+// engageSide is which side of t this fighter is on. Two fighters on the same
+// pixel column have no side to be on, and there the facing decides - the same
+// answer pushDir gives a shove thrown at that distance.
+func (a *Actor) engageSide(t *Actor) int8 {
+	if d := a.Pos.X - t.Pos.X; d != 0 {
+		return facing(d)
+	}
+	return a.Orientation
+}
+
+// holdsPlace reports whether this bot is standing in the place it last took.
+// The fighter's own pair is the only record of who holds what; the bot's side
+// only says which of the two to look in, so the two cannot drift apart.
+func (a *Actor) holdsPlace() bool {
+	t := a.Bot.target
+	return t != nil && t.Engaged[placeIndex(a.Bot.side)] == a
+}
+
+// releasePlace gives up the place this bot holds, if it holds one.
+//
+// It does not forget the target. A bot whose turn at the front is over is still
+// fighting the same fighter - it goes to the back of the line and waits for
+// another - and leaveFight is what ends that.
+func (a *Actor) releasePlace() {
+	t := a.Bot.target
+	if t == nil {
+		return
+	}
+	if i := placeIndex(a.Bot.side); t.Engaged[i] == a {
+		t.Engaged[i] = nil
+	}
+	a.Bot.holdTicks = 0
+}
+
+// leaveFight gives up both the place and the fighter it was held at: this bot
+// is no longer in that fight at all, at the front of it or in the line.
+func (a *Actor) leaveFight() {
+	a.releasePlace()
+	a.Bot.target, a.Bot.side = nil, 0
 }
 
 // Update advances the actor by one fixed tick using a.Input.
@@ -340,11 +439,12 @@ func (a *Actor) Update(dt float32) {
 	a.updateVertSpeed(dt)
 	a.updateFalling()
 
-	// Two fighters cannot stand in one another: whichever is on its feet and free
-	// - standing, walking or running - turns on the other and shoves it off. One
-	// already swinging, blocking, stunned or still flinching from a hit finishes
-	// that first, and one guarding everything stands its ground. The first to
-	// qualify shoves, and the stun it throws keeps the other from shoving back.
+	// Two fighters who are not allies cannot stand in one another: whichever is
+	// on its feet and free - standing, walking or running - turns on the other
+	// and shoves it off. One already swinging, blocking, stunned or still
+	// flinching from a hit finishes that first, and one guarding everything
+	// stands its ground. The first to qualify shoves, and the stun it throws
+	// keeps the other from shoving back.
 	if (a.State == StateIdle || a.State == StateRun) && a.OnGround && a.Updown != 3 && a.FlinchTicks == 0 {
 		if other := a.crowding(); other != nil {
 			a.enterPushState(other)
@@ -412,6 +512,13 @@ func (a *Actor) Update(dt float32) {
 		a.updateAttack()
 	case StatePush:
 		a.updatePush()
+	case StateClash:
+		// the exchange is played out, not steered: nothing asked for during it
+		// is carried out, then or after
+		a.Speed.X = 0
+		if a.AnimFinished {
+			a.endClash()
+		}
 	case StateAttacked:
 		// no AttackDash cap here: that is the lunge of the fighter doing the
 		// swinging, and capping the one being hit threw StunKnockback away.
@@ -504,28 +611,6 @@ func animFrame(once, reverse bool, start, total uint8, duration, elapsed float64
 	return start + frame, false
 }
 
-// recordRewind writes the actor's state into the frame the recording is open
-// on. Called once per live fixed step, before the step runs.
-func (a *Actor) recordRewind() {
-	a.RewindData[rewindSlot(rewindHead)] = ActorRewindFrame{
-		Pos:         a.Pos,
-		Speed:       a.Speed,
-		Orientation: a.Orientation,
-		Anim:        a.Anim,
-		AnimFrame:   a.AnimCurrentFrame,
-	}
-}
-
-// restoreRewind puts the actor back onto the frame the playhead is on. The
-// previous position goes with it: nothing is in motion on a recorded frame, so
-// there is nothing to interpolate from.
-func (a *Actor) restoreRewind() {
-	data := a.RewindData[rewindSlot(rewindCursor)]
-	a.Pos = data.Pos
-	a.PrevPos = data.Pos
-	a.Speed = data.Speed
-	a.Orientation = data.Orientation
-}
 func (a *Actor) UpdatePhysics() {}
 
 // drawPos is the sprite's position rounded to whole world pixels. Interpolation
@@ -540,15 +625,10 @@ func (a *Actor) Draw() {
 	if a.deathHidden() {
 		return
 	}
-	if TimeShowsHistory() {
-		tex, src, pos := a.spriteDraw()
-		rl.DrawTextureRec(tex, src, pos, rl.White)
+	if a.AnimOnce {
+		a.DrawAnimOnce()
 	} else {
-		if a.AnimOnce {
-			a.DrawAnimOnce()
-		} else {
-			a.DrawAnim()
-		}
+		a.DrawAnim()
 	}
 
 	if DevTools && Debug {
@@ -656,18 +736,8 @@ func (a *Actor) DrawFrame() {
 // spriteDraw is the texture, source rectangle and position this fighter's
 // sprite is drawn with on this frame. The outline and rim passes draw the same
 // sprite a second time, so they must read it from one place or they would drift
-// and trace a pose the fighter is not in. While time shows history it is the
-// recorded frame.
+// and trace a pose the fighter is not in.
 func (a *Actor) spriteDraw() (rl.Texture2D, rl.Rectangle, rl.Vector2) {
-	if TimeShowsHistory() {
-		data := a.RewindData[rewindSlot(rewindCursor)]
-		return resources[data.Anim], rl.Rectangle{
-			X:      float32(data.AnimFrame) * 48,
-			Y:      0,
-			Width:  48 * float32(a.Orientation),
-			Height: 48,
-		}, a.drawPos()
-	}
 	tex := resources[a.Anim]
 	pos := a.drawPos()
 	height := float32(48)
@@ -712,11 +782,10 @@ func (a *Actor) topAnim() (string, bool) {
 // same frame of the top layer's sheet, at the same place as the body. The
 // drawing and the rim both take it from here, so the rim cannot trace a
 // silhouette the fighter is not showing. ok is false when the fighter has no
-// top layer, and while time shows history - a recorded frame holds the body
-// animation alone.
+// top layer.
 func (a *Actor) topDraw() (tex rl.Texture2D, src rl.Rectangle, pos rl.Vector2, ok bool) {
 	anim, has := a.topAnim()
-	if !has || TimeShowsHistory() {
+	if !has {
 		return tex, src, pos, false
 	}
 	tex, ok = resources[anim]
@@ -765,7 +834,7 @@ func (a *Actor) DrawAnim() {
 func (a *Actor) updateHorSpeed(dt float32) {
 	var movePressed bool
 	prevOrientation := a.Orientation
-	canMove := a.State != StateAttack && a.State != StateBlock && a.State != StateAttacked && a.State != StatePush && a.Updown != 3
+	canMove := a.State != StateAttack && a.State != StateBlock && a.State != StateAttacked && a.State != StatePush && a.State != StateClash && a.Updown != 3
 	if a.Input.Right && !(a.State == StateTurnover && prevOrientation == 1) && canMove {
 		movePressed = true
 		if abs(a.Speed.X) < 0.001 {
@@ -1012,6 +1081,9 @@ func (a *Actor) enterAttackState() bool {
 	}
 	a.spendEnergy(EnergySwing)
 	a.State = StateAttack
+	if a.W != nil {
+		a.SwingTick = a.W.Tick
+	}
 	a.stopFlicker()
 	a.SwingHit = false
 	a.Events |= EvAttackStart
@@ -1050,11 +1122,12 @@ func (a *Actor) restoreStructure(amount float32) {
 // animation is what carries the fighter over the ledge it grabbed, and one that
 // turned halfway up would mantle one way while facing the other. A broken
 // fighter has stopped being part of the fight, so nothing it can still see
-// turns it: the fall would spin on the spot while it played out. Every turn a
+// turns it: the fall would spin on the spot while it played out. A clash is
+// played out facing the other fighter, whatever either one asks. Every turn a
 // player or a bot asks for goes through here so the rule cannot be missed by a
 // new caller.
 func (a *Actor) face(orientation int8) {
-	if a.State == StateClimb || a.State == StateDeath {
+	if a.State == StateClimb || a.State == StateDeath || a.State == StateClash {
 		return
 	}
 	a.Orientation = orientation
@@ -1254,6 +1327,13 @@ func (a *Actor) Flickering() bool {
 // crowding returns a living fighter on its feet whose collision box overlaps
 // this one's, in front or behind.
 //
+// Never a teammate: a shove is something done to an enemy, and fighters on one
+// team walk through one another rather than throw each other off. Bots hold
+// formation and move as a crowd, which shoving them apart never let them do.
+//
+// Never a bot on its way round to the far side of this one either, nor the
+// fighter it is walking round - see Actor.crossing.
+//
 // Only one on its feet: a shove is a thing done on the ground, to someone on
 // it. A fighter passing through in the air - jumping up past a ledge another
 // stands on, most often - is left to land first. Shoving it out of the air
@@ -1271,7 +1351,10 @@ func (a *Actor) crowding() *Actor {
 		a.PushStuck = nil
 	}
 	for _, other := range a.W.Actors {
-		if other == a || other == a.PushStuck || other.State == StateDeath || !other.OnGround {
+		if other == a || other == a.PushStuck || other.State == StateDeath || other.State == StateClash || !other.OnGround || a.allyOf(other) {
+			continue
+		}
+		if a.crossing(other) || other.crossing(a) {
 			continue
 		}
 		if aabb(a.collisionRect(), other.collisionRect()) {
@@ -1321,7 +1404,10 @@ func (a *Actor) updatePush() {
 	if a.W != nil && !a.PushDone && a.AnimCurrentFrame >= PushFrame {
 		a.PushDone = true
 		for _, other := range a.W.Actors {
-			if other == a || other.State == StateDeath {
+			if other == a || other.State == StateDeath || a.allyOf(other) {
+				continue
+			}
+			if a.crossing(other) || other.crossing(a) {
 				continue
 			}
 			if !aabb(a.collisionRect(), other.collisionRect()) {
@@ -1344,7 +1430,9 @@ func (a *Actor) updatePush() {
 // the game moves in whole pixels, truncating every tick, so a speed that slows
 // under a pixel a tick never moves anyone, and the tail of any slide is lost.
 func (a *Actor) shove(other *Actor) {
-	other.enterShovedState(a)
+	if !a.allyOf(other) {
+		other.enterShovedState(a)
+	}
 	other.Speed.X = 0
 	other.ShoveLeft, other.ShoveDir = PushDistance, a.pushDir(other)
 }
@@ -1396,6 +1484,13 @@ func (a *Actor) enterDeathState(attacker *Actor) {
 	a.AnimWhite = false
 	a.Speed = rl.Vector2{}
 	a.AttackQueued, a.BufAttack, a.BufJump = false, false, false
+	// The fallen are out of every fight at once: the place this one held at
+	// whoever it was fighting, and the two at itself that its own attackers
+	// hold. Waiting for the removal to do it leaves a body that stays on the
+	// floor holding a place forever, and the bots behind it waiting forever
+	// for a turn at the front that never comes.
+	a.leaveFight()
+	a.Engaged = [2]*Actor{}
 	if attacker != nil {
 		attacker.FreezeTicks = HitStopTicks
 		attacker.restoreEnergy(MaxEnergy) // a kill puts the winner straight back in the fight
@@ -1407,9 +1502,10 @@ func (a *Actor) enterDeathState(attacker *Actor) {
 }
 
 // updateDeath plays the fall out, then counts the flicker off before the
-// authority takes the body out of the world. A client waits to be told.
+// authority takes the body out of the world. A client waits to be told. A bot
+// in a world where bots stay dead stops at the end of the fall, and lies there.
 func (a *Actor) updateDeath() {
-	if !a.AnimFinished {
+	if !a.AnimFinished || a.W != nil && a.W.BotsStayDead && !a.IsPlayer {
 		return
 	}
 	a.DeathTicks++
@@ -1528,12 +1624,23 @@ func (a *Actor) updateAttack() {
 	}
 	r1, _ := a.attackBoxAt(a.Updown, a.Pos)
 
+	// An opening low swing answered by another in time is a clash, not a hit
+	// and a block. It is looked for before the hits, or the answering fighter
+	// would already be thrown into a block by the time it is asked.
+	if a.W.Authority && a.openingLowSwing() {
+		for _, actor := range a.W.Actors {
+			if tryClash(a, actor) {
+				return
+			}
+		}
+	}
+
 	// only the authoritative world decides hits and blocks, and one swing
 	// lands on a given fighter at most once
 	if a.W.Authority && !a.SwingHit {
 		for _, actor := range a.W.Actors {
-			if a == actor || actor.State == StateDeath || actor.State == StateAttacked {
-				continue
+			if a == actor || actor.State == StateDeath || actor.State == StateAttacked || actor.State == StateClash || a.allyOf(actor) {
+				continue // an ally, or a clash, is passed through: no hit, no block
 			}
 			r2 := actor.collisionRect()
 			if !aabb(r1, r2) {
@@ -1632,6 +1739,11 @@ func (a *Actor) updateAttack() {
 }
 
 func (a *Actor) updateBlock() {
+	// a low swing asked for from the block a low swing threw it into, in time,
+	// is an answer to that swing: the two clash
+	if a.Input.Attack && a.Attacker != nil && tryClash(a.Attacker, a) {
+		return
+	}
 	if a.Attacker == nil {
 		a.exitBlockState()
 		a.enterIdleState()

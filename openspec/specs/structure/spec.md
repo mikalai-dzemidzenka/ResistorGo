@@ -85,7 +85,7 @@ When a fighter has not lost structure for 1.5 seconds, its structure SHALL refil
 - **THEN** its structure never regenerates, and it is stunned on every third hit
 
 ### Requirement: Breaking structure kills
-Structure reaching zero SHALL put the fighter into a Death state, whether the last cost came from a hit or from block-all. In the Death state the fighter SHALL play the death animation once, SHALL NOT act, SHALL NOT be hit or blocked by anyone, and SHALL NOT take further structure changes. When the animation finishes the fighter SHALL flicker for about 0.6 seconds and then be removed from the world.
+Structure reaching zero SHALL put the fighter into a Death state, whether the last cost came from a hit or from block-all. In the Death state the fighter SHALL play the death animation once, SHALL NOT act, SHALL NOT be hit or blocked by anyone, and SHALL NOT take further structure changes. When the animation finishes the fighter SHALL flicker for about 0.6 seconds and then be removed from the world, except a bot in a single-player match, which SHALL stay lying where it fell, visible and without flickering, for the rest of the match.
 
 #### Scenario: Twelve hits
 - **WHEN** a fighter takes 12 hits with no regeneration in between
@@ -103,11 +103,15 @@ Structure reaching zero SHALL put the fighter into a Death state, whether the la
 - **WHEN** the death animation finishes
 - **THEN** the fighter flickers in place for about 0.6 seconds and is then no longer in the world
 
+#### Scenario: Single-player bodies stay
+- **WHEN** a bot's death animation finishes in a single-player match
+- **THEN** the body stays where it fell, does not flicker and is never removed
+
 ### Requirement: Respawning
-A fighter removed by death SHALL return 2 seconds later at a spawn position not occupied by another fighter's collision box, with full structure and none of its old state. A player whose fighter died SHALL be given the new fighter and control it; a bot SHALL return as a bot.
+A fighter removed by death SHALL return 2 seconds later at a spawn position not occupied by another living fighter's collision box, with full structure and none of its old state. A player whose fighter died SHALL be given the new fighter and control it; a bot SHALL return as a bot. A bot that dies in a single-player match is never removed, and so never returns.
 
 #### Scenario: Bot returns
-- **WHEN** the only bot in a single-player match dies
+- **WHEN** a bot in a networked match dies
 - **THEN** 2 seconds after it disappears a bot is fighting again, with full structure
 
 #### Scenario: Player returns
@@ -117,6 +121,13 @@ A fighter removed by death SHALL return 2 seconds later at a spawn position not 
 #### Scenario: Nothing carries over
 - **WHEN** a fighter that died while stunned and mid-attack respawns
 - **THEN** it is idle, at full structure, with its hit count back to zero
+
+### Requirement: Restarting a single-player level
+In a single-player match, outside edit mode, R SHALL restart the level: the match SHALL start over as it started from the menu, with the player and every bot alive at full structure on their spawn positions, and the recorded history for time manipulation SHALL be dropped. R SHALL do nothing in a networked match.
+
+#### Scenario: Bodies get back up
+- **WHEN** the player presses R after beating every bot
+- **THEN** the level starts over with the player and all the bots alive
 
 ### Requirement: Structure is decided by the authority
 Structure changes, stuns, structure breaks, deaths and respawns SHALL be decided only by the authoritative simulation, as hits and blocks already are. A client's predicted world SHALL display the structure, Death state and removals it is told about, and SHALL NOT invent them.

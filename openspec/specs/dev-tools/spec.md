@@ -7,7 +7,7 @@ Keeps the developer's tools out of the fight and out of players' hands: the leve
 ## Requirements
 
 ### Requirement: Edit mode is explicit
-In a development build, in a single-player match, F2 SHALL toggle edit mode: pressing it while edit mode is off turns it on, pressing it again turns it off. F2 SHALL do nothing in a networked match and while time manipulation is on. While edit mode is on, R SHALL do nothing.
+In a development build, in a single-player match, F2 SHALL toggle edit mode: pressing it while edit mode is off turns it on, pressing it again turns it off. F2 SHALL do nothing in a networked match and while time manipulation is on. While edit mode is on, T and R SHALL do nothing.
 
 #### Scenario: Enter and leave
 - **WHEN** the player presses F2 in a single-player match, then presses it again
@@ -22,8 +22,12 @@ In a development build, in a single-player match, F2 SHALL toggle edit mode: pre
 - **THEN** edit mode stays off
 
 #### Scenario: No time manipulation while editing
-- **WHEN** the player presses R while edit mode is on
+- **WHEN** the player presses T while edit mode is on
 - **THEN** time manipulation does not start
+
+#### Scenario: No restart while editing
+- **WHEN** the player presses R while edit mode is on
+- **THEN** the level is not restarted
 
 ### Requirement: Edit mode pauses the match
 While edit mode is on, the match SHALL be paused: no fighter physics, no animation, no bot decisions, and no fighter input applied. No input SHALL be buffered for when edit mode is left, and leaving it SHALL NOT produce a burst of catch-up simulation.

@@ -118,7 +118,7 @@ The server SHALL maintain the configured number of bot fighters. Bots SHALL be s
 While in a networked match (host or client), time manipulation, the level editor and writing the level file SHALL be disabled. In a development build, debug overlays SHALL remain available; a release build has none.
 
 #### Scenario: Rewind key online
-- **WHEN** a player in a networked match presses R
+- **WHEN** a player in a networked match presses T
 - **THEN** nothing is paused or rewound and gameplay continues normally
 
 #### Scenario: Level not saved

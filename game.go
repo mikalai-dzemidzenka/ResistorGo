@@ -210,12 +210,28 @@ const OfflineBots = 3
 // and OfflineBots bots on the free spawn columns beside it.
 func startOffline() {
 	NetMode = NetOffline
-	CL = NewWorld(true)
-	CL.Local = CL.Spawn(rl.Vector2{}, true)
-	for range OfflineBots {
-		CL.Spawn(CL.spawnPos(), false)
-	}
+	CL = newOfflineWorld()
 	enterLevel()
+}
+
+// newOfflineWorld builds the single-player match as it stands at the start.
+func newOfflineWorld() *World {
+	w := NewWorld(true)
+	w.BotsStayDead = true
+	w.Local = w.Spawn(rl.Vector2{}, true)
+	for range OfflineBots {
+		w.Spawn(w.spawnPos(), false)
+	}
+	return w
+}
+
+// restartOffline starts the single-player level over: every fighter back on
+// its spawn, the fallen bots with them, and the recorded history dropped with
+// the match it recorded.
+func restartOffline() {
+	ResetTime()
+	clearLatchedInput()
+	startOffline()
 }
 
 func enterLevel() {
@@ -266,9 +282,7 @@ func stepOffline(dt float32) {
 		PhysicsTime += FixedTimeStep
 		CL.Tick++
 		CL.updateRespawns()
-		rewindRecord()
 		for _, actor := range CL.Actors {
-			actor.recordRewind()
 			if actor.IsPlayer {
 				// A death nils CL.Local through World.Remove, and the respawn
 				// spawns a fighter nothing points at. Adopting it here is the
@@ -286,6 +300,10 @@ func stepOffline(dt float32) {
 			}
 			actor.Update(float32(FixedTimeStep))
 		}
+		// The frame is the match after the step, so the newest one is exactly
+		// what is on screen.
+		rewindRecord()
+		captureFrame(CL)
 		Accumulator -= FixedTimeStep
 	}
 }
@@ -349,12 +367,13 @@ func runLevel(dt float32) {
 		if DevTools && rl.IsKeyPressed(rl.KeyF2) {
 			toggleEditing(true, TimeMode != TimeOff)
 		}
+		if rl.IsKeyPressed(RestartKey) && !Editing {
+			restartOffline()
+		}
 		// Time manipulation is single player only, and holds the simulation
 		// while it is on: no step, and no dt banked up for one either.
-		if UpdateTime(rl.IsKeyPressed(rl.KeyR), rl.GetMouseDelta().X, dt) {
-			for _, actor := range CL.Actors {
-				actor.restoreRewind()
-			}
+		if UpdateTime(rl.IsKeyPressed(TimeKey), rl.GetMouseDelta().X, dt) {
+			restoreFrame(CL)
 		}
 		if !matchHeld() {
 			stepOffline(dt)
