@@ -26,3 +26,9 @@ While a match is on, a level track SHALL loop in place of silence: in single pla
 #### Scenario: Volume applies
 - **WHEN** the music volume is set to 0
 - **THEN** the level track is inaudible during a match
+
+## REMOVED Requirements
+
+### Requirement: Music stops during a match
+**Reason**: The level is no longer silent: a level track plays during a match, as "Level music" requires.
+**Migration**: The menu music still fades out when a match starts and back in on returning to the menu; that half of this requirement is carried by "Level music".

@@ -7,11 +7,11 @@ Lets players start, host, join and leave networked matches, either on a listen s
 ## Requirements
 
 ### Requirement: Main menu entries
-The game SHALL boot into the main menu. The menu SHALL offer Single Player, Host Game, Join Game and Quit, selectable with the mouse. The mouse cursor SHALL be visible and usable while the menu is shown.
+The game SHALL boot into the main menu. The menu SHALL offer Single Player, Host Game, Join Game, Options and Quit, selectable with the mouse. The mouse cursor SHALL be visible and usable while the menu is shown.
 
 #### Scenario: Boot shows the menu
 - **WHEN** the game is started without the dedicated-server flag
-- **THEN** the animated main menu is displayed with the entries Single Player, Host Game, Join Game and Quit
+- **THEN** the animated main menu is displayed with the entries Single Player, Host Game, Join Game, Options and Quit
 
 #### Scenario: Single player unchanged
 - **WHEN** the user selects Single Player

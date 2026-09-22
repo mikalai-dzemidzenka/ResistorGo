@@ -41,3 +41,7 @@ after a match, and the run of the release build.
 - [ ] 6.3 Start a match, open the level editor and confirm its widgets are in the editor's dark style, not the menu's reds.
 - [x] 6.4 Tune the rain's weight and the sweeping band's speed and alpha by eye in play — they read differently in motion than in a capture — and record any values that change in design.md, closing its open question. The rain was judged too faint in the release build and was raised (streaks, body alpha, length, and a brighter tip of its own); the new weight was checked in a capture of the development build. The band was left as it was. Verified by the values recorded in design.md and by `go test ./` passing with the rain's tip named in the scene's red-set test.
 - [ ] 6.5 Build the release binary with `.\build.ps1` and confirm it packs, then run it and confirm the menu is the same as the development build's.
+
+## Before archiving
+
+- [ ] Merge the `main-menu` delta by hand, not by replacing blocks: `add-menu-music-and-options` (archived 2026-09-23) rewrote "Pixel-art menu scene" and "Menu widgets fit inside the menu panel" after this delta was written - the virtual screen instead of the window, and the Options screen with its fullscreen, window size and music volume rows. Keep those edits alongside this change's; verify with `openspec validate --specs --strict`

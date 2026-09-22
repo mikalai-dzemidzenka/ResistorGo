@@ -17,7 +17,7 @@
 
 - [x] 2.1 Add a task to `add-menu-music-and-options`: its "Music stops during
       a match" is replaced by `level-music`, which must be archived after it
-- [ ] 2.2 When archiving: archive `add-menu-music-and-options` first, then turn
+- [x] 2.2 When archiving: archive `add-menu-music-and-options` first, then turn
       this delta into a MODIFIED of "Music stops during a match" and sync it
 - [x] 2.3 Run `go test ./...` and `go test -tags release ./...`; build with
       `build.ps1`. `TestOnlyTheMenuTrackIsEmbedded` pinned the menu
