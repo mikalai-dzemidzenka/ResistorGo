@@ -45,5 +45,5 @@
       silent
 - [x] 5.4 Run `go test ./...` and `go test -tags release ./...`; build with
       `build.ps1`
-- [ ] 5.5 In the game: block a bot's swings high, low and with block-all -
+- [x] 5.5 In the game: block a bot's swings high, low and with block-all -
       each is heard; as a client and a spectator likewise
