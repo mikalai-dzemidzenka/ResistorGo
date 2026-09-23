@@ -8,6 +8,7 @@ import (
 	"image"
 	"image/color"
 	"image/png"
+	"math/bits"
 	"testing"
 
 	rl "github.com/gen2brain/raylib-go/raylib"
@@ -449,4 +450,87 @@ func TestBloodDoesNotHangInTheVoid(t *testing.T) {
 		}
 	}
 	clearBlood()
+}
+
+// A droplet is a clump of pixels in one piece, and splashes out into a bigger
+// one where it lands - never bigger than a blot can hold.
+func TestBloodIsClumps(t *testing.T) {
+	clearBlood()
+	t.Cleanup(clearBlood)
+	for range 500 {
+		n := blood.rng.Intn(10)
+		bl := blood.grow(0, n)
+		if !bl.has(0, 0) {
+			t.Fatal("a clump without its center")
+		}
+		// every pixel is reached from the center through covered pixels
+		seen := blotCenter
+		for grew := true; grew; {
+			grew = false
+			bl.pixels(func(dx, dy int) {
+				if seen&blotBit(dx, dy) != 0 {
+					return
+				}
+				if seen.has(dx+1, dy) || seen.has(dx-1, dy) || seen.has(dx, dy+1) || seen.has(dx, dy-1) {
+					seen |= blotBit(dx, dy)
+					grew = true
+				}
+			})
+		}
+		if seen != bl {
+			t.Fatalf("clump %025b is in pieces", bl)
+		}
+		if c := bits.OnesCount32(uint32(bl)); c != 1+n {
+			t.Fatalf("grew by %d, got %d pixels, want %d", n, c, 1+n)
+		}
+	}
+}
+
+// Blood on the floor is clumps smeared along it: some stains are more than a
+// pixel, and none of them hangs in the air above the floor.
+func TestBloodClumpsHugTheFloor(t *testing.T) {
+	floor()
+	clearBlood()
+	t.Cleanup(clearBlood)
+	blood.spray(rl.Vector2{X: 0, Y: floorY - 20}, 1, 50)
+	flyFor(BloodLife+1, 0)
+	big := 0
+	for i := range blood.n {
+		s := blood.stainAt(i)
+		if bits.OnesCount32(uint32(s.shape)) > 1 {
+			big++
+		}
+		s.shape.pixels(func(dx, dy int) {
+			if y := int(s.y) + dy; y < floorY-1 {
+				t.Errorf("a stain's pixel at y=%d, above the floor's top at %d", y, floorY)
+			}
+		})
+	}
+	if big == 0 {
+		t.Error("every stain is a single pixel")
+	}
+}
+
+// A clump splashed onto the wall behind covers only the tile's painted pixels.
+func TestBloodClumpsStayOnTheTile(t *testing.T) {
+	floor()
+	clearBlood()
+	t.Cleanup(clearBlood)
+	tiles := backdrop(t, true)
+	splash(tiles)
+	for i := range blood.n {
+		s := blood.stainAt(i)
+		if s.tx == 0 && s.ty == 0 {
+			continue
+		}
+		s.shape.pixels(func(dx, dy int) {
+			if dx == 0 && dy == 0 {
+				return
+			}
+			x, y := int(s.x)+dx, int(s.y)+dy
+			if x < -24 || x >= 24 || y < 0 || y >= 48 {
+				t.Errorf("a streak's clump covers %d,%d, off the tile", x, y)
+			}
+		})
+	}
 }

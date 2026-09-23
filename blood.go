@@ -8,7 +8,7 @@ import (
 )
 
 // Blood is what a landed blow leaves behind: droplets thrown away from it that
-// fly, land on the level and stay there as one-pixel stains. It is the view's
+// fly, land on the level and stay there as small clumps of stain. It is the view's
 // alone - every machine makes its own from the structure drops it is shown,
 // nothing of it is sent, and nothing in the match reads it.
 const (
@@ -32,7 +32,79 @@ const (
 	// BloodStreakMax is how many pixels a streak's tail runs back along the
 	// droplet's flight behind its head.
 	BloodStreakMax = 4
+
+	// A droplet is a clump of 1 to BloodDropMax pixels, and splashes out by 1
+	// to BloodSplatMax more when it lands.
+	BloodDropMax  = 3
+	BloodSplatMax = 4
 )
+
+// A blot is the shape of a clump of blood: which pixels of the 5x5 square
+// around its center it covers, bit (dy+2)*5 + (dx+2). The center is always in.
+type blot uint32
+
+const (
+	blotR      = 2
+	blotSide   = 2*blotR + 1
+	blotCenter = blot(1) << (blotR*blotSide + blotR)
+)
+
+func blotBit(dx, dy int) blot {
+	return blot(1) << ((dy+blotR)*blotSide + dx + blotR)
+}
+
+// has reports whether the blot covers the pixel dx, dy from its center.
+func (bl blot) has(dx, dy int) bool {
+	return dx >= -blotR && dx <= blotR && dy >= -blotR && dy <= blotR && bl&blotBit(dx, dy) != 0
+}
+
+// pixels calls f with every pixel the blot covers, as offsets from its center.
+func (bl blot) pixels(f func(dx, dy int)) {
+	for dy := -blotR; dy <= blotR; dy++ {
+		for dx := -blotR; dx <= blotR; dx++ {
+			if bl.has(dx, dy) {
+				f(dx, dy)
+			}
+		}
+	}
+}
+
+// grow spreads a blot by up to n more pixels, each one next to a pixel it
+// already covers, so a clump stays in one piece.
+func (b *bloodState) grow(bl blot, n int) blot {
+	bl |= blotCenter
+	for ; n > 0; n-- {
+		// the pixels next to the clump, not yet in it
+		var edge [blotSide * blotSide][2]int
+		k := 0
+		for dy := -blotR; dy <= blotR; dy++ {
+			for dx := -blotR; dx <= blotR; dx++ {
+				if !bl.has(dx, dy) && (bl.has(dx+1, dy) || bl.has(dx-1, dy) || bl.has(dx, dy+1) || bl.has(dx, dy-1)) {
+					edge[k] = [2]int{dx, dy}
+					k++
+				}
+			}
+		}
+		if k == 0 {
+			break // the blot is full
+		}
+		p := edge[b.rng.Intn(k)]
+		bl |= blotBit(p[0], p[1])
+	}
+	return bl
+}
+
+// keep is the part of a blot centered on x, y whose pixels pass ok. The center
+// is kept whatever ok says: it is where the droplet came to rest.
+func (bl blot) keep(x, y int, ok func(x, y int) bool) blot {
+	out := blotCenter
+	bl.pixels(func(dx, dy int) {
+		if ok(x+dx, y+dy) {
+			out |= blotBit(dx, dy)
+		}
+	})
+	return out
+}
 
 // bloodReds are the level palette's reds, darkest first.
 var bloodReds = [...]rl.Color{
@@ -47,6 +119,7 @@ type droplet struct {
 	age      float32
 	reach    float32 // seconds before it may splash onto the backdrop
 	red      uint8
+	shape    blot // the clump it flies as
 }
 
 // A stain keeps the world tick it landed on. Time manipulation shows only the
@@ -55,12 +128,14 @@ type droplet struct {
 // needs of it.
 //
 // A stain on the backdrop is a streak: tx, ty is its tail, back along the way
-// the droplet flew. A stain on a floor or a wall it hit has no tail.
+// the droplet flew. A stain on a floor or a wall it hit has no tail. Either is
+// a clump at its head, its shape the droplet's splashed out where it landed.
 type stain struct {
 	x, y   int16
 	tx, ty int8
 	red    uint8
 	tick   uint32
+	shape  blot
 }
 
 // seenFighter is what the blood last saw of a fighter: a drop in structure
@@ -135,6 +210,7 @@ func (b *bloodState) spray(at rl.Vector2, dir float32, n int) {
 			reach: float32(BloodReachMin + b.rng.Float64()*(BloodReachMax-BloodReachMin)),
 			red:   uint8(b.rng.Intn(len(bloodReds))),
 		}
+		d.shape = b.grow(0, b.rng.Intn(BloodDropMax))
 		if len(b.drops) >= BloodDroplets {
 			copy(b.drops, b.drops[1:])
 			b.drops = b.drops[:len(b.drops)-1]
@@ -196,15 +272,39 @@ func paintedAt(tiles []LevelObject, p rl.Vector2) bool {
 }
 
 // streak is the stain a droplet leaves splashing onto the backdrop at p: its
-// head there, its tail up to BloodStreakMax pixels back along its flight.
-func (b *bloodState) streak(d droplet, p rl.Vector2, tick uint32) stain {
-	s := stain{x: int16(math.Floor(float64(p.X))), y: int16(math.Floor(float64(p.Y))), red: d.red, tick: tick}
+// head there, its tail up to BloodStreakMax pixels back along its flight. The
+// head's clump covers only painted pixels, so no blood hangs off a tile's edge.
+func (b *bloodState) streak(d droplet, p rl.Vector2, tiles []LevelObject, tick uint32) stain {
+	x, y := int(math.Floor(float64(p.X))), int(math.Floor(float64(p.Y)))
+	s := stain{x: int16(x), y: int16(y), red: d.red, tick: tick}
+	s.shape = b.splat(d).keep(x, y, func(x, y int) bool {
+		return paintedAt(tiles, rl.Vector2{X: float32(x), Y: float32(y)})
+	})
 	if speed := math.Hypot(float64(d.vel.X), float64(d.vel.Y)); speed > 0 {
 		l := float64(1 + b.rng.Intn(BloodStreakMax))
 		s.tx = int8(math.Round(-float64(d.vel.X) / speed * l))
 		s.ty = int8(math.Round(-float64(d.vel.Y) / speed * l))
 	}
 	return s
+}
+
+// splat is the clump a droplet leaves where it lands: its own, splashed out.
+func (b *bloodState) splat(d droplet) blot {
+	return b.grow(d.shape, 1+b.rng.Intn(BloodSplatMax))
+}
+
+// hug is the stain a droplet leaves stopped by the level's collision at p: its
+// clump covers only the collision and the pixels touching it, smeared along
+// the surface rather than hanging in the air beside it.
+func (b *bloodState) hug(d droplet, p rl.Vector2, solids []rl.Rectangle, tick uint32) stain {
+	x, y := int(math.Floor(float64(p.X))), int(math.Floor(float64(p.Y)))
+	solid := func(x, y int) bool {
+		return pixelSolid(solids, rl.Vector2{X: float32(x) + 0.5, Y: float32(y) + 0.5})
+	}
+	shape := b.splat(d).keep(x, y, func(x, y int) bool {
+		return solid(x, y) || solid(x+1, y) || solid(x-1, y) || solid(x, y+1) || solid(x, y-1)
+	})
+	return stain{x: int16(x), y: int16(y), red: d.red, tick: tick, shape: shape}
 }
 
 // fly moves every droplet on by dt under gravity. One that meets the level's
@@ -229,13 +329,13 @@ func (b *bloodState) fly(solids []rl.Rectangle, tiles []LevelObject, dt float32,
 		for range n {
 			next := rl.Vector2{X: d.pos.X + step.X, Y: d.pos.Y + step.Y}
 			if pixelSolid(solids, next) {
-				b.addStain(stain{x: int16(math.Floor(float64(d.pos.X))), y: int16(math.Floor(float64(d.pos.Y))), red: d.red, tick: tick})
+				b.addStain(b.hug(d, d.pos, solids, tick))
 				landed = true
 				break
 			}
 			d.pos = next
 			if d.age >= d.reach && paintedAt(tiles, d.pos) {
-				b.addStain(b.streak(d, d.pos, tick))
+				b.addStain(b.streak(d, d.pos, tiles, tick))
 				landed = true
 				break
 			}
@@ -352,17 +452,31 @@ func drawStains(w *World, view rl.Rectangle) {
 	for i := range b.n {
 		s := b.stainAt(i)
 		x, y := float32(s.x), float32(s.y)
-		if x < view.X || x >= view.X+view.Width || y < view.Y || y >= view.Y+view.Height || !stainShown(s, w) {
+		const m = max(blotR, BloodStreakMax) // a clump or a tail reaches past its head
+		if x < view.X-m || x >= view.X+view.Width+m || y < view.Y-m || y >= view.Y+view.Height+m || !stainShown(s, w) {
 			continue
 		}
 		drawStain(s)
 	}
 }
 
-// drawStain draws a stain, and a streak as its line of pixels from the head
-// back to the tail, one red darker behind the head.
+// drawBlot draws a clump centered on x, y: its middle in red, its rim - the
+// pixels more than a step from the center - one red darker.
+func drawBlot(bl blot, x, y int32, red uint8) {
+	rim := bloodReds[max(int(red)-1, 0)]
+	(bl | blotCenter).pixels(func(dx, dy int) {
+		col := bloodReds[red]
+		if iabs(dx)+iabs(dy) > 1 {
+			col = rim
+		}
+		rl.DrawRectangle(x+int32(dx), y+int32(dy), 1, 1, col)
+	})
+}
+
+// drawStain draws a stain's clump, and a streak's tail as its line of pixels
+// back from the head, one red darker.
 func drawStain(s *stain) {
-	rl.DrawRectangle(int32(s.x), int32(s.y), 1, 1, bloodReds[s.red])
+	drawBlot(s.shape, int32(s.x), int32(s.y), s.red)
 	n := max(iabs(int(s.tx)), iabs(int(s.ty)))
 	tail := bloodReds[max(int(s.red)-1, 0)]
 	for i := 1; i <= n; i++ {
@@ -379,7 +493,7 @@ func drawDroplets(view rl.Rectangle) {
 		if !rl.CheckCollisionPointRec(d.pos, view) {
 			continue
 		}
-		rl.DrawRectangle(int32(math.Floor(float64(d.pos.X))), int32(math.Floor(float64(d.pos.Y))), 1, 1, bloodReds[d.red])
+		drawBlot(d.shape, int32(math.Floor(float64(d.pos.X))), int32(math.Floor(float64(d.pos.Y))), d.red)
 	}
 }
 
