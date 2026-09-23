@@ -15,34 +15,37 @@ import (
 // and a release build has no editor.
 const objectDefaultsPath = "level_objects.json"
 
-// ObjectRects is an object's rectangles: the ones fighters collide with and the
-// ones that cast a shadow, any number of each, in order. No collision
+// ObjectRects is an object's rectangles: the ones fighters collide with, the
+// ones that cast a shadow, and the drop-through ones - floor from above that a
+// fighter can climb down through - any number of each, in order. No collision
 // rectangles, or no light rectangles, is how a texture says it should not be
 // stood on, or should not cast a shadow.
 type ObjectRects struct {
 	Collision []rl.Rectangle
 	Light     []rl.Rectangle
+	Drop      []rl.Rectangle
 }
 
 // clone copies the lists themselves, so a tile placed from a palette entry does
 // not share them with the entry.
 func (o ObjectRects) clone() ObjectRects {
-	return ObjectRects{Collision: slices.Clone(o.Collision), Light: slices.Clone(o.Light)}
+	return ObjectRects{Collision: slices.Clone(o.Collision), Light: slices.Clone(o.Light), Drop: slices.Clone(o.Drop)}
 }
 
 // sameRects reports whether two objects have the same rectangles: the same
-// collision rectangles and the same light rectangles, each in the same order.
+// collision, light and drop-through rectangles, each in the same order.
 func sameRects(a, b ObjectRects) bool {
-	return slices.Equal(a.Collision, b.Collision) && slices.Equal(a.Light, b.Light)
+	return slices.Equal(a.Collision, b.Collision) && slices.Equal(a.Light, b.Light) && slices.Equal(a.Drop, b.Drop)
 }
 
 func (o LevelObject) rects() ObjectRects {
-	return ObjectRects{Collision: o.CollisionRects, Light: o.LightRects}
+	return ObjectRects{Collision: o.CollisionRects, Light: o.LightRects, Drop: o.DropRects}
 }
 
 func (o *LevelObject) setRects(r ObjectRects) {
 	o.CollisionRects = r.Collision
 	o.LightRects = r.Light
+	o.DropRects = r.Drop
 }
 
 // loadObjectDefaults reads the palette's rectangles. Anything missing or
@@ -157,12 +160,15 @@ type levelObjectWire struct {
 	CollisionRects []rl.Rectangle `json:"collisionRects,omitempty"`
 	LightRect      *rl.Rectangle  `json:"lightRect,omitempty"`
 	LightRects     []rl.Rectangle `json:"lightRects,omitempty"`
+	DropRect       *rl.Rectangle  `json:"dropRect,omitempty"`
+	DropRects      []rl.Rectangle `json:"dropRects,omitempty"`
 }
 
 func (o LevelObject) MarshalJSON() ([]byte, error) {
 	w := levelObjectWire{Resource: o.Resource, Layer: o.Layer, X: o.X, Y: o.Y}
 	w.CollisionRect, w.CollisionRects = rectsToWire(o.CollisionRects)
 	w.LightRect, w.LightRects = rectsToWire(o.LightRects)
+	w.DropRect, w.DropRects = rectsToWire(o.DropRects)
 	return json.Marshal(w)
 }
 
@@ -178,6 +184,7 @@ func (o *LevelObject) UnmarshalJSON(b []byte) error {
 		Y:              w.Y,
 		CollisionRects: rectsFromWire(w.CollisionRect, w.CollisionRects, "collisionRect"),
 		LightRects:     rectsFromWire(w.LightRect, w.LightRects, "lightRect"),
+		DropRects:      rectsFromWire(w.DropRect, w.DropRects, "dropRect"),
 	}
 	return nil
 }
@@ -188,12 +195,15 @@ type objectRectsWire struct {
 	CollisionRects []rl.Rectangle `json:"collisionRects,omitempty"`
 	LightRect      *rl.Rectangle  `json:"lightRect,omitempty"`
 	LightRects     []rl.Rectangle `json:"lightRects,omitempty"`
+	DropRect       *rl.Rectangle  `json:"dropRect,omitempty"`
+	DropRects      []rl.Rectangle `json:"dropRects,omitempty"`
 }
 
 func (o ObjectRects) MarshalJSON() ([]byte, error) {
 	var w objectRectsWire
 	w.CollisionRect, w.CollisionRects = rectsToWire(o.Collision)
 	w.LightRect, w.LightRects = rectsToWire(o.Light)
+	w.DropRect, w.DropRects = rectsToWire(o.Drop)
 	return json.Marshal(w)
 }
 
@@ -205,6 +215,7 @@ func (o *ObjectRects) UnmarshalJSON(b []byte) error {
 	*o = ObjectRects{
 		Collision: rectsFromWire(w.CollisionRect, w.CollisionRects, "collisionRect"),
 		Light:     rectsFromWire(w.LightRect, w.LightRects, "lightRect"),
+		Drop:      rectsFromWire(w.DropRect, w.DropRects, "dropRect"),
 	}
 	return nil
 }

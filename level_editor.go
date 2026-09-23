@@ -63,10 +63,11 @@ const (
 // nextTool is the tool Q switches to: place, rect, light, area, and round again.
 func nextTool(t int) int { return (t + 1) % toolCount }
 
-// Which of an object's two rectangles the rect tool is shaping.
+// Which of an object's three kinds of rectangle the rect tool is shaping.
 const (
 	rectCollision = iota
 	rectLight
+	rectDrop
 )
 
 // selection is what rectangle editing acts on: the palette entry new objects
@@ -99,6 +100,7 @@ type LevelEditor struct {
 	objects                map[int]LevelLayer // layer - pos - object
 	objectsIndexed         []LevelObject
 	solids                 []rl.Rectangle // every collision rectangle in world space, in the order collision visits them
+	drop                   []bool         // beside solids: whether that rectangle is drop-through
 	dirty                  bool           // edited since the last save; only Ctrl+S in edit mode writes
 
 	defaults   map[string]ObjectRects // palette rectangles, from level_objects.json
@@ -130,6 +132,7 @@ type LevelObject struct {
 	Y              int32          `json:"y,omitempty"`
 	CollisionRects []rl.Rectangle // relative to the object's origin; saved by MarshalJSON
 	LightRects     []rl.Rectangle // likewise; each casts a shadow
+	DropRects      []rl.Rectangle // likewise; floor a fighter can climb down through
 
 	// own is whether the object keeps rectangles of its own rather than
 	// following its texture's. It is unexported, so it is never saved: the
@@ -216,6 +219,9 @@ func (le *LevelEditor) Update(dt float32) {
 		}
 		if rl.IsKeyPressed(rl.KeyL) {
 			le.pickKind(rectLight)
+		}
+		if rl.IsKeyPressed(rl.KeyP) {
+			le.pickKind(rectDrop)
 		}
 		if le.tool == toolRect && rl.IsKeyPressed(rl.KeyN) {
 			le.addActiveRect()
@@ -334,7 +340,7 @@ func (le *LevelEditor) setActiveRect(which int) {
 	le.clampActiveIdx()
 }
 
-// pickKind is C and L: that kind's rectangles, or - when they are already what
+// pickKind is C, L and P: that kind's rectangles, or - when they are already what
 // is being edited - the next of them, round again after the last.
 func (le *LevelEditor) pickKind(which int) {
 	if le.activeRect != which {
@@ -549,10 +555,13 @@ func (le *LevelEditor) pasteSelection() {
 	le.editField = -1
 }
 
-// list is the kind's list of rectangles: collision or light.
+// list is the kind's list of rectangles: collision, light or drop-through.
 func (r *ObjectRects) list(which int) *[]rl.Rectangle {
-	if which == rectLight {
+	switch which {
+	case rectLight:
 		return &r.Light
+	case rectDrop:
+		return &r.Drop
 	}
 	return &r.Collision
 }
@@ -638,10 +647,10 @@ type rectRef struct{ which, i int }
 
 // rectOrder is the order a click tries the selection's rectangles in: the
 // active one first, so it wins where rectangles overlap, then every collision
-// rectangle in order, then every light rectangle in order.
+// rectangle in order, then every light rectangle, then every drop-through one.
 func (le *LevelEditor) rectOrder(r ObjectRects) []rectRef {
 	refs := []rectRef{{le.activeRect, le.activeIdx}}
-	for _, which := range []int{rectCollision, rectLight} {
+	for _, which := range []int{rectCollision, rectLight, rectDrop} {
 		for i := range r.count(which) {
 			if which != le.activeRect || i != le.activeIdx {
 				refs = append(refs, rectRef{which, i})
@@ -709,18 +718,28 @@ func (le *LevelEditor) buildIndex() {
 
 	// Collision walks every rectangle of every object, in the objects' order
 	// and each object's own, placed in the level the way it always has been.
+	// An object's drop-through rectangles follow its collision ones, marked in
+	// drop, so everything else that walks solids takes them for floor.
 	solids := make([]rl.Rectangle, 0, len(le.objectsIndexed))
+	drop := make([]bool, 0, len(le.objectsIndexed))
+	place := func(obj LevelObject, c rl.Rectangle, through bool) {
+		solids = append(solids, rl.Rectangle{
+			X:      float32(obj.X + int32(c.X)),
+			Y:      float32(obj.Y + int32(c.Y)),
+			Width:  c.Width,
+			Height: c.Height,
+		})
+		drop = append(drop, through)
+	}
 	for _, obj := range le.objectsIndexed {
 		for _, c := range obj.CollisionRects {
-			solids = append(solids, rl.Rectangle{
-				X:      float32(obj.X + int32(c.X)),
-				Y:      float32(obj.Y + int32(c.Y)),
-				Width:  c.Width,
-				Height: c.Height,
-			})
+			place(obj, c, false)
+		}
+		for _, c := range obj.DropRects {
+			place(obj, c, true)
 		}
 	}
-	le.solids = solids
+	le.solids, le.drop = solids, drop
 }
 
 // rebuildPalette re-reads which block textures exist, keeping the rectangles
@@ -763,6 +782,9 @@ func (le *LevelEditor) Draw() {
 			for _, l := range obj.LightRects {
 				rl.DrawRectangleLinesEx(rectToWorld(l, objOrigin(obj)), 1, rl.Yellow)
 			}
+			for _, d := range obj.DropRects {
+				rl.DrawRectangleLinesEx(rectToWorld(d, objOrigin(obj)), 1, dropColor)
+			}
 		}
 		le.DrawCursor()
 
@@ -791,7 +813,11 @@ func (le *LevelEditor) drawMissing(obj LevelObject) {
 	rl.DrawText(path.Base(obj.Resource), obj.X+2, obj.Y+2, 10, rl.Magenta)
 }
 
-// drawSelection draws the selected thing and both of its rectangles, the one
+// dropColor outlines drop-through rectangles, apart from the sky-blue collision
+// ones and the yellow light ones.
+var dropColor = rl.Lime
+
+// drawSelection draws the selected thing and all of its rectangles, the one
 // being edited filled and with its corners marked.
 func (le *LevelEditor) drawSelection() {
 	obj, ok := le.selectedObject()
@@ -809,8 +835,11 @@ func (le *LevelEditor) drawSelection() {
 		}
 		wr := rectToWorld(*r, objOrigin(obj))
 		col := rl.SkyBlue
-		if refs[i].which == rectLight {
+		switch refs[i].which {
+		case rectLight:
 			col = rl.Yellow
+		case rectDrop:
+			col = dropColor
 		}
 		if i != 0 {
 			rl.DrawRectangleLinesEx(wr, 1, rl.Fade(col, 0.5))
@@ -836,6 +865,9 @@ func (le *LevelEditor) DrawCursor() {
 	}
 	for _, c := range le.obj.CollisionRects {
 		rl.DrawRectangleLinesEx(rectToWorld(c, objOrigin(le.obj)), 1, rl.SkyBlue)
+	}
+	for _, d := range le.obj.DropRects {
+		rl.DrawRectangleLinesEx(rectToWorld(d, objOrigin(le.obj)), 1, dropColor)
 	}
 }
 
@@ -1144,8 +1176,8 @@ func (le *LevelEditor) drawPanel() {
 
 	active := int32(le.activeRect)
 	r := row()
-	r.Width = 150
-	rlg.ToggleGroup(r, "Collision (C);Light (L)", &active)
+	r.Width = 115 // each of the three toggles, side by side inside the panel
+	rlg.ToggleGroup(r, "Collision (C);Light (L);Drop (P)", &active)
 	if int(active) != le.activeRect {
 		le.setActiveRect(int(active))
 	}
@@ -1156,6 +1188,9 @@ func (le *LevelEditor) drawPanel() {
 	}
 	if le.activeRect == rectLight && len(rects.Light) > 0 {
 		rlg.Label(row(), fmt.Sprintf("Light %d of %d (L: next, N: add)", le.activeIdx+1, len(rects.Light)))
+	}
+	if le.activeRect == rectDrop && len(rects.Drop) > 0 {
+		rlg.Label(row(), fmt.Sprintf("Drop %d of %d (P: next, N: add)", le.activeIdx+1, len(rects.Drop)))
 	}
 	if cur == nil {
 		rlg.Label(row(), "None - N to add")
