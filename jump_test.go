@@ -12,17 +12,18 @@ import (
 // the wrong animation for every fighter.
 func TestAnimTableIsAppendOnly(t *testing.T) {
 	for path, want := range map[string]uint8{
-		"resources/threefour/run.png":        0,
-		"resources/threefour/idle.png":       1,
-		"resources/threefour/jump-start.png": 2,
-		"resources/threefour/jump-climb.png": 3,
-		"resources/threefour/updown.png":     4,
-		"resources/threefour/hit-top.png":    24,
-		"resources/threefour/death_fall.png": 25,
-		"resources/threefour/turnover.png":   45,
-		"resources/threefour/run-jump.png":   46,
-		"resources/threefour/fall.png":       47,
-		"resources/threefour/push.png":       48,
+		"resources/threefour/run.png":                0,
+		"resources/threefour/idle.png":               1,
+		"resources/threefour/jump-start.png":         2,
+		"resources/threefour/jump-climb.png":         3,
+		"resources/threefour/updown.png":             4,
+		"resources/threefour/hit-top.png":            24,
+		"resources/threefour/death_fall.png":         25,
+		"resources/threefour/turnover.png":           45,
+		"resources/threefour/run-jump.png":           46,
+		"resources/threefour/fall.png":               47,
+		"resources/threefour/push.png":               48,
+		"resources/threefour/battle-low-1-right.png": 50,
 	} {
 		if got := animID(path); got != want {
 			t.Errorf("%s has id %d, want %d - something was inserted rather than appended", path, got, want)
@@ -30,7 +31,7 @@ func TestAnimTableIsAppendOnly(t *testing.T) {
 	}
 
 	// the newest one is on the end, and survives the round trip
-	const newest = "resources/threefour/battle-low-1-right.png"
+	const newest = "resources/threefour/climb-down.png"
 	id := animID(newest)
 	if want := uint8(len(animTable) - 1); id != want {
 		t.Errorf("%s has id %d, want %d - it is not at the end of the table", newest, id, want)
