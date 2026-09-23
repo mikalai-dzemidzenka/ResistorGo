@@ -442,28 +442,28 @@ func TestAWaitingBotIsStillAFighter(t *testing.T) {
 	// The guard goes on drifting while it waits. Only the ticks it spends
 	// waiting count: a bot that takes a place and starts swinging holds its
 	// guard still on purpose, and that is the swing's doing, not the line's.
-	drifted, waited := false, 0
-	updown := waiting.Updown
-	for range 600 {
-		w.Tick++
-		p.Structure, p.HitCount = MaxStructure, 0
-		p.Pos.X, p.Speed.X, p.ShoveLeft = 0, 0, 0
-		for _, a := range w.Actors {
-			if !a.IsPlayer {
-				a.Input = botInput(a)
-			}
-			a.Update(float32(FixedTimeStep))
-		}
+	//
+	// The drift is a roll, a change about one waiting tick in ninety, and the
+	// bot takes its turn at the front between waits; so it is watched until it
+	// has waited long enough that a guard still unmoved is the line's doing
+	// and not the dice's - a chance in a million, where a fixed 600 ticks left
+	// it one in thirty.
+	drifted, waited, ticks := false, 0, 0
+	was, wasWaiting := waiting.Updown, true
+	for ; ticks < 6000 && waited < 1200; ticks++ {
+		runFight(w, 1, p)
 		if waiting.holdsPlace() {
+			wasWaiting = false
 			continue
 		}
 		waited++
-		if waiting.Updown != updown {
+		if wasWaiting && waiting.Updown != was {
 			drifted = true
 		}
+		was, wasWaiting = waiting.Updown, true
 	}
 	if waited < 100 {
-		t.Fatalf("the bot only waited %d of 600 ticks, too few to say anything about its guard", waited)
+		t.Fatalf("the bot only waited %d of %d ticks, too few to say anything about its guard", waited, ticks)
 	}
 	if !drifted {
 		t.Error("a waiting bot's guard never moved")
