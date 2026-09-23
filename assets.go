@@ -17,6 +17,7 @@ import "embed"
 //go:embed resources/main_menu/martelo.obj
 //go:embed "resources/music/Neon Sprint.mp3"
 //go:embed "resources/music/Final Run (1).mp3"
+//go:embed resources/sounds/*.mp3
 //go:embed level_1.json
 var assetFS embed.FS
 

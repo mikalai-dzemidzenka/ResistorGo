@@ -163,6 +163,11 @@ const (
 	fBufJump   uint16 = 1 << 14
 )
 
+// The last bit carries whether the fighter has stopped an odd or an even number
+// of blows, so every machine hears a block when it flips. Blocks are a swing
+// apart, far longer than snapshots are, so none is missed between two.
+const fBlockOdd uint16 = 1 << 15
+
 const (
 	bLeft uint8 = 1 << iota
 	bRight
@@ -208,6 +213,7 @@ func recOf(a *Actor) ActorRec {
 	flag(fAttackQueued, a.AttackQueued)
 	flag(fBufAttack, a.BufAttack)
 	flag(fBufJump, a.BufJump)
+	flag(fBlockOdd, a.Blocks%2 == 1)
 	flag(fClimbRight, a.CanClimbRight)
 	flag(fClimbLeft, a.CanClimbLeft)
 	r.Flags |= uint16(min(a.HitCount, StunEveryHits-1)) << fHitCountShift
@@ -235,6 +241,9 @@ func (r ActorRec) apply(a *Actor, w *World) {
 	a.AttackQueued = r.Flags&fAttackQueued != 0
 	a.BufAttack = r.Flags&fBufAttack != 0
 	a.BufJump = r.Flags&fBufJump != 0
+	if odd := r.Flags&fBlockOdd != 0; odd != (a.Blocks%2 == 1) {
+		a.Blocks++
+	}
 	a.CanClimbRight = r.Flags&fClimbRight != 0
 	a.CanClimbLeft = r.Flags&fClimbLeft != 0
 	a.HitCount = min(uint8((r.Flags&fHitCountMask)>>fHitCountShift), StunEveryHits-1)

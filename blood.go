@@ -69,6 +69,7 @@ type seenFighter struct {
 	structure float32
 	state     ActorState
 	updown    uint8
+	blocks    uint8
 }
 
 type bloodState struct {
@@ -281,13 +282,18 @@ func sprayDir(a *Actor) float32 {
 	return float32(-a.Orientation)
 }
 
-// watch sprays blood for every blow that has landed since the last look.
+// watch sprays blood for every blow that has landed since the last look, and
+// is where a blow stopped by a guard is heard.
 func (b *bloodState) watch(w *World) {
 	for _, a := range w.Actors {
 		if was, ok := b.seen[a]; ok {
 			if n := bled(was, a); n > 0 {
 				r := a.collisionRect()
 				b.spray(rl.Vector2{X: r.X + r.Width/2, Y: r.Y + r.Height/2}, sprayDir(a), n)
+				punchHeard() // a blow that spills blood is a blow that is heard
+			}
+			if a.Blocks != was.blocks {
+				blockHeard()
 			}
 		}
 	}
@@ -300,7 +306,7 @@ func (b *bloodState) watch(w *World) {
 func (b *bloodState) reseed(w *World) {
 	clear(b.seen)
 	for _, a := range w.Actors {
-		b.seen[a] = seenFighter{a.Structure, a.State, a.Updown}
+		b.seen[a] = seenFighter{a.Structure, a.State, a.Updown, a.Blocks}
 	}
 }
 

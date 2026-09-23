@@ -1,6 +1,7 @@
 package resistor
 
 import (
+	"math/rand"
 	"path"
 	"runtime"
 
@@ -15,6 +16,98 @@ const (
 	// time manipulation or edit mode - against its full volume.
 	LevelMusicDuck = 0.3
 )
+
+// punchPaths are the sounds a landed hit makes, one picked at random each time.
+var punchPaths = []string{"resources/sounds/punch1.mp3", "resources/sounds/punch2.mp3"}
+
+// blockPaths are the sounds a blow stopped by a guard makes.
+var blockPaths = []string{"resources/sounds/block1.mp3"}
+
+// SoundVoices is how many of each sound can play at once. Playing a sound that
+// is still playing restarts it, so each sound gets this many aliases sharing
+// its samples, and a flurry of blows is heard blow by blow instead of cut short.
+const SoundVoices = 3
+
+type voicedSound struct {
+	base   rl.Sound
+	voices []rl.Sound
+	next   int
+}
+
+var (
+	punches, blocks []*voicedSound
+	// its own random source, so hearing a blow can never change what the bots,
+	// which draw from the global one, decide
+	soundRng = rand.New(rand.NewSource(2))
+	// onPunch and onBlock, when set, are told of every punch and every block
+	// heard; tests count with them
+	onPunch, onBlock func()
+)
+
+// loadSounds decodes the sounds at paths and gives each its voices.
+func loadSounds(paths []string) []*voicedSound {
+	var set []*voicedSound
+	for _, name := range paths {
+		data := asset(name)
+		wave := rl.LoadWaveFromMemory(path.Ext(name), data, int32(len(data)))
+		base := rl.LoadSoundFromWave(wave)
+		rl.UnloadWave(wave)
+		if !rl.IsSoundValid(base) {
+			continue
+		}
+		s := &voicedSound{base: base, voices: []rl.Sound{base}}
+		for range SoundVoices - 1 {
+			s.voices = append(s.voices, rl.LoadSoundAlias(base))
+		}
+		set = append(set, s)
+	}
+	return set
+}
+
+func unloadSounds(set []*voicedSound) {
+	for _, s := range set {
+		for _, v := range s.voices[1:] {
+			rl.UnloadSoundAlias(v)
+		}
+		rl.UnloadSound(s.base)
+	}
+}
+
+// nextVoice is the voice of s the next play goes to, round robin.
+func (s *voicedSound) nextVoice() int {
+	i := s.next
+	s.next = (s.next + 1) % len(s.voices)
+	return i
+}
+
+// playOne plays one sound of set, picked at random, at the sound volume. With
+// no audio device - the dedicated server, the tests - set is empty and there is
+// nothing to play.
+func playOne(set []*voicedSound) {
+	if len(set) == 0 {
+		return
+	}
+	s := set[soundRng.Intn(len(set))]
+	v := s.voices[s.nextVoice()]
+	rl.SetSoundVolume(v, float32(Cfg.SoundVolume)/100)
+	rl.PlaySound(v)
+}
+
+// punchHeard plays a punch for a landed hit.
+func punchHeard() {
+	if onPunch != nil {
+		onPunch()
+	}
+	playOne(punches)
+}
+
+// blockHeard plays a block for a blow stopped by a guard or by block-all.
+func blockHeard() {
+	if onBlock != nil {
+		onBlock()
+	}
+	playOne(blocks)
+}
 
 // A musicTrack is one looping track, faded in and out by the stage.
 type musicTrack struct {
@@ -74,6 +167,8 @@ func initAudio() {
 	}
 	menuTrack.load()
 	levelTrack.load()
+	punches = loadSounds(punchPaths)
+	blocks = loadSounds(blockPaths)
 	menuTrack.fade = 1
 	applyMusicVolume()
 	if menuTrack.ready {
@@ -85,6 +180,9 @@ func initAudio() {
 func closeAudio() {
 	menuTrack.unload()
 	levelTrack.unload()
+	unloadSounds(punches)
+	unloadSounds(blocks)
+	punches, blocks = nil, nil
 	if rl.IsAudioDeviceReady() {
 		rl.CloseAudioDevice()
 	}
