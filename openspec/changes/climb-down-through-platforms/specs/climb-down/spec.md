@@ -4,8 +4,8 @@ How a fighter gets down through a floor rather than off its edge: the drop-throu
 
 ## ADDED Requirements
 
-### Requirement: A drop-through platform is floor from above and solid from below
-A drop-through platform SHALL hold up a fighter that stands, walks, runs or lands on it, exactly as an ordinary solid does. A fighter rising into it from below SHALL have its head stopped by it, and a rising fighter SHALL be able to catch its ledge and climb onto it, exactly as with an ordinary solid. A fighter moving sideways SHALL be stopped by it exactly as by an ordinary solid. This SHALL hold for players, bots and the fighters a client predicts.
+### Requirement: A drop-through platform is floor from above and open from below
+A drop-through platform SHALL hold up a fighter that stands, walks, runs or lands on it, exactly as an ordinary solid does. A fighter rising into it from below SHALL pass up through it without its head being stopped, and SHALL be held up by it once it comes down onto its top. A rising fighter SHALL be able to catch its ledge and climb onto it, exactly as with an ordinary solid. A fighter moving sideways SHALL be stopped by it exactly as by an ordinary solid. This SHALL hold for players, bots and the fighters a client predicts.
 
 #### Scenario: Walked on
 - **WHEN** a fighter walks across a drop-through platform
@@ -15,9 +15,13 @@ A drop-through platform SHALL hold up a fighter that stands, walks, runs or land
 - **WHEN** a fighter jumps and comes down onto a drop-through platform from above
 - **THEN** it lands on the platform
 
-#### Scenario: Head bumped from below
-- **WHEN** a fighter jumps straight up under a drop-through platform
-- **THEN** its head is stopped by the platform and it does not pass through
+#### Scenario: Jumped up through
+- **WHEN** a fighter jumps from the floor under a drop-through platform, high enough for its feet to clear the platform's top
+- **THEN** it rises up through the platform and lands on top of it
+
+#### Scenario: Not high enough
+- **WHEN** a fighter jumps up into a drop-through platform but its feet never clear the top
+- **THEN** it passes up into the platform, comes back down through it, and lands where it jumped from
 
 #### Scenario: Ledge caught on the way up
 - **WHEN** a fighter jumps at the edge of a drop-through platform, facing it

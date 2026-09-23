@@ -17,7 +17,7 @@ The requirements are in `specs/climb-down/spec.md` and the two delta specs. This
 - Leave every existing level, its bytes and its fingerprint exactly as they are.
 
 **Non-Goals:**
-- One-way platforms that can be jumped up through. From below, a drop-through platform is solid, as the user decided.
+- Anything stopping a fighter below a drop-through platform. It started as solid from below and was changed in play: a jump has to be able to go up through it.
 - Bots climbing down, or bot pathing planning routes through drop-through platforms.
 - Buffering an S press across hit-stop the way attack and jump are buffered (`BufAttack`/`BufJump`). The snapshot has no bit left for a third buffer, and a climb-down asked for mid-fight is not worth growing the record for.
 - A sound for the climb-down.
@@ -36,7 +36,8 @@ The requirements are in `specs/climb-down/spec.md` and the two delta specs. This
 ### A drop-through rectangle is passed by a fighter that was already below its top
 Let `feet = Pos.Y + CollisionBox.Y + CollisionBox.Height` and `was = feet - Speed.Y*dt`, which is where the feet were before this tick's vertical move. For a rectangle marked drop, `checkCollision` changes as follows:
 - **Ground branch:** applies only when `was <= top + 1`. The fighter had to be at or above the top to be held by it. A standing fighter (feet exactly at the top, `Speed.Y == 0`) and one landing from above (it started the tick above the top) are both held. A fighter that climbed down (placed below the top with `Speed.Y == 0`) is not.
-- **Head and ledge branches, and `headBlocked`:** apply only when `Speed.Y < 0`, meaning the fighter is rising. That is "solid from below" for jumps. A falling fighter whose head passes through the platform is not snapped under it, is not stopped, and does not treat it as a ceiling that blocks a ledge catch elsewhere.
+- **Head branch and `headBlocked`:** never apply. The platform is open from below, so a rising head passes up through it, and it is never a ceiling that blocks a ledge catch elsewhere.
+- **Ledge branches:** apply only when `Speed.Y < 0`, meaning the fighter is rising, so a jump at the platform's edge can still be pulled up onto it. They live in `catchLedge`, shared with ordinary solids. A rising fighter whose feet are inside the platform is not stood on it: that waits until it comes down onto the top.
 
 Everything here comes from `Pos` and `Speed`, which the snapshot already carries. So a client replaying after a correction reaches the same answer as the server, and the rewind buffer needs nothing new. Ordinary solids are untouched.
 - *Alternative:* remember which platform the fighter dropped through (a `Dropping` flag or rectangle on the actor). That needs a replicated bit, and the record has none free, or a larger record. It would also need clearing rules. The position-and-speed rule needs neither.
