@@ -254,6 +254,7 @@ type Actor struct {
 	Structure        float32
 	HitCount         uint8   // landed hits since the last stun or recovery
 	HitRun           uint8   // hits landed in a row; unlike HitCount a stun does not clear it
+	Blocks           uint8   // blows this fighter has stopped, counted round; the view hears a change as a block
 	CalmTicks        uint16  // ticks since structure was last lost
 	EnergyCalm       uint16  // ticks since energy was last spent
 	EnergyUntouched  uint16  // ticks since an attack last reached it, hit or blocked
@@ -1286,6 +1287,7 @@ func (a *Actor) confirmBlock(attacker *Actor) {
 	a.alerted(attacker)
 	a.pressured()
 	a.endHitRun() // any attack stopped is the run broken, block-all included
+	a.Blocks++
 	if a.Updown == 3 {
 		if a.spendStructure(BlockAllStructure) {
 			a.enterDeathState(attacker)

@@ -475,15 +475,20 @@ func drawMenuUI() {
 			Cfg.MusicVolume = int(vol)
 			applyMusicVolume()
 		}
-		label(3, "HUD (F1)")
+		label(3, "Sound volume")
+		sfx := float32(Cfg.SoundVolume)
+		if rlg.Slider(row(3), "", strconv.Itoa(Cfg.SoundVolume), &sfx, 0, 100); int(sfx) != Cfg.SoundVolume {
+			Cfg.SoundVolume = int(sfx)
+		}
+		label(4, "HUD (F1)")
 		hud := !Cfg.HideHUD
 		hudText := "Off"
 		if hud {
 			hudText = "On"
 		}
-		rlg.Toggle(row(3), hudText, &hud)
+		rlg.Toggle(row(4), hudText, &hud)
 		Cfg.HideHUD = !hud
-		if menuButton(4, "Back") {
+		if menuButton(5, "Back") {
 			menuBack()
 		}
 		// drawn last so its open list covers the rows below it
