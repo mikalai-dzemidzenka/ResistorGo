@@ -268,7 +268,7 @@ Placing, moving, resizing, recolouring, changing the intensity of and removing a
 - **THEN** the level file on disk is unchanged
 
 ### Requirement: The level's ambient light is edited with the light tool
-With the light tool and no light selected, the panel SHALL show the level's ambient light — its colour and its strength — as numeric fields that set it exactly when typed into, and the level SHALL be lit by the new ambient on the next frame drawn. Selecting a light SHALL show that light's own fields, as it does today, and deselecting SHALL bring the ambient fields back. No other tool SHALL change the ambient.
+With the light tool and no light selected, the panel SHALL show the level's ambient light — its colour and its strength — as numeric fields that set it exactly when typed into, and as a darkness slider from 0% (the ambient at full strength) to 100% (no ambient at all) that sets its strength as it is dragged, and the level SHALL be lit by the new ambient on the next frame drawn. Selecting a light SHALL show that light's own fields, as it does today, and deselecting SHALL bring the ambient fields back. No other tool SHALL change the ambient.
 
 The selected light SHALL always be possible to let go of: a right click on empty space SHALL clear the selection without removing any light and without marking the level unsaved, while a right click on a light SHALL remove it as it does today. Nothing else about the selection SHALL change: a left click on empty space still places a light.
 
@@ -277,6 +277,10 @@ An ambient edit SHALL mark the level unsaved, SHALL be written only by Ctrl+S in
 #### Scenario: The ambient fields
 - **WHEN** the developer takes out the light tool with no light selected and types a new colour and strength
 - **THEN** the level's unlit parts take that colour and that strength as the values are typed
+
+#### Scenario: The darkness slider
+- **WHEN** the developer takes out the light tool with no light selected and drags the darkness slider
+- **THEN** the level's unlit parts darken or brighten as it is dragged, the strength field follows it, and the whole drag is one step to undo
 
 #### Scenario: Letting go of a light
 - **WHEN** the developer, with a light selected, right-clicks a spot with no light on it
@@ -334,7 +338,7 @@ A newly placed area SHALL take the size and feather of the area selected before 
 - **THEN** no tile is placed or erased and no object rectangle is changed
 
 ### Requirement: The area tool's panel edits the selected area's numbers
-With the area tool out and a lit area selected, the panel SHALL show that area's position, size and feather as numeric fields that set it exactly when typed into, and the level SHALL be lit by the typed numbers on the next frame drawn. With no area selected, the panel SHALL say how many lit areas the level has and how to place one. A key typed into a numeric field SHALL go to that field alone and SHALL NOT also retool the editor or remove anything.
+With the area tool out and a lit area selected, the panel SHALL show that area's position, size and feather as numeric fields that set it exactly when typed into, and as a darkness slider from 0% (the ambient at full strength) to 100% (no ambient at all) that sets its strength as it is dragged, and the level SHALL be lit by the typed numbers on the next frame drawn. With no area selected, the panel SHALL say how many lit areas the level has and how to place one. A key typed into a numeric field SHALL go to that field alone and SHALL NOT also retool the editor or remove anything.
 
 #### Scenario: Typing an area exactly
 - **WHEN** the developer selects an area and types a position, a size and a feather into the panel's fields
