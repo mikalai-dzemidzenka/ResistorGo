@@ -101,7 +101,7 @@ func TestAClashIsNotSteered(t *testing.T) {
 			break
 		}
 		in := busy
-		if tick >= 30 { // ClashSeconds is 42 ticks
+		if tick >= 30 { // ClashSeconds is 55 ticks
 			in = Input{}
 		}
 		duelStep(w, l, in, r, in)

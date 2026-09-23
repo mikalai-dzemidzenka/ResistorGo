@@ -122,7 +122,7 @@ const (
 	// well inside the ~13 ticks a low swing takes to reach its hit frame.
 	ClashWindowTicks = 6 // 100 ms
 	ClashStructure   = 0.5
-	ClashSeconds     = 0.7 // to be tuned by eye in play
+	ClashSeconds     = 0.91 // 70 ms a frame; to be tuned by eye in play
 	ClashLeftFrames  = 13
 	ClashRightFrames = 13
 	// ClashGap is how far apart the two stand while clashing, the distance the
