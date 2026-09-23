@@ -123,8 +123,8 @@ const (
 	ClashWindowTicks = 6 // 100 ms
 	ClashStructure   = 0.5
 	ClashSeconds     = 0.7 // to be tuned by eye in play
-	ClashLeftFrames  = 10
-	ClashRightFrames = 10
+	ClashLeftFrames  = 13
+	ClashRightFrames = 13
 	// ClashGap is how far apart the two stand while clashing, the distance the
 	// two sheets' blows are drawn to meet at. A feel number, tuned in play.
 	ClashGap = 24
