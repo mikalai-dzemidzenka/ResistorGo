@@ -729,7 +729,14 @@ func (le *LevelEditor) drawAreaPanel(row func() rl.Rectangle) {
 	na := a
 	na.X, na.Y, na.Width, na.Height, na.Feather = v[0], v[1], v[2], v[3], v[4]
 	le.setArea(le.areaSel, na)
-	rlg.Label(row(), "Drag body/edges; Del, RMB remove; RMB space deselects")
+	b := buttons(row(), 2)
+	if button(b[0], "Remove (Del)", true) {
+		le.deleteArea(le.areaSel)
+	}
+	if button(b[1], "Deselect", true) {
+		le.deselectArea()
+	}
+	rlg.Label(row(), "Drag the body or an edge; RMB removes")
 }
 
 // drawLights marks every light while the light tool is out: the circle its
@@ -807,5 +814,12 @@ func (le *LevelEditor) drawLightPanel(row func() rl.Rectangle) {
 	}
 	nl.Color = [3]uint8{uint8(v[4]), uint8(v[5]), uint8(v[6])}
 	le.setLight(le.lightSel, nl)
-	rlg.Label(row(), "Drag center/edge; Del, RMB remove; RMB space deselects")
+	b := buttons(row(), 2)
+	if button(b[0], "Remove (Del)", true) {
+		le.deleteLight(le.lightSel)
+	}
+	if button(b[1], "Deselect", true) {
+		le.deselectLight()
+	}
+	rlg.Label(row(), "Drag the center or the edge; RMB removes")
 }
