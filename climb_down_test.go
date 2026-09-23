@@ -84,23 +84,63 @@ func TestDropThroughIsFloorFromAbove(t *testing.T) {
 	})
 }
 
-func TestDropThroughIsSolidFromBelow(t *testing.T) {
+func TestDropThroughIsOpenFromBelow(t *testing.T) {
 	defer dropLevel()()
 
-	// head just inside the platform's underside, rising
+	// head just inside the platform's underside, rising: it goes on rising
 	a := jumper(100, 160)
 	a.checkCollision()
-	if a.Speed.Y != 0 || a.Pos.Y != 166 {
-		t.Errorf("rising into the platform: speed %v, y %v; want stopped under it at 166", a.Speed.Y, a.Pos.Y)
+	if a.Speed.Y != -5 || a.Pos.Y != 160-a.CollisionBox.Y || a.OnGround {
+		t.Errorf("rising into the platform: speed %v, y %v, on ground %t; want it left rising where it was", a.Speed.Y, a.Pos.Y, a.OnGround)
 	}
 
-	// head level with the platform just short of its right... here its left edge
-	// is at x 0, so come at the right edge facing left
-	b := jumper(215, 155)
-	b.Orientation = -1
+	// feet inside it on the way up: not stood on until it comes down
+	b := jumper(100, 150-42+4)
 	b.checkCollision()
-	if !b.CanClimbLeft {
+	if b.OnGround || b.Speed.Y != -5 {
+		t.Errorf("rising with the feet in the platform: on ground %t, speed %v; want still rising", b.OnGround, b.Speed.Y)
+	}
+
+	// head level with the platform just short of its right edge, facing it
+	c := jumper(215, 155)
+	c.Orientation = -1
+	c.checkCollision()
+	if !c.CanClimbLeft {
 		t.Errorf("rising at the platform's edge did not catch its ledge")
+	}
+}
+
+// A run-jump from the floor under a drop-through platform takes the head up
+// through it and comes down on top: the platform stands higher than the head,
+// so a platform that stopped heads would have sent it back to the floor.
+func TestJumpUpOntoADropThrough(t *testing.T) {
+	saved := LE
+	defer func() { LE = saved }()
+	LE = NewLevelEditor(39, 83)
+	LE.objects[0] = LevelLayer{
+		{}:       {CollisionRects: []rl.Rectangle{rect(-200, 300, 2400, 40)}},
+		{Y: 245}: {Y: 245, DropRects: []rl.Rectangle{rect(-200, 0, 2400, 6)}},
+	}
+	LE.buildIndex()
+	w := NewWorld(true)
+	a := standOn(w, 100, 300)
+	if head := a.Pos.Y + a.CollisionBox.Y; head <= 251 {
+		t.Fatalf("the head at %v is not under the platform's underside at 251", head)
+	}
+	a.State = StateRun
+	a.Speed.X = RunReach + 20
+	a.Input.Left = true // running right
+	a.Input.Jump = true
+	a.Update(float32(FixedTimeStep))
+	a.Input.Jump = false
+	for range 200 {
+		if a.OnGround && a.State != StateRunJump {
+			break
+		}
+		a.Update(float32(FixedTimeStep))
+	}
+	if feet(a) != 245 || !a.OnGround {
+		t.Errorf("the jump ended with the feet at %v (on ground %t), want standing on the platform at 245", feet(a), a.OnGround)
 	}
 }
 

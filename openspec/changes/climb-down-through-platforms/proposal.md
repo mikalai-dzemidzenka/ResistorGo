@@ -4,7 +4,7 @@ A fighter can go up in the level (jump, catch a ledge, climb) but the only way d
 
 ## What Changes
 
-- **A new kind of floor: the drop-through platform.** It works like any solid for standing on, walking along and bumping your head on from below. A jump can also catch its ledge. The one difference is that a fighter standing on it can climb down through it.
+- **A new kind of floor: the drop-through platform.** It works like any solid for standing on and walking along. It is open from below: a jump rises up through it and comes down on top, and a jump at its edge can still catch its ledge. A fighter standing on it can climb down through it.
 - **S climbs down.** A fighter that is standing or walking on a drop-through platform and presses S plays the climb-down animation where it stands. The fighter stays put while it plays, so no steering and no swinging. When the animation ends the fighter is below the platform and moves into the fall state that already exists, falling to whatever is underneath.
 - **S does nothing anywhere else.** On ordinary floor, in the air, or while swinging, blocking or stunned, the press is ignored.
 - **A fighter that has dropped through is not caught by the platform on the way down.** It does not land back on the platform, and it does not grab its ledge.
@@ -16,7 +16,7 @@ A fighter can go up in the level (jump, catch a ledge, climb) but the only way d
 
 ### New Capabilities
 
-- `climb-down`: the drop-through platform as fighters meet it (standing on it, bumping it from below, catching its ledge), which fighters can climb down through it and when, what the climb-down looks like, and how it hands over to the fall.
+- `climb-down`: the drop-through platform as fighters meet it (standing on it, jumping up through it, catching its ledge), which fighters can climb down through it and when, what the climb-down looks like, and how it hands over to the fall.
 
 ### Modified Capabilities
 

@@ -942,8 +942,8 @@ func (a *Actor) updateVertSpeed(dt float32) {
 func (a *Actor) headBlocked(pColCenterX float32) bool {
 	pColUpY := a.Pos.Y + a.CollisionBox.Y
 	for i, c := range LE.solids {
-		if dropThrough(i) && a.Speed.Y >= 0 {
-			continue // solid from below only to a fighter rising into it
+		if dropThrough(i) {
+			continue // open from below: a jump rises through it
 		}
 		oColY := c.Y
 		oColX := c.X
@@ -984,10 +984,11 @@ func (a *Actor) checkCollision() {
 	pPosX := a.Pos.X
 	hitTop := a.headBlocked(pColCenterX)
 	// A drop-through rectangle is floor to a fighter that came down onto it -
-	// its feet were at or above the top before this tick's move - and solid
-	// from below to one rising into it. A fighter already below its top and not
-	// rising, as one that has climbed down through it is, passes it by. Both
-	// follow from position and speed alone, which every machine has.
+	// its feet were at or above the top before this tick's move - and open to
+	// everything else: a jump rises through it from below, and a fighter below
+	// its top, rising or climbed down through it, passes it by. A jump can
+	// still catch its ledge, to be pulled up onto it. All of it follows from
+	// position and speed alone, which every machine has.
 	wasFeet := pColDownY - a.Speed.Y*float32(FixedTimeStep)
 	rising := a.Speed.Y < 0
 	for i, c := range LE.solids {
@@ -996,6 +997,10 @@ func (a *Actor) checkCollision() {
 		oColX := c.X
 		oColWidth := c.Width
 		if dropThrough(i) && !rising && wasFeet > oColY+1 {
+			continue
+		}
+		if dropThrough(i) && rising {
+			a.catchLedge(c, pColCenterX, hitTop) // and neither stood on nor bumped into
 			continue
 		}
 
@@ -1011,16 +1016,10 @@ func (a *Actor) checkCollision() {
 			a.Pos.Y = float32(int32(math.Ceil(float64(oColY)) - 48))
 			continue
 		}
-		if dropThrough(i) && !rising {
-			continue // its head and its ledges are for a fighter coming up at it
+		if dropThrough(i) {
+			continue // stood on from above, and that is all
 		}
 		pColUpY := a.Pos.Y + a.CollisionBox.Y
-		// a ledge is caught going either way: rising into it on a jump, or
-		// dropping past it on a fall
-		// but not by a fighter dropping from a climb-down, which would be put
-		// back up on whatever stands beside the platform it came through
-		airborne := a.Speed.Y != 0 && a.State != StateClimbDown
-		const climbOffset = 32
 		if oColX <= pColCenterX && oColX+oColWidth >= pColCenterX &&
 			pColUpY >= oColY && pColUpY <= oColY+oColHeight {
 			hitTop = true
@@ -1030,20 +1029,36 @@ func (a *Actor) checkCollision() {
 			a.Pos.X = pPosX
 			a.Pos.Y = float32(int32(oColY + oColHeight))
 			continue
-		} else if pColCenterX+climbOffset >= oColX && oColX >= pColCenterX &&
-			pColUpY >= oColY && pColUpY <= oColY+oColHeight && a.Orientation == 1 && airborne && !hitTop {
-			a.CanClimbRight = true
-			a.Pos.X = float32(int32(oColX) - 20)
-			a.Pos.Y = float32(int32(math.Ceil(float64(oColY)) - 48 + 1))
-			continue
-		} else if pColCenterX >= oColX+oColWidth && oColX+oColWidth >= pColCenterX-climbOffset &&
-			pColUpY >= oColY && pColUpY <= oColY+oColHeight && a.Orientation == -1 && airborne && !hitTop {
-			a.CanClimbLeft = true
-			a.Pos.X = oColX + oColWidth - 24
-			a.Pos.Y = float32(int32(math.Ceil(float64(oColY)) - 48 + 1))
-			continue
 		}
+		a.catchLedge(c, pColCenterX, hitTop)
 	}
+}
+
+// catchLedge takes hold of the ledge of solid c if the fighter's head is level
+// with it and it stands no more than a reach ahead, the way the fighter faces,
+// and reports whether it did. A ledge is caught going either way: rising into
+// it on a jump, or dropping past it on a fall - but not by a fighter dropping
+// from a climb-down, which would be put back up on whatever stands beside the
+// platform it came through - and never with the head in a ceiling.
+func (a *Actor) catchLedge(c rl.Rectangle, centerX float32, hitTop bool) bool {
+	const climbOffset = 32
+	airborne := a.Speed.Y != 0 && a.State != StateClimbDown
+	head := a.Pos.Y + a.CollisionBox.Y
+	if !airborne || hitTop || head < c.Y || head > c.Y+c.Height {
+		return false
+	}
+	switch {
+	case a.Orientation == 1 && centerX+climbOffset >= c.X && c.X >= centerX:
+		a.CanClimbRight = true
+		a.Pos.X = float32(int32(c.X) - 20)
+	case a.Orientation == -1 && centerX >= c.X+c.Width && c.X+c.Width >= centerX-climbOffset:
+		a.CanClimbLeft = true
+		a.Pos.X = c.X + c.Width - 24
+	default:
+		return false
+	}
+	a.Pos.Y = float32(int32(math.Ceil(float64(c.Y)) - 48 + 1))
+	return true
 }
 
 // isWall reports whether solid c stands in the fighter's way sideways: some of
