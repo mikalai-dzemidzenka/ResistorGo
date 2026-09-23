@@ -478,10 +478,16 @@ func (a *Actor) Update(dt float32) {
 			a.enterIdleState()
 		}
 	case StateClimbDown:
-		// played out where it stands, on top of the platform, until the fall
-		a.Speed = rl.Vector2{}
-		if a.AnimFinished {
-			a.finishClimbDown()
+		// played out where it stands, on top of the platform, then fallen
+		// through without catching a ledge: the platform's neighbours stand
+		// at the height it left, and grabbing one would put it straight back
+		if a.climbingDown() {
+			a.Speed = rl.Vector2{}
+			if a.AnimFinished {
+				a.finishClimbDown()
+			}
+		} else if a.OnGround {
+			a.land()
 		}
 	case StateIdle:
 		prevUpdown := a.Updown
@@ -869,7 +875,7 @@ func (a *Actor) DrawAnim() {
 func (a *Actor) updateHorSpeed(dt float32) {
 	var movePressed bool
 	prevOrientation := a.Orientation
-	canMove := a.State != StateBlock && a.State != StateAttacked && a.State != StatePush && a.State != StateClash && a.State != StateClimbDown && a.Updown != 3
+	canMove := a.State != StateBlock && a.State != StateAttacked && a.State != StatePush && a.State != StateClash && !a.climbingDown() && a.Updown != 3
 	// a swinging fighter moves, slowly (the attack case caps it), but keeps
 	// facing the way it swings
 	turn := a.State != StateAttack
@@ -1011,7 +1017,9 @@ func (a *Actor) checkCollision() {
 		pColUpY := a.Pos.Y + a.CollisionBox.Y
 		// a ledge is caught going either way: rising into it on a jump, or
 		// dropping past it on a fall
-		airborne := a.Speed.Y != 0
+		// but not by a fighter dropping from a climb-down, which would be put
+		// back up on whatever stands beside the platform it came through
+		airborne := a.Speed.Y != 0 && a.State != StateClimbDown
 		const climbOffset = 32
 		if oColX <= pColCenterX && oColX+oColWidth >= pColCenterX &&
 			pColUpY >= oColY && pColUpY <= oColY+oColHeight {
@@ -1932,7 +1940,7 @@ func (a *Actor) land() {
 // ends, and the dead are falling in a sense this does not mean.
 func (a *Actor) updateFalling() {
 	switch a.State {
-	case StateFall, StateClimb, StateAttacked, StateDeath:
+	case StateFall, StateClimb, StateClimbDown, StateAttacked, StateDeath:
 		return
 	}
 	if !a.OnGround && a.Speed.Y > 0 {
@@ -1955,13 +1963,23 @@ func (a *Actor) enterClimbDownState() {
 	a.State = StateClimbDown
 	a.Speed.X = 0
 	a.stopFlicker()
-	a.SetAnim("resources/threefour/climb-down.png", AnimOptions{animDuration: ClimbDownSeconds, totalFrames: ClimbDownFrames, once: true, reset: true})
+	a.SetAnim(climbDownAnim, AnimOptions{animDuration: ClimbDownSeconds, totalFrames: ClimbDownFrames, once: true, reset: true})
 }
+
+// climbingDown reports whether the fighter is still lowering itself through the
+// platform, rather than falling from it.
+func (a *Actor) climbingDown() bool {
+	return a.State == StateClimbDown && a.Anim == climbDownAnim
+}
+
+const climbDownAnim = "resources/threefour/climb-down.png"
 
 // finishClimbDown puts the fighter under the platform it climbed down through
 // and lets it fall: ClimbDownDrop px lower, or on the floor below if that is
 // closer, from rest. Placed below the platform's top and not rising, it is
-// past the platform - checkCollision does not stand it back on it.
+// past the platform - checkCollision does not stand it back on it. It falls
+// in the fall's animation but stays in the climb-down, which catches no ledge,
+// until it lands.
 func (a *Actor) finishClimbDown() {
 	top := a.Pos.Y + a.CollisionBox.Y + a.CollisionBox.Height
 	x := a.Pos.X + a.CollisionBox.X + a.CollisionBox.Width/2
@@ -1975,7 +1993,7 @@ func (a *Actor) finishClimbDown() {
 	a.PrevPos.Y = a.Pos.Y // put there, not travelled: nothing to draw in between
 	a.Speed.Y = 0
 	a.OnGround = false
-	a.enterFallState()
+	a.SetAnim("resources/threefour/fall.png", AnimOptions{animDuration: 0.3, totalFrames: 3})
 }
 
 func (a *Actor) enterJumpStartState() {

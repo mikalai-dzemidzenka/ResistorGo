@@ -58,13 +58,21 @@ While climbing down, the fighter SHALL play the climb-down animation once, from 
 - **THEN** the other players and any spectator see the climb-down animation play on that fighter
 
 ### Requirement: A climb-down ends in a fall below the platform
-When the climb-down animation ends, the fighter SHALL be below the top of the platform it climbed down through, in the fall state, playing the fall animation and falling under gravity from rest. The fall SHALL pick up where the last climb-down frame leaves the fighter's body, without a visible jump of the sprite. From then on the fighter SHALL fall as any fighter does: it SHALL be able to steer, it SHALL land on whatever solid or drop-through platform is below, and it SHALL catch any ledge it would catch in an ordinary fall, except those of the platform it came through.
+When the climb-down animation ends, the fighter SHALL be below the top of the platform it climbed down through, playing the fall animation and falling under gravity from rest. The fall SHALL pick up where the last climb-down frame leaves the fighter's body, without a visible jump of the sprite. From then on the fighter SHALL fall as any fighter does, steering and landing on whatever solid or drop-through platform is below, except that it SHALL NOT catch any ledge until it has landed. A drop-through platform usually stands in a row of solid ones, and a ledge beside it, level with the height the fighter left, would put it straight back up.
 
 If the floor below is closer than the distance the climb-down lowers the fighter, the fighter SHALL be stood on that floor rather than placed inside or past it.
 
 #### Scenario: Handed to the fall
 - **WHEN** a fighter's climb-down animation reaches its end
-- **THEN** on the next tick it is in the fall state, below the platform's top, playing the fall animation
+- **THEN** on the next tick it is below the platform's top, playing the fall animation
+
+#### Scenario: Solid tiles beside the platform
+- **WHEN** a fighter climbs down through a drop-through tile in a row of solid tiles at the same height, facing either way
+- **THEN** it falls past the solid tiles without catching their ledges and lands on the floor below
+
+#### Scenario: Steered on the way down
+- **WHEN** a fighter that has climbed down holds a movement key while it falls
+- **THEN** it moves that way as it falls
 
 #### Scenario: Lands below
 - **WHEN** a fighter climbs down through a drop-through platform with open floor some distance below it

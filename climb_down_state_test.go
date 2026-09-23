@@ -6,8 +6,9 @@ import (
 	rl "github.com/gen2brain/raylib-go/raylib"
 )
 
-// climbDown presses S once for a, then runs it until it leaves the climb-down
-// or n ticks pass, holding in on every tick after the press.
+// climbDown presses S once for a, then runs it until it has lowered itself
+// through the platform and is dropping, or n ticks pass, holding in on every
+// tick after the press.
 func climbDown(a *Actor, in Input, n int) {
 	step := float32(FixedTimeStep)
 	press := in
@@ -15,12 +16,17 @@ func climbDown(a *Actor, in Input, n int) {
 	a.Input = press
 	a.Update(step)
 	for range n {
-		if a.State != StateClimbDown {
+		if !a.climbingDown() {
 			return
 		}
 		a.Input = in
 		a.Update(step)
 	}
+}
+
+// dropping reports whether a is falling from a climb-down.
+func dropping(a *Actor) bool {
+	return a.State == StateClimbDown && a.Anim == "resources/threefour/fall.png"
 }
 
 // settle runs a until it stands idle on something, or n ticks pass.
@@ -129,7 +135,7 @@ func TestClimbDownPlaysInPlace(t *testing.T) {
 	a.Input.Down = true
 	a.Update(step)
 	var last uint8
-	for a.State == StateClimbDown {
+	for a.climbingDown() {
 		last = a.AnimCurrentFrame
 		if a.Pos.X != x || feet(a) != 150 || a.Orientation != o {
 			t.Fatalf("mid climb-down the fighter moved to x %v feet %v facing %d", a.Pos.X, feet(a), a.Orientation)
@@ -143,8 +149,8 @@ func TestClimbDownPlaysInPlace(t *testing.T) {
 	if last != ClimbDownFrames-1 {
 		t.Errorf("the climb-down ended on frame %d, want its last %d", last, ClimbDownFrames-1)
 	}
-	if a.State != StateFall {
-		t.Errorf("after the climb-down the state is %d, want the fall %d", a.State, StateFall)
+	if !dropping(a) {
+		t.Errorf("after the climb-down: state %d playing %q, want dropping in the fall's animation", a.State, a.Anim)
 	}
 	if feet(a) <= 150 {
 		t.Errorf("after the climb-down the feet are at %v, not below the platform's top", feet(a))
@@ -156,8 +162,8 @@ func TestClimbDownLandsBelow(t *testing.T) {
 	w := NewWorld(true)
 	a := standOn(w, 100, 150)
 	climbDown(a, Input{}, 100)
-	if a.State != StateFall || feet(a) != 150+ClimbDownDrop {
-		t.Fatalf("handed over in state %d with the feet at %v, want falling from %v", a.State, feet(a), 150+ClimbDownDrop)
+	if !dropping(a) || feet(a) != 150+ClimbDownDrop {
+		t.Fatalf("handed over in state %d with the feet at %v, want dropping from %v", a.State, feet(a), 150+ClimbDownDrop)
 	}
 	for range 120 {
 		if a.OnGround && a.State == StateIdle {
@@ -251,7 +257,7 @@ func TestFlinchDoesNotInterruptClimbDown(t *testing.T) {
 	a.enterFlinchState(b)
 	x := a.Pos.X
 	for range 60 {
-		if a.State != StateClimbDown {
+		if !a.climbingDown() {
 			break
 		}
 		if a.Pos.X != x {
@@ -259,7 +265,7 @@ func TestFlinchDoesNotInterruptClimbDown(t *testing.T) {
 		}
 		a.Update(float32(FixedTimeStep))
 	}
-	if a.State != StateFall || feet(a) <= 150 {
+	if !dropping(a) || feet(a) <= 150 {
 		t.Errorf("after a flinch: state %d feet %v; want the climb-down to end in the fall", a.State, feet(a))
 	}
 }
@@ -273,5 +279,55 @@ func TestDeathOnTheClimbDown(t *testing.T) {
 	}
 	if feet(a) != 150 {
 		t.Errorf("a fighter killed climbing down ended with the feet at %v, want on top at 150", feet(a))
+	}
+}
+
+// A platform is often one drop-through tile in a row of solid ones. Dropping
+// through it passes the solid tiles beside it by: their ledges stand level with
+// the height it left, and catching one put the fighter straight back up.
+func TestDropCatchesNoLedgeBeside(t *testing.T) {
+	saved := LE
+	defer func() { LE = saved }()
+	LE = NewLevelEditor(39, 83)
+	LE.objects[0] = LevelLayer{}
+	for x := int32(0); x < 39*5; x += 39 {
+		o := LevelObject{X: x, Y: 150, CollisionRects: []rl.Rectangle{{Width: 39, Height: 83}}}
+		if x == 78 {
+			o = LevelObject{X: x, Y: 150, DropRects: []rl.Rectangle{{Width: 39, Height: 83}}}
+		}
+		LE.objects[0][Vector2i{X: x, Y: 150}] = o
+	}
+	LE.objects[0][Vector2i{X: 0, Y: 400}] = LevelObject{X: 0, Y: 400, CollisionRects: []rl.Rectangle{{Width: 400, Height: 40}}}
+	LE.buildIndex()
+	for _, o := range []int8{1, -1} {
+		w := NewWorld(true)
+		a := standOn(w, 97, 150)
+		a.Orientation = o
+		climbDown(a, Input{}, 100)
+		for range 120 {
+			if a.State == StateClimb || a.CanClimbLeft || a.CanClimbRight {
+				t.Fatalf("facing %d: caught a ledge beside the platform, feet %v", o, feet(a))
+			}
+			a.Update(float32(FixedTimeStep))
+		}
+		if feet(a) != 400 || a.State != StateIdle {
+			t.Errorf("facing %d: the drop ended with the feet at %v in state %d, want standing on the floor at 400", o, feet(a), a.State)
+		}
+	}
+}
+
+// Dropping is steered like any fall.
+func TestDropIsSteered(t *testing.T) {
+	defer dropLevel()()
+	w := NewWorld(true)
+	a := standOn(w, 100, 150)
+	climbDown(a, Input{}, 100)
+	x := a.Pos.X
+	a.Input = Input{Left: true} // D: to the right
+	for range 10 {
+		a.Update(float32(FixedTimeStep))
+	}
+	if !dropping(a) || a.Pos.X <= x {
+		t.Errorf("steering a drop: state %d, x %v from %v; want it moving right while it drops", a.State, a.Pos.X, x)
 	}
 }
