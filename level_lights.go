@@ -172,6 +172,19 @@ type Ambient struct {
 // level by outside one.
 var defaultAmbient = Ambient{Color: [3]uint8{120, 140, 255}, Strength: 0.4}
 
+// ambientDarkness is how dark an ambient of strength s leaves a level, as the
+// editor's darkness slider shows it: 0% at full strength or brighter, 100% at
+// none.
+func ambientDarkness(s float32) int32 {
+	return clamp(int32(roundf((1-s)*100)), 0, 100)
+}
+
+// darknessStrength is the ambient strength that leaves a level d% dark - the
+// strength the darkness slider sets.
+func darknessStrength(d int32) float32 {
+	return float32(100-clamp(d, 0, 100)) / 100
+}
+
 // ambientClear is the colour the light map starts from, before any light is
 // added into it: the ambient's colour weighted by its strength. Opaque, because
 // the composite multiplies alpha along with colour and nothing the scene is
@@ -791,6 +804,14 @@ func (le *LevelEditor) drawLightPanel(row func() rl.Rectangle) {
 		na.Color = [3]uint8{uint8(v[0]), uint8(v[1]), uint8(v[2])}
 		if v[3] != pct { // only a typed change, so rounding never rewrites the strength
 			na.Strength = float32(v[3]) / 100
+		}
+		dark := ambientDarkness(na.Strength)
+		d := float32(dark)
+		r := row()
+		r.X, r.Width = r.X+70, r.Width-110 // room for the labels either side
+		rlg.Slider(r, "Darkness", fmt.Sprintf("%d%%", dark), &d, 0, 100)
+		if nd := int32(roundf(d)); nd != dark { // only a drag, as with the fields
+			na.Strength = darknessStrength(nd)
 		}
 		le.setAmbient(na)
 		return
