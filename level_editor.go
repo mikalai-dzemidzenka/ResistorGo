@@ -121,6 +121,8 @@ type LevelEditor struct {
 	lightDrag lightDrag
 	ambient   Ambient // what lights the level where its lights do not, saved with it
 
+	hist editHistory // undo and redo; see level_undo.go
+
 	areas    []LitArea // the level's lit areas, saved with it
 	areaSel  int       // the selected area, -1 for none
 	areaDrag rectDrag  // the area tool holds an area by the rect tool's handles
@@ -191,7 +193,10 @@ func (le *LevelEditor) updateCursor() {
 }
 
 func (le *LevelEditor) Update(dt float32) {
+	// last frame's edit, finished, is a step Ctrl+Z can take back
+	le.commitEdit(le.midGesture(rl.IsMouseButtonDown(rl.MouseButtonLeft) || rl.IsMouseButtonDown(rl.MouseButtonRight)))
 	ctrl := rl.IsKeyDown(rl.KeyLeftControl) || rl.IsKeyDown(rl.KeyRightControl)
+	shift := rl.IsKeyDown(rl.KeyLeftShift) || rl.IsKeyDown(rl.KeyRightShift)
 	if ctrl && rl.IsKeyPressed(rl.KeyS) {
 		le.Save()
 		return
@@ -205,6 +210,14 @@ func (le *LevelEditor) Update(dt float32) {
 		}
 		if rl.IsKeyPressed(rl.KeyV) {
 			le.pasteSelection()
+		}
+		// nothing to undo in the middle of a drag: it is not an edit yet
+		if !le.midGesture(rl.IsMouseButtonDown(rl.MouseButtonLeft)) {
+			if rl.IsKeyPressed(rl.KeyZ) && !shift {
+				le.undo()
+			} else if rl.IsKeyPressed(rl.KeyY) || rl.IsKeyPressed(rl.KeyZ) && shift {
+				le.redo()
+			}
 		}
 	}
 	if le.editField < 0 && !ctrl {
@@ -308,7 +321,7 @@ func (le *LevelEditor) place(pos Vector2i) {
 	}
 	obj.setRects(le.obj.rects().clone())
 	le.objects[le.layer][pos] = obj
-	le.dirty = true
+	le.edited()
 	le.buildIndex()
 }
 
@@ -316,7 +329,7 @@ func (le *LevelEditor) erase(pos Vector2i) {
 	if le.objects[le.layer] != nil {
 		delete(le.objects[le.layer], pos)
 	}
-	le.dirty = true
+	le.edited()
 	le.buildIndex()
 }
 
@@ -452,7 +465,7 @@ func (le *LevelEditor) setSelectedRects(r ObjectRects) {
 		layer[le.sel.pos] = obj
 	}
 	le.buildIndex()
-	le.dirty = true
+	le.edited()
 	le.clampActiveIdx()
 }
 
@@ -522,7 +535,7 @@ func (le *LevelEditor) followTexture() {
 	le.editField = -1
 	le.clampActiveIdx()
 	if changed {
-		le.dirty = true
+		le.edited()
 	}
 }
 
@@ -912,6 +925,7 @@ func (le *LevelEditor) LoadLevel(path string) {
 
 	le.markOwnRects()
 	le.buildIndex()
+	le.hist = editHistory{} // another level's edits are not this one's to undo
 }
 
 // marshal returns the canonical JSON of the level's tiles (map keys are sorted
@@ -966,6 +980,9 @@ func (le *LevelEditor) Save() {
 	le.SaveLevel(LevelPath)
 	if !ok {
 		le.dirty = true // the level is saved, but not everything is
+	}
+	if !le.dirty {
+		le.saved() // undoing back to here is back to what is on disk
 	}
 }
 
@@ -1057,7 +1074,7 @@ const (
 	pickerX, pickerY = 25, 35
 	pickerCell       = 100
 	pickerCols       = 12
-	panelW, panelH   = 380, 320
+	panelW, panelH   = 380, 400
 )
 
 func pickerCellRect(i int) rl.Rectangle {
@@ -1131,18 +1148,34 @@ func (le *LevelEditor) drawPanel() {
 		return r
 	}
 
+	tool := int32(le.tool)
+	r := row()
+	r.Width = (r.Width - 6) / toolCount // raygui spaces the toggles 2px apart
+	rlg.ToggleGroup(r, "Place;Rect;Light;Area", &tool)
+	if int(tool) != le.tool {
+		le.setTool(int(tool))
+	}
+	b := buttons(row(), 3)
+	if button(b[0], "Undo (Ctrl+Z)", len(le.hist.undo) > 0 || le.hist.gen != le.hist.stableGen) {
+		le.undo()
+	}
+	if button(b[1], "Redo (Ctrl+Y)", len(le.hist.redo) > 0) {
+		le.redo()
+	}
+	if button(b[2], "Save (Ctrl+S)", le.dirty) {
+		le.Save()
+	}
+
 	switch le.tool {
 	case toolPlace:
-		rlg.Label(row(), "Tool: place   (Q: rect tool)")
-		rlg.Label(row(), "LMB place, RMB delete, Tab pick")
-	case toolRect:
-		rlg.Label(row(), "Tool: rect   (Q: light tool)")
+		rlg.Label(row(), "LMB place, RMB delete (Q: next tool)")
+		if button(row(), "Pick texture (Tab)", true) {
+			le.OpenObjects()
+		}
 	case toolLight:
-		rlg.Label(row(), "Tool: light   (Q: area tool)")
 		le.drawLightPanel(row)
 		return
 	case toolArea:
-		rlg.Label(row(), "Tool: area   (Q: place tool)")
 		le.drawAreaPanel(row)
 		return
 	}
@@ -1156,7 +1189,11 @@ func (le *LevelEditor) drawPanel() {
 	default:
 		rlg.Label(row(), fmt.Sprintf("Tile %d,%d: %s", obj.X, obj.Y, path.Base(obj.Resource)))
 		if obj.own {
-			rlg.Label(row(), "Own rectangles (F: follow texture)")
+			b := buttons(row(), 2)
+			rlg.Label(b[0], "Own rectangles")
+			if button(b[1], "Follow texture (F)", true) {
+				le.followTexture()
+			}
 		} else {
 			rlg.Label(row(), "Follows texture")
 		}
@@ -1165,35 +1202,52 @@ func (le *LevelEditor) drawPanel() {
 		r := row()
 		rl.DrawText("not in build - rebuild to ship it", int32(r.X), int32(r.Y), 20, rl.Orange)
 	}
-	if le.hasClip {
-		rlg.Label(row(), "Copied: "+le.clipFrom+" (Ctrl+V)")
-	} else {
-		rlg.Label(row(), "Ctrl+C copies rectangles")
-	}
 	if le.tool != toolRect || !ok {
 		return
 	}
+	b = buttons(row(), 2)
+	if button(b[0], "Copy rects (Ctrl+C)", true) {
+		le.copySelection()
+	}
+	if button(b[1], "Paste (Ctrl+V)", le.hasClip) {
+		le.pasteSelection()
+	}
+	if le.hasClip {
+		rlg.Label(row(), "Copied: "+le.clipFrom)
+	}
 
 	active := int32(le.activeRect)
-	r := row()
-	r.Width = 115 // each of the three toggles, side by side inside the panel
+	r = row()
+	r.Width = (r.Width - 4) / 3 // each of the three toggles, side by side inside the panel
 	rlg.ToggleGroup(r, "Collision (C);Light (L);Drop (P)", &active)
 	if int(active) != le.activeRect {
 		le.setActiveRect(int(active))
 	}
 
 	rects, cur, _, _ := le.active()
-	if le.activeRect == rectCollision && len(rects.Collision) > 0 {
-		rlg.Label(row(), fmt.Sprintf("Collision %d of %d (C: next, N: add)", le.activeIdx+1, len(rects.Collision)))
+	n := rects.count(le.activeRect)
+	if n > 0 {
+		name := [...]string{rectCollision: "Collision", rectLight: "Light", rectDrop: "Drop"}[le.activeRect]
+		rlg.Label(row(), fmt.Sprintf("%s %d of %d", name, le.activeIdx+1, n))
+	} else {
+		rlg.Label(row(), "None of this kind")
 	}
-	if le.activeRect == rectLight && len(rects.Light) > 0 {
-		rlg.Label(row(), fmt.Sprintf("Light %d of %d (L: next, N: add)", le.activeIdx+1, len(rects.Light)))
-	}
-	if le.activeRect == rectDrop && len(rects.Drop) > 0 {
-		rlg.Label(row(), fmt.Sprintf("Drop %d of %d (P: next, N: add)", le.activeIdx+1, len(rects.Drop)))
+	// Each of these changes which rectangle is active. The fields below would
+	// write the one they were drawn from onto it, so the panel stops for this
+	// frame and draws the new one on the next.
+	b = buttons(row(), 3)
+	switch {
+	case button(b[0], "Add (N)", true):
+		le.addActiveRect()
+		return
+	case button(b[1], "Remove (Del)", cur != nil):
+		le.clearActiveRect()
+		return
+	case button(b[2], "Next", n > 1):
+		le.pickKind(le.activeRect)
+		return
 	}
 	if cur == nil {
-		rlg.Label(row(), "None - N to add")
 		return
 	}
 	v := le.drawIntFields(row, []intField{
@@ -1203,7 +1257,28 @@ func (le *LevelEditor) drawPanel() {
 		{"H", int32(cur.Height), 1, fieldLim},
 	})
 	le.setActive(&rl.Rectangle{X: float32(v[0]), Y: float32(v[1]), Width: float32(v[2]), Height: float32(v[3])})
-	rlg.Label(row(), "Drag to shape, Del removes")
+	rlg.Label(row(), "Drag an edge, a corner or the body to shape it")
+}
+
+// buttons splits a panel row into n buttons side by side.
+func buttons(r rl.Rectangle, n int) []rl.Rectangle {
+	const gap = 4
+	w := (r.Width - gap*float32(n-1)) / float32(n)
+	out := make([]rl.Rectangle, n)
+	for i := range out {
+		out[i] = rl.Rectangle{X: r.X + float32(i)*(w+gap), Y: r.Y, Width: w, Height: r.Height}
+	}
+	return out
+}
+
+// button is a panel button that reports a press. One with nothing to do is
+// drawn greyed out and cannot be pressed.
+func button(r rl.Rectangle, label string, enabled bool) bool {
+	if !enabled {
+		rlg.Disable()
+		defer rlg.Enable()
+	}
+	return rlg.Button(r, label) && enabled
 }
 
 // intField is one numeric field in the panel: its label, the value it shows
@@ -1308,6 +1383,9 @@ func drawEditMarker() {
 	text := "EDIT"
 	if LE.dirty {
 		text = "EDIT (unsaved - Ctrl+S)"
+	}
+	if n, m := len(LE.hist.undo), len(LE.hist.redo); n+m > 0 {
+		text += fmt.Sprintf("   undo %d (Ctrl+Z), redo %d (Ctrl+Y)", n, m)
 	}
 	rl.DrawText(text, 20, 70, 20, rl.Yellow)
 }
