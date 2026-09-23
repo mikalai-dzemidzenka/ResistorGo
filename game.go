@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 )
 
 const (
@@ -521,6 +522,9 @@ func runLevel(dt float32) {
 		drawSpectatorHUD()
 	} else {
 		Cur.DrawGUI()
+	}
+	if Cli != nil {
+		Cli.Feed.draw(time.Now())
 	}
 
 	if DevTools && Debug {

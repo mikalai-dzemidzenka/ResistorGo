@@ -1,0 +1,56 @@
+-- Team deathmatch: every fighter, player or bot, is put on Red or Blue as it
+-- enters the match, the smaller team first; a kill scores for the killer's
+-- team, and the score is called out every minute.
+--
+-- Run it with:  resistor -dedicated -gamemode tdm -bots 4
+
+-- Teams 0 (nobody's) and 1 (the bots') are what fighters start on, so the two
+-- sides are 2 and 3, and a fighter on either is one already sorted.
+local RED, BLUE = 2, 3
+local names = { [RED] = "Red", [BLUE] = "Blue" }
+local score = { [RED] = 0, [BLUE] = 0 }
+
+local function teamSize(team)
+  local n = 0
+  for _, id in ipairs(GetFighters()) do
+    if GetFighterTeam(id) == team then n = n + 1 end
+  end
+  return n
+end
+
+local function who(id)
+  local player = GetFighterPlayer(id)
+  if player and player > 0 then return "player " .. player end
+  return "a bot"
+end
+
+function OnGameModeInit()
+  print("team deathmatch: Red against Blue")
+  SetTimer(function()
+    SendMessageToAll("Score - Red " .. score[RED] .. " : " .. score[BLUE] .. " Blue")
+  end, 60000, true)
+end
+
+function OnFighterSpawn(id, player)
+  -- a fighter coming back keeps the team it died on
+  local team = GetFighterTeam(id)
+  if team ~= RED and team ~= BLUE then
+    team = teamSize(RED) <= teamSize(BLUE) and RED or BLUE
+    SetFighterTeam(id, team)
+  end
+  if player > 0 then
+    SendPlayerMessage(player, "You fight for " .. names[team] .. ".")
+  end
+end
+
+function OnFighterDeath(id, killer)
+  local lost = GetFighterTeam(id)
+  local won = killer > 0 and GetFighterTeam(killer)
+  if not won or won == lost or not names[won] then return end
+  score[won] = score[won] + 1
+  SendMessageToAll(names[won] .. " scores: " .. who(killer) .. " broke " .. who(id) .. ".  Red " .. score[RED] .. " : " .. score[BLUE] .. " Blue")
+end
+
+function OnGameModeExit()
+  print("final score: Red " .. score[RED] .. " : " .. score[BLUE] .. " Blue")
+end

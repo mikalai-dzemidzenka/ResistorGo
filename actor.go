@@ -1255,6 +1255,7 @@ func (a *Actor) takeHit(attacker *Actor) {
 	a.pressured()
 	cost := a.hitCost()
 	a.HitRun = min(a.HitRun+1, HitRunCapped)
+	a.W.scriptEvent(evScriptHit, a, attacker, min(cost, a.Structure))
 	if a.spendStructure(cost) {
 		a.enterDeathState(attacker)
 		return
@@ -1288,6 +1289,7 @@ func (a *Actor) confirmBlock(attacker *Actor) {
 	a.pressured()
 	a.endHitRun() // any attack stopped is the run broken, block-all included
 	a.Blocks++
+	a.W.scriptEvent(evScriptBlock, a, attacker, 0)
 	if a.Updown == 3 {
 		if a.spendStructure(BlockAllStructure) {
 			a.enterDeathState(attacker)
@@ -1506,6 +1508,7 @@ func (a *Actor) enterShovedState(by *Actor) {
 // enterDeathState is where a broken structure goes. The fighter stops acting
 // and stops being part of the fight; the world removes it once it has fallen.
 func (a *Actor) enterDeathState(attacker *Actor) {
+	a.W.scriptEvent(evScriptDeath, a, attacker, 0)
 	a.State = StateDeath
 	a.Attacker = attacker
 	a.Events |= EvHit

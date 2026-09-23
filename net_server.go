@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"slices"
+	"strings"
 	"time"
 )
 
@@ -26,10 +27,17 @@ type ServerConfig struct {
 	Bots          int
 	LagComp       bool
 	MaxUnlag      uint32 // ticks
+	// The scripts the server runs, read from ScriptDir; none by default.
+	Gamemode      string
+	Filterscripts []string
+	ScriptDir     string
 }
 
+// DefaultServerConfig is the configuration a server starts with, the scripts
+// named on the command line included.
 func DefaultServerConfig() ServerConfig {
-	return ServerConfig{Port: DefaultPort, MaxPlayers: 8, MaxSpectators: 4, LagComp: true, MaxUnlag: DefaultMaxUnlag}
+	return ServerConfig{Port: DefaultPort, MaxPlayers: 8, MaxSpectators: 4, LagComp: true, MaxUnlag: DefaultMaxUnlag,
+		Gamemode: Gamemode, Filterscripts: Filterscripts, ScriptDir: ScriptDir}
 }
 
 // cmdQueue orders a player's commands and rate-limits their execution.
@@ -125,9 +133,30 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 		}
 		s.W.Remove(a) // the player left while dead
 	}
+	if cfg.Gamemode != "" || len(cfg.Filterscripts) > 0 {
+		h := newScriptHost(w, s.logf)
+		h.srv = s
+		w.Script = h
+		if err := h.loadScripts(cmp.Or(cfg.ScriptDir, ScriptDir), cfg.Gamemode, cfg.Filterscripts); err != nil {
+			host.Destroy()
+			return nil, err
+		}
+	}
 	s.fillBots()
-	s.logf("listening on UDP port %d (max players %d, max spectators %d, bots %d, lagcomp %t)", cfg.Port, cfg.MaxPlayers, cfg.MaxSpectators, cfg.Bots, cfg.LagComp)
+	s.logf("listening on UDP port %d (max players %d, max spectators %d, bots %d, lagcomp %t%s)", cfg.Port, cfg.MaxPlayers, cfg.MaxSpectators, cfg.Bots, cfg.LagComp, scriptsNamed(cfg))
 	return s, nil
+}
+
+// scriptsNamed is what the startup line says of the scripts a server runs.
+func scriptsNamed(cfg ServerConfig) string {
+	out := ""
+	if cfg.Gamemode != "" {
+		out += ", gamemode " + cfg.Gamemode
+	}
+	if len(cfg.Filterscripts) > 0 {
+		out += ", filterscripts " + strings.Join(cfg.Filterscripts, ",")
+	}
+	return out
 }
 
 func (s *Server) logf(format string, args ...any) {
@@ -243,6 +272,9 @@ func (s *Server) accept(p *netPlayer) {
 	p.Actor.Owner = p.ID
 	s.logf("connect player %d (actor %d) from %s", p.ID, p.Actor.ID, p.Peer.GetAddress())
 	sendBytes(p.Peer, ChanReliable, encodeWelcome(Welcome{PlayerID: p.ID, ActorID: p.Actor.ID, Tick: s.W.Tick}))
+	if s.W.Script != nil {
+		s.W.Script.call("OnPlayerConnect", p.ID)
+	}
 }
 
 // acceptSpectator admits a watcher: no fighter, no slot, bots untouched. ActorID 0 means no fighter.
@@ -268,9 +300,24 @@ func (s *Server) drop(peerID uint16, why string) {
 			s.W.Remove(p.Actor)
 		}
 		s.fillBots()
+		if s.W.Script != nil {
+			s.W.Script.call("OnPlayerDisconnect", p.ID, scriptLeaveReason(why))
+		}
 	case p.Accepted:
 		s.logf("disconnect spectator %d: %s", p.ID, why)
 	}
+}
+
+// scriptLeaveReason is the reason OnPlayerDisconnect is given for why a
+// player was dropped.
+func scriptLeaveReason(why string) string {
+	switch why {
+	case "timed out":
+		return "timeout"
+	case "kicked":
+		return "kicked"
+	}
+	return "quit"
 }
 
 // makeRoom removes a bot when a joining human would exceed the slot count.
@@ -306,6 +353,9 @@ func (s *Server) Step() {
 		b.Input = botInput(b)
 		b.Update(float32(FixedTimeStep))
 	}
+	if s.W.Script != nil {
+		s.W.Script.endTick()
+	}
 	s.W.History.Record(s.W)
 	if s.W.Tick%SnapshotEvery == 0 {
 		s.sendSnapshots()
@@ -336,6 +386,17 @@ func (s *Server) runCmd(p *netPlayer, in Input) {
 	restore(saves)
 }
 
+// sendText sends a line for the message feed to p, or with p nil to every
+// accepted client, spectators included.
+func (s *Server) sendText(p *netPlayer, text string) {
+	data := encodeText(text)
+	for _, q := range s.Peers {
+		if q.Accepted && q.Peer != nil && (p == nil || q == p) {
+			sendBytes(q.Peer, ChanReliable, data)
+		}
+	}
+}
+
 // sendSnapshots sends the world to every accepted peer; spectators' Ack stays 0.
 func (s *Server) sendSnapshots() {
 	recs := make([]ActorRec, 0, len(s.W.Actors))
@@ -363,6 +424,9 @@ func (s *Server) Frame(dt float32) {
 
 // Close tells every client the server is going away and shuts the host down.
 func (s *Server) Close() {
+	if s.W.Script != nil {
+		s.W.Script.close()
+	}
 	for _, p := range s.Peers {
 		sendBytes(p.Peer, ChanReliable, encodeBye(ByeServerClosed))
 		p.Peer.DisconnectLater(0)
