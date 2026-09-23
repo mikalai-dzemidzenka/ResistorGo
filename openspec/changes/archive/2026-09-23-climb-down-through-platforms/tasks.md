@@ -13,7 +13,7 @@
 ## 3. Editor: the third rectangle kind
 
 - [x] 3.1 Add `rectDrop` after `rectLight`. Pick it with **P** in the key handling, next to C and L, with P also stepping to the next drop rectangle the way C and L do. Add it to the kinds loop the click hit-test walks, and change the rect-tool panel's toggle group to `"Collision (C);Light (L);Drop (P)"` with a "Drop n of m (P: next, N: add)" label. Add editor tests like `TestStepAddRemoveCollisionRects`, `TestClickPicksACollisionRect` and `TestAddAndClearRect`, for drop rectangles.
-- [ ] 3.2 Draw drop rectangles in the rect tool and in the debug overlay in a colour distinct from both the collision and the light outlines. Verify by eye in `go run ./cmd` with a tile that has all three kinds.
+- [x] 3.2 Draw drop rectangles in the rect tool and in the debug overlay in a colour distinct from both the collision and the light outlines. Verify by eye in `go run ./cmd` with a tile that has all three kinds.
 - [x] 3.3 Extend `TestEveryCollisionRectTravels` (and the paste and follow tests it relies on) so a texture's drop rectangles travel through placing, copy and paste, following, and save and load. Verify with `go test ./...`.
 
 ## 4. Collision: floor from above, solid from below
@@ -39,5 +39,5 @@
 
 ## 8. Play and ship
 
-- [ ] 8.1 In a development build, give a tile in `level_1.json` (or a new one) a drop-through rectangle. Play: stand, walk and land on it; bump it from below; catch its ledge; press S to climb down and fall. Tune `ClimbDownSeconds` and `ClimbDownDrop` by eye until the fall picks up from the last climb-down frame without a jump.
+- [x] 8.1 In a development build, give a tile in `level_1.json` (or a new one) a drop-through rectangle. Play: stand, walk and land on it; bump it from below; catch its ledge; press S to climb down and fall. Tune `ClimbDownSeconds` and `ClimbDownDrop` by eye until the fall picks up from the last climb-down frame without a jump.
 - [x] 8.2 Run `go test ./...` and `go vet ./...`, then build with `build.ps1` (UPX) without truncating its output. Confirm that `resistor.exe` was replaced, and commit with a short lowercase message.
