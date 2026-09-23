@@ -373,41 +373,52 @@ func TestThreeBotsLeaveTwoFighting(t *testing.T) {
 }
 
 // Bots waiting on one side stand apart rather than in a pile.
+//
+// Watched over a stretch of the fight rather than at one tick: the bots draw
+// from the global random source, so no two runs are the same fight, and at any
+// one tick most of the line may be walking - moving up a place, or to a new
+// drift. Every tick is checked for a pile, and the stretch has to have held a
+// line worth checking at least once.
 func TestTheLineIsNotAPile(t *testing.T) {
 	w := NewWorld(true)
 	p, bots := lineUp(w, 5)
 	runFight(w, 600, p)
 
-	// One line at a time. A bot on its way round to the far side walks the
-	// length of the other side to get there, and passing through the line it
-	// is leaving is not the pile this is about.
-	// Bots that have arrived at the spot they are drifting to. One still
-	// walking is in transit - crossing the line it is leaving, or stepping
-	// back after giving its place up - and two bodies passing one another is
-	// not the pile this is about.
-	lines := map[int8][]*Actor{}
-	for _, b := range bots {
-		if b.holdsPlace() || b.Bot.target != p {
-			continue
+	most := 0
+	for range 300 {
+		runFight(w, 1, p)
+		// One line at a time. A bot on its way round to the far side walks the
+		// length of the other side to get there, and passing through the line it
+		// is leaving is not the pile this is about.
+		// Bots that have arrived at the spot they are drifting to. One still
+		// walking is in transit - crossing the line it is leaving, or stepping
+		// back after giving its place up - and two bodies passing one another is
+		// not the pile this is about.
+		lines := map[int8][]*Actor{}
+		for _, b := range bots {
+			if b.holdsPlace() || b.Bot.target != p {
+				continue
+			}
+			spot := b.lineSpot(p, b.Bot.side, b.lineRank(p, b.Bot.side))
+			if abs(b.Pos.X-(spot.X+float32(b.Bot.sway))) > botArrived {
+				continue
+			}
+			lines[b.Bot.side] = append(lines[b.Bot.side], b)
 		}
-		spot := b.lineSpot(p, b.Bot.side, b.lineRank(p, b.Bot.side))
-		if abs(b.Pos.X-(spot.X+float32(b.Bot.sway))) > botArrived {
-			continue
-		}
-		lines[b.Bot.side] = append(lines[b.Bot.side], b)
-	}
-	if len(lines[-1])+len(lines[1]) < 2 {
-		t.Fatalf("%d bots are waiting in line, want at least 2", len(lines[-1])+len(lines[1]))
-	}
-	for side, waiting := range lines {
-		for i, a := range waiting {
-			for _, b := range waiting[i+1:] {
-				if aabb(a.collisionRect(), b.collisionRect()) {
-					t.Errorf("two bots waiting on side %d stand in one another, at %v and %v",
-						side, a.Pos.X, b.Pos.X)
+		most = max(most, len(lines[-1])+len(lines[1]))
+		for side, waiting := range lines {
+			for i, a := range waiting {
+				for _, b := range waiting[i+1:] {
+					if aabb(a.collisionRect(), b.collisionRect()) {
+						t.Fatalf("tick %d: two bots waiting on side %d stand in one another, at %v and %v",
+							w.Tick, side, a.Pos.X, b.Pos.X)
+					}
 				}
 			}
 		}
+	}
+	if most < 2 {
+		t.Fatalf("at most %d bots were waiting in line at once, want at least 2", most)
 	}
 }
 
