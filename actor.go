@@ -48,7 +48,7 @@ const (
 	// the fighter to the fall ClimbDownDrop px lower: the drop that puts the top
 	// of the fall's first frame where the last climb-down frame left the hands.
 	// Both to be tuned by eye in play.
-	ClimbDownSeconds = 0.5
+	ClimbDownSeconds = 0.3
 	ClimbDownFrames  = 5
 	ClimbDownDrop    = 40
 	AttackZoomSpeed  = 2.0

@@ -89,15 +89,19 @@ func TestSHeldDoesNotClimbAgain(t *testing.T) {
 	w := NewWorld(true)
 	a := standOn(w, 100, 150)
 	a.Input.Down = true
-	var start uint32
-	for i := range 20 {
+	a.Update(float32(FixedTimeStep))
+	start := a.AnimStartTick
+	for a.climbingDown() {
+		if a.AnimStartTick != start {
+			t.Fatalf("S held restarted the climb-down (started %d, first %d)", a.AnimStartTick, start)
+		}
 		a.Update(float32(FixedTimeStep))
-		if i == 0 {
-			start = a.AnimStartTick
+		if a.Ticks > 200 {
+			t.Fatal("the climb-down never ended")
 		}
 	}
-	if a.State != StateClimbDown || a.AnimStartTick != start {
-		t.Errorf("S held restarted the climb-down (state %d, started %d, first %d)", a.State, a.AnimStartTick, start)
+	if !dropping(a) {
+		t.Errorf("S held through the climb-down ended in state %d playing %q, want the drop", a.State, a.Anim)
 	}
 }
 
