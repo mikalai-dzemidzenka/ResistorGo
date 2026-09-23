@@ -121,6 +121,8 @@ type LevelEditor struct {
 	lightDrag lightDrag
 	ambient   Ambient // what lights the level where its lights do not, saved with it
 
+	hist editHistory // undo and redo; see level_undo.go
+
 	areas    []LitArea // the level's lit areas, saved with it
 	areaSel  int       // the selected area, -1 for none
 	areaDrag rectDrag  // the area tool holds an area by the rect tool's handles
@@ -191,7 +193,10 @@ func (le *LevelEditor) updateCursor() {
 }
 
 func (le *LevelEditor) Update(dt float32) {
+	// last frame's edit, finished, is a step Ctrl+Z can take back
+	le.commitEdit(le.midGesture(rl.IsMouseButtonDown(rl.MouseButtonLeft) || rl.IsMouseButtonDown(rl.MouseButtonRight)))
 	ctrl := rl.IsKeyDown(rl.KeyLeftControl) || rl.IsKeyDown(rl.KeyRightControl)
+	shift := rl.IsKeyDown(rl.KeyLeftShift) || rl.IsKeyDown(rl.KeyRightShift)
 	if ctrl && rl.IsKeyPressed(rl.KeyS) {
 		le.Save()
 		return
@@ -205,6 +210,14 @@ func (le *LevelEditor) Update(dt float32) {
 		}
 		if rl.IsKeyPressed(rl.KeyV) {
 			le.pasteSelection()
+		}
+		// nothing to undo in the middle of a drag: it is not an edit yet
+		if !le.midGesture(rl.IsMouseButtonDown(rl.MouseButtonLeft)) {
+			if rl.IsKeyPressed(rl.KeyZ) && !shift {
+				le.undo()
+			} else if rl.IsKeyPressed(rl.KeyY) || rl.IsKeyPressed(rl.KeyZ) && shift {
+				le.redo()
+			}
 		}
 	}
 	if le.editField < 0 && !ctrl {
@@ -308,7 +321,7 @@ func (le *LevelEditor) place(pos Vector2i) {
 	}
 	obj.setRects(le.obj.rects().clone())
 	le.objects[le.layer][pos] = obj
-	le.dirty = true
+	le.edited()
 	le.buildIndex()
 }
 
@@ -316,7 +329,7 @@ func (le *LevelEditor) erase(pos Vector2i) {
 	if le.objects[le.layer] != nil {
 		delete(le.objects[le.layer], pos)
 	}
-	le.dirty = true
+	le.edited()
 	le.buildIndex()
 }
 
@@ -452,7 +465,7 @@ func (le *LevelEditor) setSelectedRects(r ObjectRects) {
 		layer[le.sel.pos] = obj
 	}
 	le.buildIndex()
-	le.dirty = true
+	le.edited()
 	le.clampActiveIdx()
 }
 
@@ -522,7 +535,7 @@ func (le *LevelEditor) followTexture() {
 	le.editField = -1
 	le.clampActiveIdx()
 	if changed {
-		le.dirty = true
+		le.edited()
 	}
 }
 
@@ -912,6 +925,7 @@ func (le *LevelEditor) LoadLevel(path string) {
 
 	le.markOwnRects()
 	le.buildIndex()
+	le.hist = editHistory{} // another level's edits are not this one's to undo
 }
 
 // marshal returns the canonical JSON of the level's tiles (map keys are sorted
@@ -966,6 +980,9 @@ func (le *LevelEditor) Save() {
 	le.SaveLevel(LevelPath)
 	if !ok {
 		le.dirty = true // the level is saved, but not everything is
+	}
+	if !le.dirty {
+		le.saved() // undoing back to here is back to what is on disk
 	}
 }
 
@@ -1308,6 +1325,9 @@ func drawEditMarker() {
 	text := "EDIT"
 	if LE.dirty {
 		text = "EDIT (unsaved - Ctrl+S)"
+	}
+	if n, m := len(LE.hist.undo), len(LE.hist.redo); n+m > 0 {
+		text += fmt.Sprintf("   undo %d (Ctrl+Z), redo %d (Ctrl+Y)", n, m)
 	}
 	rl.DrawText(text, 20, 70, 20, rl.Yellow)
 }
