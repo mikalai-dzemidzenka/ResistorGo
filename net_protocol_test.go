@@ -135,6 +135,26 @@ func TestHeldInputReplicates(t *testing.T) {
 	}
 }
 
+// A block crosses the wire: a fighter that has stopped a blow arrives with a
+// different count than before it, one that has not with the same.
+func TestBlocksReplicate(t *testing.T) {
+	w := NewWorld(true)
+	a := w.Spawn(ZeroVec2, true)
+	b := NewActor(ZeroVec2, true)
+	for i := range 5 {
+		was := b.Blocks
+		recOf(a).apply(b, w)
+		if b.Blocks != was {
+			t.Fatalf("after %d blocks, a snapshot with no new one changed the count", i)
+		}
+		a.Blocks++
+		recOf(a).apply(b, w)
+		if b.Blocks == was {
+			t.Fatalf("block %d did not cross the wire", i+1)
+		}
+	}
+}
+
 // Structure survives the wire to a tenth of a hit-unit.
 func TestStructureReplicates(t *testing.T) {
 	w := NewWorld(true)

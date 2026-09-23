@@ -22,3 +22,18 @@ Every landed hit SHALL play a punch sound, chosen at random from the punch sound
 #### Scenario: Muted
 - **WHEN** the sound volume is set to 0
 - **THEN** hits make no sound, and the music is unaffected
+
+### Requirement: Block sounds
+Every blow stopped by a guard or by block-all SHALL play the block sound, on every machine that shows the match - in single player, when hosting, when joining and when spectating. A hit that lands, a swing that misses, a clash and a shove SHALL make no block sound. While time manipulation shows a recorded frame no block sound SHALL play. Block sounds SHALL be played at the sound volume setting.
+
+#### Scenario: A blow is blocked
+- **WHEN** a swing meets a guard at its height, or block-all
+- **THEN** the block sound plays, and no punch sound
+
+#### Scenario: A hit is no block
+- **WHEN** a hit lands on a fighter
+- **THEN** no block sound plays
+
+#### Scenario: Scrubbing is silent
+- **WHEN** the player scrubs back and forth across a block with time manipulation
+- **THEN** no block sound plays

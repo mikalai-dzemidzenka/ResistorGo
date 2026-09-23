@@ -66,9 +66,9 @@ func TestNextPlayback(t *testing.T) {
 	}
 }
 
-// Both punches are in the binary.
-func TestPunchesAreEmbedded(t *testing.T) {
-	for _, p := range punchPaths {
+// The punches and the block are in the binary.
+func TestSoundsAreEmbedded(t *testing.T) {
+	for _, p := range append(append([]string{}, punchPaths...), blockPaths...) {
 		if len(asset(p)) == 0 {
 			t.Errorf("%s is empty", p)
 		}
@@ -76,11 +76,11 @@ func TestPunchesAreEmbedded(t *testing.T) {
 }
 
 // A punch plays on its voices in turn, so the one before is left to finish.
-func TestPunchVoicesTakeTurns(t *testing.T) {
-	p := &punchSound{voices: make([]rl.Sound, PunchVoices)}
-	for want := range 2 * PunchVoices {
-		if got := p.nextVoice(); got != want%PunchVoices {
-			t.Fatalf("punch %d went to voice %d, want %d", want, got, want%PunchVoices)
+func TestSoundVoicesTakeTurns(t *testing.T) {
+	p := &voicedSound{voices: make([]rl.Sound, SoundVoices)}
+	for want := range 2 * SoundVoices {
+		if got := p.nextVoice(); got != want%SoundVoices {
+			t.Fatalf("punch %d went to voice %d, want %d", want, got, want%SoundVoices)
 		}
 	}
 }
@@ -144,5 +144,57 @@ func TestAPunchIsHeardWhenAHitLands(t *testing.T) {
 		if n := listen(c.blow, c.prep...); n != 0 {
 			t.Errorf("%s was heard %d times, want silence", name, n)
 		}
+	}
+}
+
+// A blow stopped by a guard or by block-all is heard as a block, once, and is
+// no punch; a landed hit, a clash and a shove are no block.
+func TestABlockIsHeardWhenABlowIsStopped(t *testing.T) {
+	blocked, punched := 0, 0
+	onBlock = func() { blocked++ }
+	onPunch = func() { punched++ }
+	t.Cleanup(func() { onBlock, onPunch = nil, nil })
+	guardAll := func(def *Actor) { def.Updown = 3 }
+	hurt := func(def *Actor) { def.Structure = MaxStructure - 1 }
+	for name, c := range map[string]struct {
+		blow  func(w *World, def, att *Actor)
+		prep  []func(*Actor)
+		block int
+	}{
+		"a guarded block": {func(w *World, def, att *Actor) { def.Updown = att.Updown; def.confirmBlock(att) }, []func(*Actor){hurt}, 1},
+		"a full guard":    {func(w *World, def, att *Actor) { def.Updown = att.Updown; def.confirmBlock(att) }, nil, 1},
+		"block-all":       {func(w *World, def, att *Actor) { def.confirmBlock(att) }, []func(*Actor){guardAll}, 1},
+		"a hit":           {func(w *World, def, att *Actor) { def.takeHit(att) }, nil, 0},
+		"a clash":         {func(w *World, def, att *Actor) { startClash(att, def) }, nil, 0},
+		"a shove":         {func(w *World, def, att *Actor) { def.enterShovedState(att) }, nil, 0},
+	} {
+		blocked, punched = 0, 0
+		bleeding(t, c.blow, c.prep...)
+		if blocked != c.block {
+			t.Errorf("%s was heard as %d blocks, want %d", name, blocked, c.block)
+		}
+		if c.block > 0 && punched != 0 {
+			t.Errorf("%s was heard as a punch", name)
+		}
+	}
+}
+
+// A block the blood has not looked at yet - a fighter just seen, or a restore
+// by time manipulation - is not heard.
+func TestABlockIsNotHeardAfterAReseed(t *testing.T) {
+	blocked := 0
+	onBlock = func() { blocked++ }
+	t.Cleanup(func() { onBlock = nil })
+	floor()
+	clearBlood()
+	t.Cleanup(clearBlood)
+	w := NewWorld(true)
+	def := w.Spawn(rl.Vector2{X: 0}, false)
+	blood.watch(w)
+	def.Blocks++
+	blood.reseed(w)
+	blood.watch(w)
+	if blocked != 0 {
+		t.Errorf("a reseed was heard as %d blocks", blocked)
 	}
 }
