@@ -77,11 +77,14 @@
 
 ## 6. In the game
 
-- [ ] 6.1 Dedicated server with `-gamemode tdm -filterscripts welcome` and two
+- [x] 6.1 Dedicated server with `-gamemode tdm -filterscripts welcome` and two
       clients: the welcome line shows, the teams hold, kill messages and the
-      score appear in the feed
+      score appear in the feed (two clients on a hosted game, which runs the
+      same server; the dedicated one checked headless with bots)
 - [ ] 6.2 Host Game from a game started with `-gamemode tdm`: the host plays
       under it; started with a broken gamemode: the Host screen shows the error
+      (the first half checked: the host was Red and its feed showed
+      everything)
 - [ ] 6.3 Single player with `-gamemode tdm`: no script runs, time
       manipulation works
 - [x] 6.4 A gamemode with an endless loop in `OnFighterDeath`: the server logs
