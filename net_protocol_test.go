@@ -36,7 +36,7 @@ func TestProtocolRoundTrip(t *testing.T) {
 		t.Errorf("bye: %v %v", got, err)
 	}
 	cmds := []Input{
-		{Seq: 10, Left: true, Attack: true, Updown: 3, ViewTick: 99, ViewFrac: 128},
+		{Seq: 10, Left: true, Attack: true, Down: true, Updown: 3, ViewTick: 99, ViewFrac: 128},
 		{Seq: 9, Right: true, Jump: true, FaceLeft: true, Updown: 1, ViewTick: 98},
 	}
 	if got, err := decodeCmds(encodeCmds(cmds)); err != nil || !slices.Equal(got, cmds) {

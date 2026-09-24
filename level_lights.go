@@ -424,7 +424,7 @@ func (le *LevelEditor) placeLight(p rl.Vector2) {
 	le.lightSel = len(le.lights) - 1
 	le.lightDrag = lightDrag{}
 	le.editField = -1
-	le.dirty = true
+	le.edited()
 }
 
 // beginLightDrag takes hold of the light under p, selecting it.
@@ -467,7 +467,7 @@ func (le *LevelEditor) setLight(i int, l LevelLight) {
 		return
 	}
 	le.lights[i] = l
-	le.dirty = true
+	le.edited()
 }
 
 // setAmbient replaces the level's ambient light, if that changes anything.
@@ -476,7 +476,7 @@ func (le *LevelEditor) setAmbient(a Ambient) {
 		return
 	}
 	le.ambient = a
-	le.dirty = true
+	le.edited()
 }
 
 // deselectLight lets go of the selected light without touching it. It is what a
@@ -504,7 +504,7 @@ func (le *LevelEditor) deleteLight(i int) {
 	}
 	le.lightDrag = lightDrag{}
 	le.editField = -1
-	le.dirty = true
+	le.edited()
 }
 
 // updateLightTool is the light tool's handling of the mouse, the cursor being
@@ -563,7 +563,7 @@ func (le *LevelEditor) placeArea(p rl.Vector2) {
 	le.areaSel = len(le.areas) - 1
 	le.areaDrag = rectDrag{}
 	le.editField = -1
-	le.dirty = true
+	le.edited()
 }
 
 // beginAreaDrag takes hold of the area under p, by whichever handle, selecting
@@ -602,7 +602,7 @@ func (le *LevelEditor) setArea(i int, a LitArea) {
 		return
 	}
 	le.areas[i] = a
-	le.dirty = true
+	le.edited()
 }
 
 // deselectArea lets go of the selected area without touching it, as
@@ -628,7 +628,7 @@ func (le *LevelEditor) deleteArea(i int) {
 	}
 	le.areaDrag = rectDrag{}
 	le.editField = -1
-	le.dirty = true
+	le.edited()
 }
 
 // updateAreaTool is the area tool's handling of the mouse, the cursor being at
@@ -729,7 +729,14 @@ func (le *LevelEditor) drawAreaPanel(row func() rl.Rectangle) {
 	na := a
 	na.X, na.Y, na.Width, na.Height, na.Feather = v[0], v[1], v[2], v[3], v[4]
 	le.setArea(le.areaSel, na)
-	rlg.Label(row(), "Drag body/edges; Del, RMB remove; RMB space deselects")
+	b := buttons(row(), 2)
+	if button(b[0], "Remove (Del)", true) {
+		le.deleteArea(le.areaSel)
+	}
+	if button(b[1], "Deselect", true) {
+		le.deselectArea()
+	}
+	rlg.Label(row(), "Drag the body or an edge; RMB removes")
 }
 
 // drawLights marks every light while the light tool is out: the circle its
@@ -807,5 +814,12 @@ func (le *LevelEditor) drawLightPanel(row func() rl.Rectangle) {
 	}
 	nl.Color = [3]uint8{uint8(v[4]), uint8(v[5]), uint8(v[6])}
 	le.setLight(le.lightSel, nl)
-	rlg.Label(row(), "Drag center/edge; Del, RMB remove; RMB space deselects")
+	b := buttons(row(), 2)
+	if button(b[0], "Remove (Del)", true) {
+		le.deleteLight(le.lightSel)
+	}
+	if button(b[1], "Deselect", true) {
+		le.deselectLight()
+	}
+	rlg.Label(row(), "Drag the center or the edge; RMB removes")
 }
