@@ -46,6 +46,7 @@ type Client struct {
 	closed      bool
 	Spectator   bool // joined without a fighter
 	lastKeep    time.Time
+	Feed        messageFeed // lines the server sent, for the HUD
 }
 
 var Cli *Client
@@ -239,6 +240,10 @@ func (c *Client) recv(data []byte) {
 	case MsgSnapshot:
 		if s, err := decodeSnapshot(data); err == nil && c.Welcomed {
 			c.onSnapshot(s)
+		}
+	case MsgText:
+		if text, err := decodeText(data); err == nil {
+			c.Feed.add(text, time.Now())
 		}
 	}
 }
