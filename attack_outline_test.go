@@ -171,6 +171,21 @@ func TestOutlineExclusions(t *testing.T) {
 	if outlineTarget(att, att) {
 		t.Errorf("the aimer marks itself")
 	}
+
+	// a swing passes through an ally, so it is not marked; two fighters with
+	// no team are not allies, and still are
+	att.Team, target.Team = RedTeam, RedTeam
+	if outlineTarget(att, target) {
+		t.Errorf("an ally is marked")
+	}
+	target.Team = BlueTeam
+	if !outlineTarget(att, target) {
+		t.Errorf("an enemy on the other side is not marked")
+	}
+	att.Team, target.Team = NoTeam, NoTeam
+	if !outlineTarget(att, target) {
+		t.Errorf("two fighters with no team do not mark each other")
+	}
 	if outlineTarget(nil, target) {
 		t.Errorf("a nil aimer - a spectator, or a player between respawns - marks a target")
 	}

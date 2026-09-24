@@ -5,10 +5,12 @@ import (
 	"errors"
 	"hash/fnv"
 	"math"
+	"strings"
+	"unicode/utf8"
 )
 
 const (
-	ProtocolVersion  uint16 = 8
+	ProtocolVersion  uint16 = 9
 	DefaultPort             = 27015
 	ChanUnreliable   uint8  = 0 // commands, snapshots
 	ChanReliable     uint8  = 1 // hello, welcome, reject, bye
@@ -25,7 +27,11 @@ const (
 	MsgCmds
 	MsgSnapshot
 	MsgKeepalive // spectator -> server, keeps an idle connection from timing out
+	MsgText      // server -> client, a line for the message feed
 )
+
+// MaxTextBytes is the longest line of text the server sends.
+const MaxTextBytes = 128
 
 const (
 	RejectVersion uint8 = iota + 1
@@ -122,9 +128,13 @@ type ActorRec struct {
 	EnergyCalm      uint8  // ticks since the last swing, 0..EnergyCalmTicks
 	EnergyUntouched uint8  // ticks since an attack reached it, 0..EnergyUntouchedTicks
 	AttackerID      uint16
+	// Team is the fighter's team. A client needs it to predict shoving right,
+	// and a server's scripts can change it; it cannot be worked out from
+	// whether the fighter is a bot.
+	Team uint8
 }
 
-const actorRecSize = 46
+const actorRecSize = 47
 
 const (
 	fOrientLeft uint16 = 1 << iota
@@ -200,6 +210,7 @@ func recOf(a *Actor) ActorRec {
 		Energy:          uint16(clamp(a.Energy, 0, MaxEnergy)),
 		EnergyCalm:      uint8(min(a.EnergyCalm, EnergyCalmTicks)),
 		EnergyUntouched: uint8(min(a.EnergyUntouched, EnergyUntouchedTicks)),
+		Team:            a.Team,
 	}
 	flag := func(f uint16, on bool) {
 		if on {
@@ -264,6 +275,7 @@ func (r ActorRec) apply(a *Actor, w *World) {
 	a.Energy = int32(min(r.Energy, MaxEnergy))
 	a.EnergyCalm = uint16(min(r.EnergyCalm, EnergyCalmTicks))
 	a.EnergyUntouched = uint16(min(r.EnergyUntouched, EnergyUntouchedTicks))
+	a.Team = r.Team
 	a.Attacker = nil
 	if r.AttackerID != 0 && w != nil {
 		a.Attacker = w.ByID(r.AttackerID)
@@ -384,6 +396,30 @@ func decodeReject(b []byte) (uint8, error) {
 
 func encodeBye(reason uint8) []byte { return []byte{MsgBye, reason} }
 
+// encodeText is a line for the feed, cut to MaxTextBytes without splitting a
+// character.
+func encodeText(text string) []byte {
+	text = strings.ToValidUTF8(text, "?")
+	if len(text) > MaxTextBytes {
+		cut := MaxTextBytes
+		for cut > 0 && !utf8.RuneStart(text[cut]) {
+			cut--
+		}
+		text = text[:cut]
+	}
+	return append([]byte{MsgText, uint8(len(text))}, text...)
+}
+
+func decodeText(b []byte) (string, error) {
+	r := newReader(b, MsgText)
+	n := int(r.u8())
+	body := r.take(n)
+	if r.bad || n > MaxTextBytes || !utf8.Valid(body) {
+		return "", errPacket
+	}
+	return string(body), nil
+}
+
 func decodeBye(b []byte) (uint8, error) {
 	r := newReader(b, MsgBye)
 	v := r.u8()
@@ -473,6 +509,7 @@ func encodeSnapshot(s Snapshot) []byte {
 		b = putU16(b, a.Energy)
 		b = append(b, a.EnergyCalm, a.EnergyUntouched)
 		b = putU16(b, a.AttackerID)
+		b = append(b, a.Team)
 	}
 	return b
 }
@@ -510,6 +547,7 @@ func decodeSnapshot(b []byte) (Snapshot, error) {
 		a.EnergyCalm = r.u8()
 		a.EnergyUntouched = r.u8()
 		a.AttackerID = r.u16()
+		a.Team = r.u8()
 		if a.State >= uint8(stateCount) || a.Updown > 3 {
 			r.bad = true
 		}

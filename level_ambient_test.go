@@ -193,3 +193,25 @@ func TestDeselectLight(t *testing.T) {
 		t.Errorf("letting go of a light marked the level unsaved")
 	}
 }
+
+// The darkness slider reads the ambient strength upside down, clamped to what a
+// slider can show, and sets the strength that leaves the level as dark as it
+// was dragged to.
+func TestAmbientDarkness(t *testing.T) {
+	for _, c := range []struct {
+		s    float32
+		want int32
+	}{{0.4, 60}, {0, 100}, {1, 0}, {4, 0}, {-2, 100}, {0.255, 75}} {
+		if got := ambientDarkness(c.s); got != c.want {
+			t.Errorf("ambientDarkness(%v) = %d, want %d", c.s, got, c.want)
+		}
+	}
+	for d := int32(0); d <= 100; d++ {
+		if got := ambientDarkness(darknessStrength(d)); got != d {
+			t.Errorf("the slider at %d%% reads back as %d%%", d, got)
+		}
+	}
+	if darknessStrength(-5) != 1 || darknessStrength(150) != 0 {
+		t.Errorf("a darkness out of range was not clamped: %v, %v", darknessStrength(-5), darknessStrength(150))
+	}
+}

@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"regexp"
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -15,7 +16,7 @@ func sampleRec(id uint16) ActorRec {
 		State: uint8(StateAttack), Flags: fOrientLeft | fAnimOnce | fAttackQueued | fBufAttack | fBufJump,
 		Updown: 2, PrevUpdown: 1, Anim: 17, AnimFrame: 3, AnimTotal: 8, AnimYOffset: -48,
 		AnimDurMs: 300, Ticks: 123456, AnimStart: 123400, AttackCount: 2, FreezeTicks: 5, Structure: 73,
-		Energy: 45, EnergyCalm: 30, EnergyUntouched: 77, AttackerID: 7,
+		Energy: 45, EnergyCalm: 30, EnergyUntouched: 77, AttackerID: 7, Team: 4,
 	}
 }
 
@@ -60,6 +61,7 @@ func TestProtocolRejectsMalformed(t *testing.T) {
 		{"bye", encodeBye(ByeQuit), func(b []byte) error { _, err := decodeBye(b); return err }},
 		{"cmds", encodeCmds([]Input{{Seq: 1}, {Seq: 2}}), func(b []byte) error { _, err := decodeCmds(b); return err }},
 		{"snapshot", encodeSnapshot(Snapshot{Tick: 1, Actors: []ActorRec{sampleRec(1)}}), func(b []byte) error { _, err := decodeSnapshot(b); return err }},
+		{"text", encodeText("round over"), func(b []byte) error { _, err := decodeText(b); return err }},
 	}
 	for _, c := range cases {
 		for i := range len(c.data) {
@@ -151,6 +153,46 @@ func TestBlocksReplicate(t *testing.T) {
 		recOf(a).apply(b, w)
 		if b.Blocks == was {
 			t.Fatalf("block %d did not cross the wire", i+1)
+		}
+	}
+}
+
+// A line of text crosses the wire as sent, cut to MaxTextBytes without
+// splitting a character; a body that is not UTF-8 or claims more than the
+// limit is refused.
+func TestTextMessages(t *testing.T) {
+	for _, text := range []string{"", "round over", "zwei Teams: ä ö ü"} {
+		if got, err := decodeText(encodeText(text)); err != nil || got != text {
+			t.Errorf("%q arrived as %q, %v", text, got, err)
+		}
+	}
+	long := strings.Repeat("a", MaxTextBytes-1) + "é" // the é straddles the limit
+	got, err := decodeText(encodeText(long))
+	if err != nil || got != strings.Repeat("a", MaxTextBytes-1) {
+		t.Errorf("a long line arrived as %d bytes %q, %v", len(got), got[max(0, len(got)-4):], err)
+	}
+	if got, _ := decodeText(encodeText("a\xffb")); got != "a?b" {
+		t.Errorf("a line that is not UTF-8 was sent as %q", got)
+	}
+	if _, err := decodeText([]byte{MsgText, 2, 0xff, 0xfe}); err == nil {
+		t.Error("a body that is not UTF-8 was accepted")
+	}
+	over := append([]byte{MsgText, MaxTextBytes + 1}, strings.Repeat("a", MaxTextBytes+1)...)
+	if _, err := decodeText(over); err == nil {
+		t.Error("a line over the limit was accepted")
+	}
+}
+
+// A fighter's team crosses the wire, whatever it is and whatever the fighter.
+func TestTeamReplicates(t *testing.T) {
+	w := NewWorld(true)
+	a := w.Spawn(ZeroVec2, true)
+	for _, team := range []uint8{NoTeam, BotTeam, 2, 255} {
+		a.Team = team
+		b := NewActor(ZeroVec2, false) // a remote fighter starts on the bots' team
+		recOf(a).apply(b, w)
+		if b.Team != team {
+			t.Errorf("team %d arrived as %d", team, b.Team)
 		}
 	}
 }
