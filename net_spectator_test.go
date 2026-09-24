@@ -48,6 +48,9 @@ func TestSpectatorServer(t *testing.T) {
 	if s.humans() != 1 || len(s.Bots) != 1 {
 		t.Fatalf("humans %d bots %d, want 1 1 (all slots taken)", s.humans(), len(s.Bots))
 	}
+	// the human is the bot's ally, so only the spectator's commands could
+	// change it below - otherwise the bot's swings and the human's blocks do
+	fighterOf(s, w1.ActorID).Team = BotTeam
 
 	// all player slots taken by a human and a bot: a spectator still gets in and no bot is removed
 	sp := hello(t, s, nil, cfg.Port, spectator)
