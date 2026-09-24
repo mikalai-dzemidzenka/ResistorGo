@@ -391,8 +391,9 @@ func TestABrokenGamemodeStopsTheServer(t *testing.T) {
 	}
 }
 
-// The example scripts load, and the team deathmatch sorts fighters into two
-// even teams that keep across a respawn, and scores a kill for the killer.
+// The example scripts load, and the team deathmatch sorts players into two
+// even teams that keep across a respawn, leaves bots neutral, and scores only
+// a kill of the other side.
 func TestExampleScripts(t *testing.T) {
 	floor()
 	w := NewWorld(true)
@@ -403,34 +404,36 @@ func TestExampleScripts(t *testing.T) {
 	if err := h.loadScripts("scripts", "tdm", []string{"welcome"}); err != nil {
 		t.Fatal(err)
 	}
-	var fighters []*Actor
-	for i := range 4 {
-		fighters = append(fighters, w.Spawn(rl.Vector2{X: float32(60 * i)}, i == 0))
+	spawn := func(x float32, owner uint16) *Actor {
+		a := w.Spawn(rl.Vector2{X: x}, owner > 0)
+		a.Owner = owner
+		return a
 	}
+	p1, bot1, p2, bot2 := spawn(0, 1), spawn(60, 0), spawn(120, 2), spawn(180, 0)
 	h.endTick()
-	teams := map[uint8]int{}
-	for _, f := range fighters {
-		teams[f.Team]++
+	if p1.Team == p2.Team || (p1.Team != RedTeam && p1.Team != BlueTeam) || (p2.Team != RedTeam && p2.Team != BlueTeam) {
+		t.Fatalf("players on teams %d and %d, want one on Red and one on Blue", p1.Team, p2.Team)
 	}
-	if teams[2] != 2 || teams[3] != 2 {
-		t.Fatalf("teams %v, want two on 2 and two on 3", teams)
+	if bot1.Team != BotTeam || bot2.Team != BotTeam {
+		t.Errorf("bots on teams %d and %d, want both left on the bots' team", bot1.Team, bot2.Team)
 	}
-	var red, blue *Actor
-	for _, f := range fighters {
-		if f.Team == 2 && red == nil {
-			red = f
-		}
-		if f.Team == 3 && blue == nil {
-			blue = f
-		}
+	red, blue := p1, p2
+	if red.Team != RedTeam {
+		red, blue = p2, p1
 	}
+
+	// breaking a neutral bot scores nothing
+	bot1.Structure = 0.1
+	bot1.takeHit(red)
+	h.endTick()
+
 	blue.Structure = 0.1
 	blue.takeHit(red)
-	back := w.Spawn(rl.Vector2{X: 300}, false)
+	back := spawn(300, blue.Owner)
 	back.Team = blue.Team // as a respawn comes back
 	h.endTick()
-	if back.Team != 3 {
-		t.Errorf("a respawned Blue fighter was moved to team %d", back.Team)
+	if back.Team != BlueTeam {
+		t.Errorf("a respawned Blue player was moved to team %d", back.Team)
 	}
 	for _, l := range log.lines {
 		// a failed call is logged as "[script name] Callback: error"
@@ -440,6 +443,6 @@ func TestExampleScripts(t *testing.T) {
 	}
 	h.close()
 	if !log.has("final score: Red 1 : 0 Blue") {
-		t.Errorf("the kill was not scored: %q", log.lines)
+		t.Errorf("want only the kill of the other side scored: %q", log.lines)
 	}
 }

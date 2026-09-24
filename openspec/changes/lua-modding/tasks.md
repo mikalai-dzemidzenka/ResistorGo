@@ -100,6 +100,10 @@
 - [x] 7.2 The attack outline skips an ally; verify in the outline exclusions
       test that an ally is not marked, an enemy is, and two fighters with no
       team still are
-- [ ] 7.3 In the game: a TDM host and a second client with bots - each sees
-      its own side's colour and the other's, the bot on its side has its line
-      and no outline, and the enemies take damage
+- [x] 7.3 TDM leaves bots neutral on the bots' team: they fight both sides,
+      and breaking one scores nothing; verify in `TestExampleScripts` that two
+      players are split, two bots stay put, and only a kill of the other side
+      scores
+- [ ] 7.4 In the game: a TDM host and a second client with bots - each sees
+      its own side's colour and the other's, the bots have no line and both
+      sides can hurt them, and a teammate is never outlined

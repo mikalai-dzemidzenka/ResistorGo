@@ -1,6 +1,7 @@
--- Team deathmatch: every fighter, player or bot, is put on Red or Blue as it
--- enters the match, the smaller team first; a kill scores for the killer's
--- team, and the score is called out every minute.
+-- Team deathmatch: every player is put on Red or Blue as it enters the match,
+-- the smaller team first; a kill of the other side scores for the killer's
+-- team, and the score is called out every minute. Bots stay on the bots' team,
+-- neutral: they fight both sides, and breaking one scores nothing.
 --
 -- Run it with:  resistor -dedicated -gamemode tdm -bots 4
 
@@ -33,21 +34,20 @@ function OnGameModeInit()
 end
 
 function OnFighterSpawn(id, player)
-  -- a fighter coming back keeps the team it died on
+  if player == 0 then return end -- a bot stays neutral
+  -- a player coming back keeps the team it died on
   local team = GetFighterTeam(id)
   if team ~= RED and team ~= BLUE then
     team = teamSize(RED) <= teamSize(BLUE) and RED or BLUE
     SetFighterTeam(id, team)
   end
-  if player > 0 then
-    SendPlayerMessage(player, "You fight for " .. names[team] .. ".")
-  end
+  SendPlayerMessage(player, "You fight for " .. names[team] .. ".")
 end
 
 function OnFighterDeath(id, killer)
   local lost = GetFighterTeam(id)
   local won = killer > 0 and GetFighterTeam(killer)
-  if not won or won == lost or not names[won] then return end
+  if not won or won == lost or not names[won] or not names[lost] then return end
   score[won] = score[won] + 1
   SendMessageToAll(names[won] .. " scores: " .. who(killer) .. " broke " .. who(id) .. ".  Red " .. score[RED] .. " : " .. score[BLUE] .. " Blue")
 end
