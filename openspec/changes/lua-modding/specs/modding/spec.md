@@ -45,7 +45,7 @@ A script SHALL have Lua's base, string, table, math and bit32 libraries, without
 The server SHALL call these global functions in a script, when the script defines them, with these arguments:
 
 - `OnGameModeInit()` / `OnGameModeExit()` in the gamemode, and `OnFilterScriptInit()` / `OnFilterScriptExit()` in a filterscript, when it is loaded and when the server shuts down.
-- `OnPlayerConnect(playerid)` when a fighter player is accepted, and `OnPlayerDisconnect(playerid, reason)` when one leaves, with reason `"quit"`, `"timeout"` or `"kicked"`.
+- `OnPlayerConnect(playerid)` when a fighter player is accepted, and `OnPlayerDisconnect(playerid, reason)` when one leaves, with reason `"quit"`, `"timeout"` or `"kicked"`. When the server shuts down, every player still connected - a hosted game's own player among them - leaves with `"quit"` before the exit callbacks run.
 - `OnFighterSpawn(fighterid, playerid)` when a fighter enters the world - at a player's connect, at a respawn, or added by a script - with `playerid` 0 for a bot.
 - `OnFighterHit(fighterid, attackerid, structure)` when a hit lands, with the structure it cost.
 - `OnFighterBlock(fighterid, attackerid)` when a guard or block-all stops a blow.
@@ -60,6 +60,10 @@ Every callback SHALL be called in each filterscript in load order and then in th
 #### Scenario: A change made in a callback holds
 - **WHEN** a script sets a fighter's structure to full inside `OnFighterHit`
 - **THEN** the next snapshot shows that fighter at full structure
+
+#### Scenario: The host leaves with the server
+- **WHEN** the player hosting a game from the menu closes it
+- **THEN** the scripts get `OnPlayerDisconnect` with that player's id and `"quit"`, and then their exit callbacks
 
 #### Scenario: Order
 - **WHEN** filterscript `admin` and gamemode `tdm` both define `OnPlayerConnect` and a player connects

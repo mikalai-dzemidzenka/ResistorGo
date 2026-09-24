@@ -148,17 +148,20 @@ func TestScriptPlayerCallbacks(t *testing.T) {
 	pumpFor(200*time.Millisecond, s, nil, a, b)
 	s.W.Script.call("Kick", 2)
 	pumpFor(100*time.Millisecond, s, nil, b)
+	// still in when the server closes, as a hosted game's own player is
+	c := hello(t, s, nil, cfg.Port, fighter)
+	pumpFor(100*time.Millisecond, s, nil, c)
 	host := s.W.Script
 	s.Close()
 
 	// A player's fighter is told of on the tick after it connects, so where it
 	// falls among the connects is up to the timing; it is checked on its own.
-	want := "init;connect 1;connect 2;leave 1 quit;leave 2 kicked;exit;"
+	want := "init;connect 1;connect 2;leave 1 quit;leave 2 kicked;connect 3;leave 3 quit;exit;"
 	if seen := scriptGlobal(host0(host, gm), "seen"); seen != want {
 		t.Errorf("callbacks\n got %s\nwant %s", seen, want)
 	}
-	if spawned := scriptGlobal(host0(host, gm), "spawned"); spawned != "1;2;" {
-		t.Errorf("fighters spawned for players %q, want 1;2;", spawned)
+	if spawned := scriptGlobal(host0(host, gm), "spawned"); spawned != "1;2;3;" {
+		t.Errorf("fighters spawned for players %q, want 1;2;3;", spawned)
 	}
 	if reason := scriptLeaveReason("timed out"); reason != "timeout" {
 		t.Errorf("a timed out player leaves with %q, want timeout", reason)

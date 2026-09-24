@@ -425,6 +425,11 @@ func (s *Server) Frame(dt float32) {
 // Close tells every client the server is going away and shuts the host down.
 func (s *Server) Close() {
 	if s.W.Script != nil {
+		// every player still in - a hosted game's own player among them -
+		// leaves with the server, and the scripts hear it before they exit
+		for _, id := range s.W.Script.playerIDs() {
+			s.W.Script.call("OnPlayerDisconnect", id, "quit")
+		}
 		s.W.Script.close()
 	}
 	for _, p := range s.Peers {
