@@ -32,6 +32,7 @@ type Client struct {
 	Welcomed    bool
 	PlayerID    uint16
 	ActorID     uint16
+	Played      bool // has had a fighter: without one now, it is waiting for a respawn
 	W           *World
 	Seq         uint32
 	Ring        [CmdRing]Input
@@ -137,7 +138,7 @@ func (c *Client) send(ch uint8, data []byte) {
 // ready reports whether the client is in the match: a fighter once its own
 // fighter arrived, a spectator once the first snapshot arrived.
 func (c *Client) ready() bool {
-	return c.W.Local != nil || (c.Spectator && c.HasSnap)
+	return c.W.Local != nil || c.Played || (c.Spectator && c.HasSnap)
 }
 
 func (c *Client) fail(reason string) {
@@ -261,8 +262,16 @@ func (c *Client) onSnapshot(s Snapshot) {
 	if c.Spectator && Stage != StageLevel {
 		enterLevel()
 	}
+	if !c.Spectator && s.Yours != c.ActorID {
+		// handed another fighter, or none: the one held is no longer ours,
+		// and the next reconcile builds the new one from scratch
+		if c.W.Local != nil {
+			c.W.Remove(c.W.Local)
+		}
+		c.ActorID = s.Yours
+	}
 	for _, r := range s.Actors {
-		if r.ID == c.ActorID {
+		if c.ActorID != 0 && r.ID == c.ActorID {
 			c.reconcile(r, s.Ack)
 		}
 	}
@@ -275,6 +284,7 @@ func (c *Client) reconcile(r ActorRec, ack uint32) {
 		local = NewActor(rl.Vector2{}, true)
 		c.W.Add(local)
 		c.W.Local = local
+		c.Played = true
 		r.apply(local, c.W)
 		local.PrevPos = local.Pos
 		if Stage != StageLevel {
@@ -333,12 +343,25 @@ func (c *Client) tick() {
 	c.W.Tick++
 }
 
-// applyInterp positions every remote actor at the interpolation time.
+// applyInterp positions every remote actor at the interpolation time, and
+// removes any actor - the local fighter too - the server has stopped sending.
 func (c *Client) applyInterp() {
 	rt := c.Interp.RenderTick()
+	var newest *Snapshot
+	if n := len(c.Interp.Snaps); n > 0 {
+		newest = &c.Interp.Snaps[n-1]
+	}
+	sent := func(id uint16) bool {
+		if newest == nil {
+			return false
+		}
+		_, ok := findRec(newest, id)
+		return ok
+	}
 	visible := make(map[uint16]bool)
 	for _, id := range c.Interp.IDs() {
 		if id == c.ActorID {
+			visible[id] = sent(id) // predicted, not interpolated
 			continue
 		}
 		st, ok := c.Interp.Sample(id, rt)
@@ -347,6 +370,9 @@ func (c *Client) applyInterp() {
 		}
 		a := c.W.ByID(id)
 		if a == nil {
+			if !sent(id) {
+				continue // already gone on the server, e.g. our own corpse after a handover
+			}
 			a = NewActor(st.Pos, false)
 			a.Remote = true
 			c.W.Add(a)
@@ -360,7 +386,7 @@ func (c *Client) applyInterp() {
 		visible[id] = true
 	}
 	for i := len(c.W.Actors) - 1; i >= 0; i-- {
-		if a := c.W.Actors[i]; a.Remote && !visible[a.ID] {
+		if a := c.W.Actors[i]; !visible[a.ID] {
 			c.W.Remove(a)
 		}
 	}

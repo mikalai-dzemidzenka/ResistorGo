@@ -407,7 +407,11 @@ func (s *Server) sendSnapshots() {
 		if !p.Accepted {
 			continue
 		}
-		data := encodeSnapshot(Snapshot{Tick: s.W.Tick, Ack: p.Cmds.last, Actors: recs})
+		var yours uint16
+		if p.Actor != nil {
+			yours = p.Actor.ID
+		}
+		data := encodeSnapshot(Snapshot{Tick: s.W.Tick, Ack: p.Cmds.last, Yours: yours, Actors: recs})
 		sendBytes(p.Peer, ChanUnreliable, data)
 	}
 }

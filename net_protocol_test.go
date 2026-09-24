@@ -42,7 +42,7 @@ func TestProtocolRoundTrip(t *testing.T) {
 	if got, err := decodeCmds(encodeCmds(cmds)); err != nil || !slices.Equal(got, cmds) {
 		t.Errorf("cmds: %+v %v", got, err)
 	}
-	s := Snapshot{Tick: 42, Ack: 500, Actors: []ActorRec{sampleRec(1), sampleRec(2)}}
+	s := Snapshot{Tick: 42, Ack: 500, Yours: 2, Actors: []ActorRec{sampleRec(1), sampleRec(2)}}
 	if got, err := decodeSnapshot(encodeSnapshot(s)); err != nil || !reflect.DeepEqual(got, s) {
 		t.Errorf("snapshot: %+v %v", got, err)
 	}
@@ -107,7 +107,7 @@ func TestSnapshotFitsPacket(t *testing.T) {
 	for i := range 16 {
 		recs = append(recs, sampleRec(uint16(i+1)))
 	}
-	if n := len(encodeSnapshot(Snapshot{Tick: 1, Ack: 1, Actors: recs})); n > 1200 {
+	if n := len(encodeSnapshot(Snapshot{Tick: 1, Ack: 1, Yours: 16, Actors: recs})); n > 1200 {
 		t.Errorf("16-actor snapshot is %d bytes, want <= 1200", n)
 	}
 }
@@ -115,7 +115,7 @@ func TestSnapshotFitsPacket(t *testing.T) {
 // The record size constant has to match what the encoder actually writes, or
 // the decoder's length check silently rejects good packets.
 func TestActorRecSize(t *testing.T) {
-	const header = 1 + 4 + 4 + 1 // message id, tick, ack, count
+	const header = 1 + 4 + 4 + 2 + 1 // message id, tick, ack, yours, count
 	if n := len(encodeSnapshot(Snapshot{Tick: 1, Ack: 1, Actors: []ActorRec{sampleRec(1)}})); n != header+actorRecSize {
 		t.Errorf("one-actor snapshot is %d bytes, want %d", n, header+actorRecSize)
 	}

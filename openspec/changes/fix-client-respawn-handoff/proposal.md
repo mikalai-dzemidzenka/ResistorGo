@@ -27,10 +27,9 @@ Single player has the quiet half of the same bug: `World.Remove` nils `w.Local`,
 
 ## Impact
 
-- `net_protocol.go`: `Snapshot` gains a `Yours uint16`; `encodeSnapshot`/`decodeSnapshot` carry it; the snapshot header goes 10 → 12 bytes; `ProtocolVersion` 5 → 6.
+- `net_protocol.go`: `Snapshot` gains a `Yours uint16`; `encodeSnapshot`/`decodeSnapshot` carry it; the snapshot header goes 10 → 12 bytes; `ProtocolVersion` 9 → 10.
 - `net_server.go`: `sendSnapshots` fills it per peer from `p.Actor`.
 - `net_client.go`: `onSnapshot` adopts `Yours` into `c.ActorID`; `applySnapshot` removes the local fighter when it is no longer in the snapshot; `reconcile` handles being given a different fighter than the one it holds.
 - `actor.go`: `updateDeath` stops the count at the end of the flicker instead of counting on.
 - `game.go`: `stepOffline` points `CL.Local` at the player's fighter when it has none.
 - Tests: `net_integration_test.go` gains a death-to-respawn-to-control case; `net_protocol_test.go` covers the new field and the packet size; the existing `TestNetDeathAndRespawn` is tightened to assert control, not just visibility.
-- Lands alongside `add-actor-energy`, which is already bumping the protocol; the two version bumps collapse into one if they ship together.

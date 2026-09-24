@@ -266,7 +266,7 @@ func TestParseAddr(t *testing.T) {
 	}
 }
 
-// A player that dies keeps its slot while the body is gone, is given a new
+// A player that dies keeps its slot while the body is gone, controls a new
 // fighter when it respawns, and its structure reaches the client.
 func TestNetDeathAndRespawn(t *testing.T) {
 	initNet()
@@ -346,8 +346,8 @@ func TestNetDeathAndRespawn(t *testing.T) {
 		t.Errorf("respawned fighter belongs to player %d, want %d", p.Actor.Owner, p.ID)
 	}
 	pumpFor(500*time.Millisecond, s, c)
-	if c.W.ByID(p.Actor.ID) == nil {
-		t.Errorf("the client does not see the respawned fighter %d", p.Actor.ID)
+	if local := c.W.Local; local == nil || local.ID != p.Actor.ID || c.ActorID != p.Actor.ID {
+		t.Errorf("the client controls %v (actor %d), want the respawned fighter %d", local, c.ActorID, p.Actor.ID)
 	}
 }
 
