@@ -165,8 +165,9 @@ func TestSaveWritesLevelAndDefaults(t *testing.T) {
 	if !le.dirty {
 		t.Fatal("a default edit did not mark the editor unsaved")
 	}
+	le.usePreset(2, true)
 	le.Save()
-	for _, p := range []string{"level_1.json", objectDefaultsPath} {
+	for _, p := range []string{"level_1.json", objectDefaultsPath, presetsPath} {
 		if b, err := os.ReadFile(p); err != nil || len(b) == 0 {
 			t.Errorf("saving did not write %s: %v", p, err)
 		}
@@ -177,5 +178,24 @@ func TestSaveWritesLevelAndDefaults(t *testing.T) {
 	got := loadObjectDefaults(objectDefaultsPath)[le.obj.Resource]
 	if len(got.Collision) != 1 || got.Collision[0] != (rl.Rectangle{Width: 7, Height: 7}) {
 		t.Errorf("saved default = %+v, want the edited rectangle", got.Collision)
+	}
+	if p := NewLevelEditor(39, 83).presets[2]; p == nil || len(p.Collision) != 1 || p.Collision[0] != (rl.Rectangle{Width: 7, Height: 7}) {
+		t.Errorf("reopened preset 3 = %+v, want the edited rectangle", p)
+	}
+}
+
+func TestPresetsRoundTrip(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "level_presets.json")
+	var want Presets
+	want[0] = &ObjectRects{Collision: coll(3, 4)}
+	want[8] = &ObjectRects{Light: coll(5, 6), Drop: coll(7, 8)}
+	if !savePresets(path, want) {
+		t.Fatal("saving the presets failed")
+	}
+	got := loadPresets(path)
+	for i := range got {
+		if (got[i] == nil) != (want[i] == nil) || got[i] != nil && !sameRects(*got[i], *want[i]) {
+			t.Errorf("slot %d = %+v, want %+v", i+1, got[i], want[i])
+		}
 	}
 }

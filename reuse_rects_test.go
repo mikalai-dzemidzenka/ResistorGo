@@ -264,3 +264,46 @@ func TestCopyPaste(t *testing.T) {
 		t.Errorf("a tile pasted onto took its texture's next change: %+v", got)
 	}
 }
+
+// A preset slot keeps a selection's rectangles and gives them to any other
+// selection, as a paste does; an empty slot, or Shift, keeps instead.
+func TestPresets(t *testing.T) {
+	src := LevelObject{Resource: "a", CollisionRects: coll(10, 10), LightRects: coll(9, 9)}
+	dst := LevelObject{Resource: "b", CollisionRects: coll(1, 1)}
+	le := newLevelEditor(39, 83, []LevelObject{src, dst}, nil)
+	frame(&le)
+
+	le.usePreset(0, false) // empty: keeps a's
+	if p := le.presets[0]; p == nil || !sameRects(*p, src.rects()) || !le.dirty {
+		t.Fatalf("slot 1 = %+v, want a's rectangles kept and the editor unsaved", p)
+	}
+	le.levelObjects[0].CollisionRects[0].Width = 99 // the slot is a copy
+	if le.presets[0].Collision[0].Width != 10 {
+		t.Errorf("the slot shares its lists with the entry it was kept from")
+	}
+
+	le.selectEntry(1)
+	tile := Vector2i{X: 39}
+	le.place(tile)
+	le.selectAt(tile)
+	le.usePreset(0, false)
+	if got := le.objects[0][tile]; !got.own || !sameRects(got.rects(), *le.presets[0]) {
+		t.Errorf("a tile given slot 1 = %+v, want its own copy of the slot", got)
+	}
+	if len(le.levelObjects[1].LightRects) != 0 {
+		t.Errorf("a preset given to a tile reached its palette entry")
+	}
+
+	le.usePreset(0, true) // Shift: keeps the tile's over what was there
+	le.selectEntry(1)
+	frame(&le)
+	le.usePreset(0, false)
+	frame(&le)
+	if !sameRects(le.levelObjects[1].rects(), le.objects[0][tile].rects()) {
+		t.Errorf("palette b = %+v, want the rectangles Shift kept", le.levelObjects[1].rects())
+	}
+	le.undo()
+	if len(le.levelObjects[1].LightRects) != 0 {
+		t.Errorf("undo did not take back the preset")
+	}
+}

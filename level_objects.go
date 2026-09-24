@@ -52,16 +52,8 @@ func (o *LevelObject) setRects(r ObjectRects) {
 // malformed falls back to the rectangles built into the game: bad editor data
 // must never stop the editor from opening.
 func loadObjectDefaults(path string) map[string]ObjectRects {
-	if !DevTools {
-		return nil // a release build has no editor to have a palette for
-	}
-	b, err := os.ReadFile(path)
-	if err != nil {
-		return nil
-	}
 	m := make(map[string]ObjectRects)
-	if err := json.Unmarshal(b, &m); err != nil {
-		rl.TraceLog(rl.LogError, "failed to load object defaults: json unmarshal: %s", err.Error())
+	if !readEditorJSON(path, "object defaults", &m) {
 		return nil
 	}
 	return m
@@ -72,19 +64,69 @@ func loadObjectDefaults(path string) map[string]ObjectRects {
 // writes nothing, so saving a level does not litter the repo with an empty file.
 // It reports whether the defaults are safely on disk.
 func saveObjectDefaults(path string, defaults map[string]ObjectRects) bool {
+	if len(defaults) == 0 {
+		return DevTools
+	}
+	return writeEditorJSON(path, "object defaults", defaults)
+}
+
+// presetsPath holds the editor's rectangle presets: slots of rectangles that
+// any palette entry or placed tile can be given with one key. Like the
+// defaults, only the editor reads it, and only Ctrl+S writes it.
+const presetsPath = "level_presets.json"
+
+const presetSlots = 9 // keys 1 to 9
+
+// Presets are the slots, nil where nothing has been saved.
+type Presets [presetSlots]*ObjectRects
+
+// loadPresets reads the presets; anything missing or malformed is no presets.
+func loadPresets(path string) Presets {
+	var p Presets
+	if !readEditorJSON(path, "presets", &p) {
+		return Presets{}
+	}
+	return p
+}
+
+// savePresets writes the presets. No preset writes nothing.
+func savePresets(path string, p Presets) bool {
+	if p == (Presets{}) {
+		return DevTools
+	}
+	return writeEditorJSON(path, "presets", p)
+}
+
+// readEditorJSON reads one of the editor's own files into v, reporting whether
+// it did. Only a development build has an editor to read them.
+func readEditorJSON(path, what string, v any) bool {
 	if !DevTools {
 		return false
 	}
-	if len(defaults) == 0 {
-		return true
-	}
-	b, err := json.MarshalIndent(defaults, "", "  ")
+	b, err := os.ReadFile(path)
 	if err != nil {
-		rl.TraceLog(rl.LogError, "failed to save object defaults: marshal: %s", err.Error())
+		return false
+	}
+	if err := json.Unmarshal(b, v); err != nil {
+		rl.TraceLog(rl.LogError, "failed to load %s: json unmarshal: %s", what, err.Error())
+		return false
+	}
+	return true
+}
+
+// writeEditorJSON writes one of the editor's own files, reporting whether it is
+// safely on disk.
+func writeEditorJSON(path, what string, v any) bool {
+	if !DevTools {
+		return false
+	}
+	b, err := json.MarshalIndent(v, "", "  ")
+	if err != nil {
+		rl.TraceLog(rl.LogError, "failed to save %s: marshal: %s", what, err.Error())
 		return false
 	}
 	if err := os.WriteFile(path, b, 0o644); err != nil {
-		rl.TraceLog(rl.LogError, "failed to save object defaults: write file: %s", err.Error())
+		rl.TraceLog(rl.LogError, "failed to save %s: write file: %s", what, err.Error())
 		return false
 	}
 	return true

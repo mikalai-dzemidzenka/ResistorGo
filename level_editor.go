@@ -115,6 +115,7 @@ type LevelEditor struct {
 	clip     ObjectRects // rectangles copied with Ctrl+C, pasted with Ctrl+V
 	clipFrom string      // what they were copied from, for the panel
 	hasClip  bool
+	presets  Presets // rectangles kept in slots 1 to 9, from level_presets.json
 
 	lights    []LevelLight // the level's lights, saved with it
 	lightSel  int          // the selected light, -1 for none
@@ -145,7 +146,9 @@ type LevelObject struct {
 
 func NewLevelEditor(gridW, gridH int32) LevelEditor {
 	defaults := loadObjectDefaults(objectDefaultsPath)
-	return newLevelEditor(gridW, gridH, buildPalette(defaults), defaults)
+	le := newLevelEditor(gridW, gridH, buildPalette(defaults), defaults)
+	le.presets = loadPresets(presetsPath)
+	return le
 }
 
 func newLevelEditor(gridW, gridH int32, palette []LevelObject, defaults map[string]ObjectRects) LevelEditor {
@@ -241,6 +244,13 @@ func (le *LevelEditor) Update(dt float32) {
 		}
 		if rl.IsKeyPressed(rl.KeyF) {
 			le.followTexture()
+		}
+		if le.tool == toolPlace || le.tool == toolRect {
+			for i := range presetSlots {
+				if rl.IsKeyPressed(int32(rl.KeyOne) + int32(i)) {
+					le.usePreset(i, shift)
+				}
+			}
 		}
 	}
 	if le.editField < 0 && le.tool == toolRect && rl.IsKeyPressed(rl.KeyDelete) {
@@ -559,13 +569,37 @@ func (le *LevelEditor) copySelection() {
 // that texture, onto a placed object it detaches that object. A paste that
 // changes nothing is no edit at all.
 func (le *LevelEditor) pasteSelection() {
+	if le.hasClip {
+		le.giveRects(le.clip)
+	}
+}
+
+// giveRects gives the selected thing a copy of r, as a paste does.
+func (le *LevelEditor) giveRects(r ObjectRects) {
 	obj, ok := le.selectedObject()
-	if !ok || !le.hasClip || sameRects(obj.rects(), le.clip) {
+	if !ok || sameRects(obj.rects(), r) {
 		return
 	}
-	le.setSelectedRects(le.clip.clone())
+	le.setSelectedRects(r.clone())
 	le.drag = rectDrag{}
 	le.editField = -1
+}
+
+// usePreset is a preset slot's key or button: it gives the selection the
+// slot's rectangles. An empty slot, or save, keeps the selection's rectangles
+// in the slot instead; Ctrl+S writes them.
+func (le *LevelEditor) usePreset(i int, save bool) {
+	if p := le.presets[i]; p != nil && !save {
+		le.giveRects(*p)
+		return
+	}
+	obj, ok := le.selectedObject()
+	if !ok {
+		return
+	}
+	r := obj.rects().clone()
+	le.presets[i] = &r
+	le.dirty = true
 }
 
 // list is the kind's list of rectangles: collision, light or drop-through.
@@ -977,6 +1011,7 @@ func (le *LevelEditor) OpenObjects() {
 // and nothing else writes either file.
 func (le *LevelEditor) Save() {
 	ok := saveObjectDefaults(objectDefaultsPath, le.defaults)
+	ok = savePresets(presetsPath, le.presets) && ok
 	le.SaveLevel(LevelPath)
 	if !ok {
 		le.dirty = true // the level is saved, but not everything is
@@ -1074,7 +1109,7 @@ const (
 	pickerX, pickerY = 25, 35
 	pickerCell       = 100
 	pickerCols       = 12
-	panelW, panelH   = 380, 400
+	panelW, panelH   = 380, 428
 )
 
 func pickerCellRect(i int) rl.Rectangle {
@@ -1215,6 +1250,18 @@ func (le *LevelEditor) drawPanel() {
 	if le.hasClip {
 		rlg.Label(row(), "Copied: "+le.clipFrom)
 	}
+	// preset slots: a number gives its rectangles, + (or Shift) keeps the selection's
+	shift := rl.IsKeyDown(rl.KeyLeftShift) || rl.IsKeyDown(rl.KeyRightShift)
+	b = buttons(row(), presetSlots)
+	for i, p := range le.presets {
+		label := "+"
+		if p != nil {
+			label = strconv.Itoa(i + 1)
+		}
+		if button(b[i], label, true) {
+			le.usePreset(i, shift)
+		}
+	}
 
 	active := int32(le.activeRect)
 	r = row()
@@ -1257,7 +1304,7 @@ func (le *LevelEditor) drawPanel() {
 		{"H", int32(cur.Height), 1, fieldLim},
 	})
 	le.setActive(&rl.Rectangle{X: float32(v[0]), Y: float32(v[1]), Width: float32(v[2]), Height: float32(v[3])})
-	rlg.Label(row(), "Drag an edge, a corner or the body to shape it")
+	rlg.Label(row(), "Drag to shape. 1-9 preset, Shift+1-9 keep one")
 }
 
 // buttons splits a panel row into n buttons side by side.
