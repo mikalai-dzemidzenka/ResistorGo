@@ -1,0 +1,112 @@
+package resistor
+
+import rl "github.com/gen2brain/raylib-go/raylib"
+
+// The roll's launch grows with how long the duck was held, from the Min pair on
+// the first tick to the Max pair after RollChargeTicks, and no further. Speeds
+// in px/s; to be tuned by eye in play. RollMaxX stays under MaxSpeed.
+const (
+	RollChargeTicks = 60
+	RollMinX        = 260
+	RollMaxX        = 300
+	RollMinY        = -150
+	RollMaxY        = -420
+	RollPathTicks   = 300 // the drawn arc gives up on a roll that has not landed by then
+)
+
+// rolling reports whether the fighter is anywhere in a roll: ducked, in the
+// air, or recovering. None of it guards.
+func (a *Actor) rolling() bool {
+	return a.State == StateDuck || a.State == StateRoll || a.State == StateRollRecover
+}
+
+// rollLaunch is the speed a duck released now would roll off with. The charge
+// is read from the duck's animation start, which is replicated and recorded
+// already, so every machine arrives at the same one.
+func (a *Actor) rollLaunch() rl.Vector2 {
+	t := float32(min(a.Ticks-a.AnimStartTick, RollChargeTicks)) / RollChargeTicks
+	return rl.Vector2{
+		X: lerp(RollMinX, RollMaxX, t) * float32(a.Orientation),
+		Y: lerp(RollMinY, RollMaxY, t),
+	}
+}
+
+// enterDuckState crouches to charge a roll, if the fighter can pay for one.
+// Nothing is spent until it rolls, so a duck that ends another way is free.
+func (a *Actor) enterDuckState() bool {
+	if !a.canRunJump() {
+		a.Events |= EvNoEnergy
+		return false
+	}
+	a.State = StateDuck
+	a.Speed.X = 0
+	a.SetAnim("resources/threefour/duck.png", AnimOptions{animDuration: 0.2, totalFrames: 4, once: true, reset: true})
+	return true
+}
+
+func (a *Actor) launchRoll() {
+	a.spendEnergy(EnergyRunJump)
+	a.Speed = a.rollLaunch()
+	a.OnGround = false
+	a.State = StateRoll
+	a.SetAnim("resources/threefour/roll.png", AnimOptions{animDuration: 0.4, totalFrames: 5})
+}
+
+func (a *Actor) enterRollRecoverState() {
+	a.State = StateRollRecover
+	a.SetAnim("resources/threefour/roll-recover.png", AnimOptions{animDuration: 0.3, totalFrames: 4, once: true})
+}
+
+// updateRoll is the state switch's arm for all three stages of a roll.
+func (a *Actor) updateRoll() {
+	switch a.State {
+	case StateDuck:
+		// no return after the launch: the take-off tick must move the fighter,
+		// or the next collision check stands it back on the floor
+		if !a.Input.Roll {
+			a.launchRoll()
+		}
+	case StateRoll:
+		if a.OnGround {
+			a.enterRollRecoverState()
+		}
+	case StateRollRecover:
+		if a.AnimFinished {
+			a.land()
+		}
+	}
+}
+
+// rollPath is where the fighter's feet would go if the duck were released now:
+// a copy of it is released and run through the real fixed step until it lands.
+// Running the simulation itself, rather than a second copy of its maths, is
+// what keeps the drawn arc from lying. A copy is safe to step - an Actor is
+// recorded and restored by value - and a roll touches no other fighter.
+func (a *Actor) rollPath() []rl.Vector2 {
+	b := *a
+	b.Input = Input{FaceLeft: a.Input.FaceLeft, Updown: a.Input.Updown}
+	b.FreezeTicks = 0
+	feet := func() rl.Vector2 {
+		return rl.Vector2{X: b.Pos.X + b.CollisionBox.X + b.CollisionBox.Width/2, Y: b.Pos.Y + b.CollisionBox.Y + b.CollisionBox.Height}
+	}
+	path := []rl.Vector2{feet()}
+	for range RollPathTicks {
+		b.Update(float32(FixedTimeStep))
+		path = append(path, feet())
+		if b.State != StateRoll {
+			break
+		}
+	}
+	return path
+}
+
+// drawRollArc dots the path a ducking fighter would roll along.
+func drawRollArc(a *Actor) {
+	if a == nil || a.State != StateDuck {
+		return
+	}
+	path := a.rollPath()
+	for i := 0; i < len(path); i += 2 {
+		rl.DrawPixelV(rl.Vector2{X: roundf(path[i].X), Y: roundf(path[i].Y)}, rl.RayWhite)
+	}
+}

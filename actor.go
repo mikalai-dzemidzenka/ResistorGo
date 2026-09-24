@@ -195,6 +195,9 @@ const (
 	StatePush
 	StateClash
 	StateClimbDown
+	StateDuck
+	StateRoll
+	StateRollRecover
 	// stateCount is one past the last state. A replicated state is checked
 	// against it, so appending a state cannot leave that check behind - it was
 	// left at the death when the run-jump and the fall were appended, and every
@@ -306,6 +309,7 @@ type Input struct {
 	Attack   bool
 	Jump     bool
 	Down     bool // climb down through the floor; pressed, not held
+	Roll     bool // duck and charge a roll; held, and released to roll
 	FaceLeft bool
 	Updown   uint8
 	ViewTick uint32
@@ -518,6 +522,9 @@ func (a *Actor) Update(dt float32) {
 		} else if absSpeed < 0.1 && a.Anim == "resources/threefour/walk.png" {
 			a.SetAnimFrame("resources/threefour/updown.png", a.Updown)
 		}
+		if a.Input.Roll && a.OnGround && a.enterDuckState() {
+			return
+		}
 		if a.Input.Attack && a.Updown != 3 && a.enterAttackState() {
 			return
 		}
@@ -541,7 +548,9 @@ func (a *Actor) Update(dt float32) {
 		// no return: the take-off tick must still apply its movement, or the
 		// fighter is left standing on the floor and the next collision check
 		// cancels the jump. The standing jump leaves the ground the same way.
-		if a.Input.Jump && a.enterRunJumpState() {
+		if a.Input.Roll && a.OnGround && a.enterDuckState() {
+			// ducked; a refused duck falls through and the fighter runs on
+		} else if a.Input.Jump && a.enterRunJumpState() {
 			// nothing else this tick; a refused jump falls through and the
 			// fighter goes on running
 		} else if a.Input.Attack {
@@ -605,6 +614,8 @@ func (a *Actor) Update(dt float32) {
 			a.exitJumpState()
 			a.land()
 		}
+	case StateDuck, StateRoll, StateRollRecover:
+		a.updateRoll()
 	case StateTurnover:
 		if a.AnimFinished {
 			if abs(a.Speed.X) < 0.001 {
@@ -877,9 +888,12 @@ func (a *Actor) DrawAnim() {
 }
 
 func (a *Actor) updateHorSpeed(dt float32) {
+	if a.State == StateRoll {
+		return // a roll is released onto its arc: not steered, not slowed, not clamped
+	}
 	var movePressed bool
 	prevOrientation := a.Orientation
-	canMove := a.State != StateBlock && a.State != StateAttacked && a.State != StatePush && a.State != StateClash && !a.climbingDown() && a.Updown != 3
+	canMove := a.State != StateBlock && a.State != StateAttacked && a.State != StatePush && a.State != StateClash && a.State != StateDuck && a.State != StateRollRecover && !a.climbingDown() && a.Updown != 3
 	// a swinging fighter moves, slowly (the attack case caps it), but keeps
 	// facing the way it swings
 	turn := a.State != StateAttack
@@ -905,7 +919,7 @@ func (a *Actor) updateHorSpeed(dt float32) {
 			a.face(1)
 		}
 	}
-	if a.State == StateIdle || a.State == StateAttack && a.AnimCurrentFrame == 0 {
+	if a.State == StateIdle || a.State == StateDuck || a.State == StateAttack && a.AnimCurrentFrame == 0 {
 		if a.IsPlayer {
 			if a.MouseOnLeft() {
 				a.face(-1)
@@ -1046,7 +1060,7 @@ func (a *Actor) checkCollision() {
 // platform it came through - and never with the head in a ceiling.
 func (a *Actor) catchLedge(c rl.Rectangle, centerX float32, hitTop bool) bool {
 	const climbOffset = 32
-	airborne := a.Speed.Y != 0 && a.State != StateClimbDown
+	airborne := a.Speed.Y != 0 && a.State != StateClimbDown && a.State != StateRoll
 	head := a.Pos.Y + a.CollisionBox.Y
 	if !airborne || hitTop || head < c.Y || head > c.Y+c.Height {
 		return false
@@ -1163,6 +1177,7 @@ func sampleInput(a *Actor) Input {
 		Attack: pressedAttack,
 		Jump:   pressedJump,
 		Down:   pressedDown,
+		Roll:   rl.IsMouseButtonDown(rl.MouseButtonRight),
 	}
 	pressedAttack, pressedJump, pressedDown = false, false, false
 
@@ -1775,7 +1790,7 @@ func (a *Actor) updateAttack() {
 			if !aabb(r1, r2) {
 				continue
 			}
-			guarding := a.Updown == actor.Updown || actor.Updown == 3
+			guarding := (a.Updown == actor.Updown || actor.Updown == 3) && !actor.rolling()
 			hitFrame := a.AnimCurrentFrame > attackFrames[a.Anim]
 			switch {
 			case actor.State == StateBlock:
@@ -1969,7 +1984,7 @@ func (a *Actor) land() {
 // ends, and the dead are falling in a sense this does not mean.
 func (a *Actor) updateFalling() {
 	switch a.State {
-	case StateFall, StateClimb, StateClimbDown, StateAttacked, StateDeath:
+	case StateFall, StateClimb, StateClimbDown, StateAttacked, StateDeath, StateRoll:
 		return
 	}
 	if !a.OnGround && a.Speed.Y > 0 {

@@ -7,7 +7,7 @@ Gives offence a price: a pool every swing spends and a correct guard earns back,
 ## Requirements
 
 ### Requirement: Energy pool
-Every fighter SHALL have an energy pool with a capacity of 200 points, full when the fighter enters the world. Energy SHALL never exceed that capacity or fall below zero. Energy SHALL gate attacking only: moving, jumping, climbing and blocking SHALL cost nothing and SHALL be available at any energy.
+Every fighter SHALL have an energy pool with a capacity of 200 points, full when the fighter enters the world. Energy SHALL never exceed that capacity or fall below zero. Energy SHALL gate attacking, the running jump and the roll: walking, running, the standing jump, climbing and blocking SHALL cost nothing and SHALL be available at any energy.
 
 #### Scenario: Full at spawn
 - **WHEN** a fighter spawns, whether at the start of a match or on respawn
@@ -19,7 +19,15 @@ Every fighter SHALL have an energy pool with a capacity of 200 points, full when
 
 #### Scenario: An empty fighter can still defend
 - **WHEN** a fighter at 0 energy is attacked
-- **THEN** it can move, jump and block normally, and blocking still resolves as it always does
+- **THEN** it can move, jump from a standstill and block normally, and blocking still resolves as it always does
+
+#### Scenario: An empty fighter still gets around
+- **WHEN** a fighter at 0 energy runs, climbs a ledge and jumps from a standstill
+- **THEN** none of them is refused and none of them costs anything
+
+#### Scenario: An empty fighter cannot roll
+- **WHEN** a fighter at 0 energy presses the roll button
+- **THEN** it does not duck and the refusal is raised
 
 ### Requirement: A swing costs energy
 Starting a swing SHALL cost the attacker 12 energy, taken when the swing starts. Every swing SHALL cost this: the first swing of an attack and each chained swing that continues it. A swing SHALL NOT cost energy more than once however long its attack box stays over a defender, and a swing SHALL cost the same whether it lands, is blocked, or hits nothing at all.
