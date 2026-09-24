@@ -104,6 +104,6 @@
       and breaking one scores nothing; verify in `TestExampleScripts` that two
       players are split, two bots stay put, and only a kill of the other side
       scores
-- [ ] 7.4 In the game: a TDM host and a second client with bots - each sees
+- [x] 7.4 In the game: a TDM host and a second client with bots - each sees
       its own side's colour and the other's, the bots have no line and both
       sides can hurt them, and a teammate is never outlined
