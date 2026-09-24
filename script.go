@@ -26,9 +26,9 @@ var (
 
 // ScriptBudget is how many Lua instructions one call into a script - a
 // callback, a timer, a script's main chunk - may run before it is stopped.
-// Roughly a twentieth of a second in go-lua: long enough for any sane
-// callback, short enough that a loop that never ends costs the server a few
-// ticks rather than the match.
+// About 20 ms in go-lua, a little over a tick: long enough for any sane
+// callback, short enough that a loop that never ends costs the server a tick
+// or two rather than the match.
 const (
 	ScriptBudget     = 5_000_000
 	scriptHookEvery  = 10_000

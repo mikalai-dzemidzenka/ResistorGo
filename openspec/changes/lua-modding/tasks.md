@@ -84,5 +84,7 @@
       under it; started with a broken gamemode: the Host screen shows the error
 - [ ] 6.3 Single player with `-gamemode tdm`: no script runs, time
       manipulation works
-- [ ] 6.4 A gamemode with an endless loop in `OnFighterDeath`: the server logs
-      it and keeps playing smoothly
+- [x] 6.4 A gamemode with an endless loop in `OnFighterDeath`: the server logs
+      it and keeps playing smoothly (dedicated, 4 bots on two teams: each death
+      logs "stopped: ran past 5000000 instructions", the fighter respawns and
+      timers keep their period; a runaway call is stopped in ~20 ms)
