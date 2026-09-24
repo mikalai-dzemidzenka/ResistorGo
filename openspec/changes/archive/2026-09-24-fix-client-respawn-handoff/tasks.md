@@ -32,5 +32,5 @@
 - [x] 6.1 Tighten `TestNetDeathAndRespawn` to assert control rather than visibility: after the respawn the client's `W.Local` is the server's new fighter and `c.ActorID` matches it, which is what it misses today
 - [x] 6.2 Add an integration test covering the reported bug end to end: a client's fighter dies, the corpse leaves the client's world, the client has no fighter for the gap, and after the respawn it predicts and controls the new one — with `DeathTicks` never past `DeathFlickerTicks`
 - [x] 6.3 Run `go test ./...` and confirm the replication, prediction, spectator and session suites all still pass
-- [ ] 6.4 Play a networked match against the dedicated server (`go run ./cmd -dedicated` plus a client): die on purpose and confirm the fighter falls, flickers once, disappears, and that two seconds later a new fighter is under control with no blinking at any point
-- [ ] 6.5 Play a single-player match (`go run ./cmd`): die on purpose and confirm the respawned fighter is controlled and the attack zoom and hit shake still happen
+- [x] 6.4 Play a networked match against the dedicated server (`go run ./cmd -dedicated` plus a client): die on purpose and confirm the fighter falls, flickers once, disappears, and that two seconds later a new fighter is under control with no blinking at any point
+- [x] 6.5 Play a single-player match (`go run ./cmd`): die on purpose and confirm the respawned fighter is controlled and the attack zoom and hit shake still happen
