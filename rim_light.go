@@ -123,7 +123,22 @@ var rimLoc struct {
 	hasTop                              int32
 	lightCount, lightPos, lightColor    int32
 	cap                                 int32
+	bodies, bodiesSize, bodyId          int32
 }
+
+// BodyMask holds every fighter's silhouette on screen, each as its own id,
+// drawn with the same camera and size as the scene so a rim pixel finds the
+// body under it at its own coordinates.
+var (
+	BodyMask       rl.RenderTexture2D
+	BodyMaskShader rl.Shader
+	bodyMaskID     int32
+)
+
+// maxBodies is how many fighters the mask can tell apart: an id is one byte.
+const maxBodies = 255
+
+func bodyID(i int) float32 { return float32(i+1) / 255 }
 
 func loadRimShader() {
 	RimShader = rl.LoadShaderFromMemory("", fsRim)
@@ -144,6 +159,37 @@ func loadRimShader() {
 	rimLoc.lightPos = loc("lightPos")
 	rimLoc.lightColor = loc("lightColor")
 	rimLoc.cap = loc("rimCap")
+	rimLoc.bodies = loc("bodies")
+	rimLoc.bodiesSize = loc("bodiesSize")
+	rimLoc.bodyId = loc("bodyId")
+	BodyMaskShader = rl.LoadShaderFromMemory("", fsBodyMask)
+	bodyMaskID = rl.GetShaderLocation(BodyMaskShader, "bodyId")
+}
+
+// drawBodyMask draws each fighter's silhouette into BodyMask as its index in
+// actors, the order drawRim is given them in. It runs before the scene pass:
+// render textures do not nest.
+func drawBodyMask(actors []*Actor, cam rl.Camera2D) {
+	rl.BeginTextureMode(BodyMask)
+	rl.ClearBackground(rl.Blank)
+	rl.BeginMode2D(cam)
+	rl.BeginShaderMode(BodyMaskShader)
+	for i, a := range actors[:min(len(actors), maxBodies)] {
+		if a.deathHidden() {
+			continue
+		}
+		// a batch per fighter, so each is drawn with its own id
+		rl.SetShaderValue(BodyMaskShader, bodyMaskID, []float32{bodyID(i)}, rl.ShaderUniformFloat)
+		tex, src, pos := a.spriteDraw()
+		rl.DrawTextureRec(tex, src, pos, rl.White)
+		if tex, src, pos, ok := a.topDraw(); ok {
+			rl.DrawTextureRec(tex, src, pos, rl.White)
+		}
+		rl.DrawRenderBatchActive()
+	}
+	rl.EndShaderMode()
+	rl.EndMode2D()
+	rl.EndTextureMode()
 }
 
 // rimQuad grows a sprite draw by one pixel on every side, so the ring of empty
@@ -162,9 +208,11 @@ func rimQuad(src rl.Rectangle, pos rl.Vector2) (rl.Rectangle, rl.Rectangle) {
 
 // drawRim draws the ring of light around a's silhouette, lit by the level
 // lights that reach it: the sprite's quad again, a pixel larger all round, through
-// RimShader. The caller has the blend mode set to additive and the camera applied.
-func drawRim(a *Actor, lights []LevelLight, occluders []rl.Rectangle) {
-	if a.deathHidden() {
+// RimShader. i is a's place in the list drawBodyMask was given, so the ring stops
+// at every other fighter's body. The caller has the blend mode set to additive
+// and the camera applied.
+func drawRim(a *Actor, i int, lights []LevelLight, occluders []rl.Rectangle) {
+	if a.deathHidden() || i >= maxBodies {
 		return
 	}
 	tex, src, pos := a.spriteDraw()
@@ -202,6 +250,9 @@ func drawRim(a *Actor, lights []LevelLight, occluders []rl.Rectangle) {
 	rl.SetShaderValueV(RimShader, rimLoc.lightPos, lp[:], rl.ShaderUniformVec2, rimMaxLights)
 	rl.SetShaderValueV(RimShader, rimLoc.lightColor, lc[:], rl.ShaderUniformVec3, rimMaxLights)
 	rl.SetShaderValue(RimShader, rimLoc.cap, []float32{rimCap}, rl.ShaderUniformFloat)
+	rl.SetShaderValue(RimShader, rimLoc.bodyId, []float32{bodyID(i)}, rl.ShaderUniformFloat)
+	rl.SetShaderValue(RimShader, rimLoc.bodiesSize, []float32{float32(BodyMask.Texture.Width), float32(BodyMask.Texture.Height)}, rl.ShaderUniformVec2)
+	rl.SetShaderValueTexture(RimShader, rimLoc.bodies, BodyMask.Texture)
 	rl.DrawTexturePro(tex, grown, dst, rl.Vector2{}, 0, rl.White)
 	rl.EndShaderMode()
 }

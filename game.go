@@ -353,6 +353,7 @@ func runLevel(dt float32) {
 
 		ScreenFullTexture = rl.LoadRenderTexture(SW*WindowScale, SH*WindowScale)
 		LightAccum = rl.LoadRenderTexture(SW*WindowScale, SH*WindowScale)
+		BodyMask = rl.LoadRenderTexture(SW*WindowScale, SH*WindowScale)
 		cornerFade = newCornerFade()
 	}
 	if rl.IsKeyPressed(rl.KeyEscape) {
@@ -427,6 +428,13 @@ func runLevel(dt float32) {
 
 	occluders := LE.LightOccluders()
 	computeLights(LE.lights, LE.areas, LE.ambient, occluders, Cam.View())
+
+	// sort a copy: the simulation order of w.Actors must stay stable
+	drawList = append(drawList[:0], w.Actors...)
+	slices.SortFunc(drawList, func(a, b *Actor) int {
+		return int(b.Pos.X - a.Pos.X)
+	})
+	drawBodyMask(drawList, Cam.View())
 	rl.BeginTextureMode(ScreenFullTexture)
 	{
 		rl.ClearBackground(rl.Black)
@@ -436,11 +444,6 @@ func runLevel(dt float32) {
 		view := viewRect(Cam.View(), float32(ScreenFullTexture.Texture.Width), float32(ScreenFullTexture.Texture.Height))
 		drawStains(w, view) // on the level, under the fighters, lit like both
 
-		// sort a copy: the simulation order of w.Actors must stay stable
-		drawList = append(drawList[:0], w.Actors...)
-		slices.SortFunc(drawList, func(a, b *Actor) int {
-			return int(b.Pos.X - a.Pos.X)
-		})
 		locTime := rl.GetShaderLocation(WhiteShader, "time")
 		for _, a := range drawList {
 			if a.Flickering() {
@@ -466,8 +469,8 @@ func runLevel(dt float32) {
 		// the rim is light added on top of the lit scene, so the ambient dark
 		// cannot dim it; the overlays below go over it
 		rl.BeginBlendMode(rl.BlendAdditive)
-		for _, a := range drawList {
-			drawRim(a, LE.lights, occluders)
+		for i, a := range drawList {
+			drawRim(a, i, LE.lights, occluders)
 		}
 		rl.EndBlendMode()
 
