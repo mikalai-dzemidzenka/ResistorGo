@@ -31,7 +31,7 @@ See proposal.md — Why for the defect and its measurement. What shapes the fix 
 
 The alternative was a reliable `MsgRespawn{ActorID}` at the moment of the handover. It is fewer bytes, but it puts the client's most important piece of state behind a single delivery and introduces an ordering question the current code has never had to answer: a respawn message arriving before or after the snapshot that first carries the new fighter are different situations, and only one of them is easy. Carrying it in the snapshot makes the two arrive together by construction, and makes the state self-healing — a client that misses one snapshot is told again 50 ms later. It also answers a case no message would have covered: a client connecting while its player is between fighters is told `0`, instead of inheriting a stale id from `Welcome`.
 
-Cost is 2 bytes per snapshot, not per fighter: the header goes 10 → 12 bytes, so a 16-fighter snapshot lands at 716 bytes against the 1200 the test asserts.
+Cost is 2 bytes per snapshot, not per fighter: the header goes 10 → 12 bytes, so a 16-fighter snapshot lands at 764 bytes against the 1200 the test asserts.
 
 `Welcome` keeps carrying `ActorID`, so the first fighter still arrives the way it does today and the join path is untouched; `Yours` simply becomes the thing that keeps it true afterwards.
 
@@ -49,6 +49,10 @@ Being told `0` is the same path without the rebuild: drop the local fighter, pre
 
 This is safe for the one case the `Remote` test was protecting: the local fighter is absent from `applyInterp`'s loop by the `id == c.ActorID` skip, so `visible` must be built from the snapshot's own ids rather than from what interpolation drew, or the client would delete its own fighter every frame.
 
+The removal lives in `applyInterp`, and the local fighter counts as kept while the newest snapshot still carries it. After a handover the old id is no longer skipped as our own, and interpolation, which runs 100 ms behind, can still sample it; so `applyInterp` never builds a new remote actor for an id the newest snapshot no longer carries, or the corpse would flash back as a fresh actor with no death state.
+
+`Client.ready()` used to mean "has a local fighter", and a client that is not ready is timed out. A fighter client waiting out the gap has none, so `ready()` also holds once the client has had a fighter (`Played`).
+
 ### The flicker gets a ceiling in `updateDeath`
 
 `updateDeath` stops incrementing once `DeathTicks` reaches `DeathFlickerTicks`, and `deathHidden` reports hidden from that point rather than alternating. On the authority nothing changes — the fighter is killed on the tick it reaches the limit. On a client it means a dead fighter held for any reason ends up hidden and still, which is the failure that is least bad to look at.
@@ -62,7 +66,7 @@ This is belt-and-braces: with the two fixes above, a client stops holding a dead
 ## Risks / Trade-offs
 
 - **Dropping `Remote` from the removal test deletes the local fighter wrongly** → The test becomes "did this snapshot name it", built from `s.Actors` rather than from the interpolation ids, which never include the local fighter. A test that runs a client through a full match asserting its fighter is never removed while alive covers the regression.
-- **Two protocol bumps close together** (`add-actor-energy` is already moving 4 → 5) → They collapse into one if the two changes ship together; if they do not, the handshake rejects mismatches cleanly either way. Nothing persists a snapshot, so there is no stored data to migrate.
+- **Protocol bump** (9 → 10) → Client and server must be built together; the handshake rejects a mismatch cleanly. Nothing persists a snapshot, so there is no stored data to migrate.
 - **A client adopts a fighter id the server later contradicts** → It cannot linger: `Yours` is in every snapshot, so the correction is at most one snapshot behind, and the fighter it predicts in the meantime is one the server really did hand it.
 - **Reconcile's rebuild path runs more often than it used to** → It runs once per handover, roughly once per death, and it is the path every client already takes on its first snapshot.
 

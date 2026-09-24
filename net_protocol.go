@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	ProtocolVersion  uint16 = 9
+	ProtocolVersion  uint16 = 10
 	DefaultPort             = 27015
 	ChanUnreliable   uint8  = 0 // commands, snapshots
 	ChanReliable     uint8  = 1 // hello, welcome, reject, bye
@@ -102,6 +102,7 @@ type Welcome struct {
 type Snapshot struct {
 	Tick   uint32
 	Ack    uint32 // last command sequence executed for the receiving player
+	Yours  uint16 // the receiving player's current fighter; 0 while it has none
 	Actors []ActorRec
 }
 
@@ -488,10 +489,11 @@ func decodeCmds(b []byte) ([]Input, error) {
 }
 
 func encodeSnapshot(s Snapshot) []byte {
-	b := make([]byte, 0, 10+len(s.Actors)*actorRecSize)
+	b := make([]byte, 0, 12+len(s.Actors)*actorRecSize)
 	b = append(b, MsgSnapshot)
 	b = putU32(b, s.Tick)
 	b = putU32(b, s.Ack)
+	b = putU16(b, s.Yours)
 	b = append(b, uint8(len(s.Actors)))
 	for _, a := range s.Actors {
 		b = putU16(b, a.ID)
@@ -516,7 +518,7 @@ func encodeSnapshot(s Snapshot) []byte {
 
 func decodeSnapshot(b []byte) (Snapshot, error) {
 	r := newReader(b, MsgSnapshot)
-	s := Snapshot{Tick: r.u32(), Ack: r.u32()}
+	s := Snapshot{Tick: r.u32(), Ack: r.u32(), Yours: r.u16()}
 	n := int(r.u8())
 	if r.bad || len(r.b) < n*actorRecSize {
 		return Snapshot{}, errPacket

@@ -1630,15 +1630,22 @@ func (a *Actor) updateDeath() {
 	if !a.AnimFinished || a.W != nil && a.W.BotsStayDead && !a.IsPlayer {
 		return
 	}
+	if a.DeathTicks >= DeathFlickerTicks {
+		return // a client holds the count here rather than flicker forever
+	}
 	a.DeathTicks++
 	if a.DeathTicks >= DeathFlickerTicks && a.W != nil && a.W.Authority {
 		a.W.Kill(a)
 	}
 }
 
-// deathHidden reports whether the flicker is in an off span this tick.
+// deathHidden reports whether the flicker is in an off span this tick; past
+// the end of the flicker the fighter stays hidden.
 func (a *Actor) deathHidden() bool {
-	return a.State == StateDeath && a.AnimFinished && (a.DeathTicks/DeathFlickerSpan)%2 == 1
+	if a.State != StateDeath || !a.AnimFinished {
+		return false
+	}
+	return a.DeathTicks >= DeathFlickerTicks || (a.DeathTicks/DeathFlickerSpan)%2 == 1
 }
 
 func (a *Actor) enterBlockState(attacker *Actor) {
