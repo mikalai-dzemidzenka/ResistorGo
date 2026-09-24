@@ -69,11 +69,11 @@ Exactly one thing SHALL be selected for rectangle editing at a time: either a pa
 - **THEN** only the palette entry is selected, and the tile is no longer selected
 
 ### Requirement: Rectangles are shaped on screen
-With the rect tool, every collision rectangle and every light rectangle of the selected thing SHALL be drawn over the level, collision distinguishable from light, with exactly one of them active for editing. Clicking any of those rectangles SHALL make it the active one, and a drag begun on it SHALL shape it. The developer SHALL also be able to switch between the collision rectangles and the light rectangles, and to step from one rectangle of the active kind to the next, without losing the selection. The editor SHALL show which rectangle of the active kind is active, and how many of that kind the selection has.
+With the rect tool, every collision rectangle, every drop-through rectangle and every light rectangle of the selected thing SHALL be drawn over the level, each kind distinguishable from the other two, with exactly one of them active for editing. Clicking any of those rectangles SHALL make it the active one, and a drag begun on it SHALL shape it. The developer SHALL also be able to switch between the collision rectangles, the drop-through rectangles and the light rectangles, and to step from one rectangle of the active kind to the next, without losing the selection. The editor SHALL show which rectangle of the active kind is active, and how many of that kind the selection has.
 
 Dragging an edge or a corner of the active rectangle SHALL resize it from that edge or corner. Dragging its body SHALL move it without changing its size. Only the active rectangle SHALL change. Both SHALL work in whole level pixels, and SHALL work at every camera zoom level. A rectangle's width and height SHALL never be dragged below one pixel. Releasing the mouse button SHALL end the drag. Numeric fields SHALL show the active rectangle's position and size and SHALL set them exactly.
 
-An edit SHALL take effect at once: a reshaped light rectangle SHALL change the level's lighting on the next frame drawn, and a reshaped collision rectangle SHALL be what fighters collide with when the match resumes.
+An edit SHALL take effect at once: a reshaped light rectangle SHALL change the level's lighting on the next frame drawn, and a reshaped collision or drop-through rectangle SHALL be what fighters collide with when the match resumes.
 
 #### Scenario: Resize by a corner
 - **WHEN** the developer drags the bottom-right corner of the active collision rectangle two pixels to the right
@@ -103,6 +103,10 @@ An edit SHALL take effect at once: a reshaped light rectangle SHALL change the l
 - **WHEN** the developer, with a collision rectangle active on a tile with two light rectangles, switches to the light rectangles and then steps twice
 - **THEN** the first light rectangle is active after the switch, the second after the first step, and the first again after the second
 
+#### Scenario: Switch to the drop-through rectangles
+- **WHEN** the developer, with a collision rectangle active on a tile with one collision rectangle and one drop-through rectangle, switches to the drop-through rectangles
+- **THEN** the drop-through rectangle is active, the editor says it is the first of one drop-through rectangle, and it is drawn unlike the collision rectangle
+
 #### Scenario: Exact values
 - **WHEN** the developer types a width into the numeric field for the active rectangle
 - **THEN** the rectangle is exactly that wide
@@ -123,8 +127,12 @@ An edit SHALL take effect at once: a reshaped light rectangle SHALL change the l
 - **WHEN** the developer reshapes a placed tile's collision rectangle and leaves edit mode
 - **THEN** the fighter collides with the new rectangle
 
+#### Scenario: The drop-through follows
+- **WHEN** the developer widens a placed tile's drop-through rectangle and leaves edit mode
+- **THEN** the fighter can stand on, and climb down through, the whole of the widened rectangle
+
 ### Requirement: A rectangle can be added and cleared
-The selected thing SHALL be able to have any number of collision rectangles and any number of light rectangles. The developer SHALL be able to add another rectangle of either kind at any time, and to remove the active rectangle, leaving every other rectangle as it was. A newly added rectangle SHALL start as one grid cell at the object's origin, so it is visible and can be dragged from there, and SHALL become the active one. An object with no collision rectangles SHALL NOT collide with fighters, and an object with no light rectangles SHALL NOT cast a shadow.
+The selected thing SHALL be able to have any number of collision rectangles, any number of drop-through rectangles and any number of light rectangles. The developer SHALL be able to add another rectangle of any of the three kinds at any time, and to remove the active rectangle, leaving every other rectangle as it was. A newly added rectangle SHALL start as one grid cell at the object's origin, so it is visible and can be dragged from there, and SHALL become the active one. An object with no collision rectangles and no drop-through rectangles SHALL NOT collide with fighters, and an object with no light rectangles SHALL NOT cast a shadow.
 
 #### Scenario: Add one
 - **WHEN** the developer selects a placed tile that has no light rectangle and adds one
@@ -138,6 +146,10 @@ The selected thing SHALL be able to have any number of collision rectangles and 
 - **WHEN** the developer selects a tile with one light rectangle and, with the light rectangles active, adds one
 - **THEN** the tile has two light rectangles, the new one a grid cell at its origin and active, and the first unchanged
 
+#### Scenario: Add a drop-through rectangle
+- **WHEN** the developer selects a tile with one collision rectangle and, with the drop-through rectangles active, adds one
+- **THEN** the tile has one drop-through rectangle, a grid cell at its origin and active, and its collision rectangle unchanged
+
 #### Scenario: Remove one of several
 - **WHEN** the developer removes the active one of a tile's three collision rectangles
 - **THEN** the tile has the other two, unchanged, and one of them is active
@@ -148,6 +160,10 @@ The selected thing SHALL be able to have any number of collision rectangles and 
 
 #### Scenario: Clear one
 - **WHEN** the developer removes a placed tile's only collision rectangle and leaves edit mode
+- **THEN** a fighter passes through that tile
+
+#### Scenario: Clear the drop-through
+- **WHEN** the developer removes a placed tile's only drop-through rectangle, the tile has no collision rectangle, and the developer leaves edit mode
 - **THEN** a fighter passes through that tile
 
 #### Scenario: No shadow
@@ -252,7 +268,7 @@ Placing, moving, resizing, recolouring, changing the intensity of and removing a
 - **THEN** the level file on disk is unchanged
 
 ### Requirement: The level's ambient light is edited with the light tool
-With the light tool and no light selected, the panel SHALL show the level's ambient light — its colour and its strength — as numeric fields that set it exactly when typed into, and the level SHALL be lit by the new ambient on the next frame drawn. Selecting a light SHALL show that light's own fields, as it does today, and deselecting SHALL bring the ambient fields back. No other tool SHALL change the ambient.
+With the light tool and no light selected, the panel SHALL show the level's ambient light — its colour and its strength — as numeric fields that set it exactly when typed into, and as a darkness slider from 0% (the ambient at full strength) to 100% (no ambient at all) that sets its strength as it is dragged, and the level SHALL be lit by the new ambient on the next frame drawn. Selecting a light SHALL show that light's own fields, as it does today, and deselecting SHALL bring the ambient fields back. No other tool SHALL change the ambient.
 
 The selected light SHALL always be possible to let go of: a right click on empty space SHALL clear the selection without removing any light and without marking the level unsaved, while a right click on a light SHALL remove it as it does today. Nothing else about the selection SHALL change: a left click on empty space still places a light.
 
@@ -261,6 +277,10 @@ An ambient edit SHALL mark the level unsaved, SHALL be written only by Ctrl+S in
 #### Scenario: The ambient fields
 - **WHEN** the developer takes out the light tool with no light selected and types a new colour and strength
 - **THEN** the level's unlit parts take that colour and that strength as the values are typed
+
+#### Scenario: The darkness slider
+- **WHEN** the developer takes out the light tool with no light selected and drags the darkness slider
+- **THEN** the level's unlit parts darken or brighten as it is dragged, the strength field follows it, and the whole drag is one step to undo
 
 #### Scenario: Letting go of a light
 - **WHEN** the developer, with a light selected, right-clicks a spot with no light on it
@@ -318,7 +338,7 @@ A newly placed area SHALL take the size and feather of the area selected before 
 - **THEN** no tile is placed or erased and no object rectangle is changed
 
 ### Requirement: The area tool's panel edits the selected area's numbers
-With the area tool out and a lit area selected, the panel SHALL show that area's position, size and feather as numeric fields that set it exactly when typed into, and the level SHALL be lit by the typed numbers on the next frame drawn. With no area selected, the panel SHALL say how many lit areas the level has and how to place one. A key typed into a numeric field SHALL go to that field alone and SHALL NOT also retool the editor or remove anything.
+With the area tool out and a lit area selected, the panel SHALL show that area's position, size and feather as numeric fields that set it exactly when typed into, and as a darkness slider from 0% (the ambient at full strength) to 100% (no ambient at all) that sets its strength as it is dragged, and the level SHALL be lit by the typed numbers on the next frame drawn. With no area selected, the panel SHALL say how many lit areas the level has and how to place one. A key typed into a numeric field SHALL go to that field alone and SHALL NOT also retool the editor or remove anything.
 
 #### Scenario: Typing an area exactly
 - **WHEN** the developer selects an area and types a position, a size and a feather into the panel's fields
@@ -378,7 +398,7 @@ A fighter SHALL collide with every collision rectangle of every object in the le
 - **THEN** both collide with both rectangles, and neither is corrected by the server for doing so
 
 ### Requirement: Every collision rectangle travels together
-Whatever carries an object's rectangles SHALL carry all of them, every collision rectangle and every light rectangle, each kind in the same order:
+Whatever carries an object's rectangles SHALL carry all of them, every collision rectangle, every drop-through rectangle and every light rectangle, each kind in the same order:
 
 - placing a tile from a palette entry
 - a palette entry's saved defaults
@@ -386,15 +406,23 @@ Whatever carries an object's rectangles SHALL carry all of them, every collision
 - copy and paste
 - saving and loading the level
 
-A tile SHALL follow its texture only while all of its collision rectangles and all of its light rectangles are exactly its texture's.
+A tile SHALL follow its texture only while all of its collision rectangles, all of its drop-through rectangles and all of its light rectangles are exactly its texture's.
 
 #### Scenario: Placed with all of them
 - **WHEN** the developer gives a texture three collision rectangles and two light rectangles and places a tile of it
 - **THEN** the tile has the same three collision rectangles and the same two light rectangles
 
+#### Scenario: Placed with its drop-through
+- **WHEN** the developer gives a texture one drop-through rectangle and places a tile of it
+- **THEN** the tile has the same drop-through rectangle, and a fighter can climb down through it
+
 #### Scenario: Copied with all of them
 - **WHEN** the developer copies from a texture with two light rectangles and pastes onto a texture with one
 - **THEN** the second texture has exactly the two
+
+#### Scenario: Copied with the drop-through
+- **WHEN** the developer copies from a texture with one drop-through rectangle and pastes onto a texture with none
+- **THEN** the second texture has exactly that drop-through rectangle
 
 #### Scenario: Followed with all of them
 - **WHEN** the developer adds a second light rectangle to a texture whose tiles follow it
@@ -405,11 +433,11 @@ A tile SHALL follow its texture only while all of its collision rectangles and a
 - **THEN** that tile no longer follows its texture, and the texture's other tiles are unchanged
 
 #### Scenario: Saved with all of them
-- **WHEN** the developer gives a tile three collision rectangles and two light rectangles, saves, and restarts
-- **THEN** the tile has the same three collision rectangles and the same two light rectangles
+- **WHEN** the developer gives a tile three collision rectangles, one drop-through rectangle and two light rectangles, saves, and restarts
+- **THEN** the tile has the same three collision rectangles, the same drop-through rectangle and the same two light rectangles
 
 ### Requirement: The level file keeps its shape
-An object with no collision rectangle or one, and no light rectangle or one, SHALL be saved in the level file exactly as it was before objects could have several of either. Only the kind of which an object has two or more SHALL be saved differently. The texture defaults file SHALL follow the same rule. A level in which no object has more than one rectangle of either kind SHALL therefore keep its fingerprint.
+An object with no collision rectangle or one, no light rectangle or one, and no drop-through rectangle SHALL be saved in the level file exactly as it was before objects could have several of either or any drop-through rectangle. Only a kind of which an object has two or more SHALL be saved as a list, and drop-through rectangles SHALL be saved under keys of their own, one or a list by the same rule, and only when an object has some. The texture defaults file SHALL follow the same rule. A level in which no object has more than one rectangle of either of the first two kinds, and none has a drop-through rectangle, SHALL therefore keep its fingerprint.
 
 #### Scenario: The existing level
 - **WHEN** a development build loads a level in which no tile has more than one light rectangle, and saves it without an edit
@@ -418,6 +446,14 @@ An object with no collision rectangle or one, and no light rectangle or one, SHA
 #### Scenario: Only light rectangles changed shape
 - **WHEN** a tile with one collision rectangle is given a second light rectangle and the level is saved
 - **THEN** that tile's collision rectangle is saved exactly as before, and only its light rectangles are saved as a list
+
+#### Scenario: A drop-through rectangle is added
+- **WHEN** a tile with one collision rectangle is given a drop-through rectangle and the level is saved
+- **THEN** that tile's collision rectangle is saved exactly as before, its drop-through rectangle is saved under its own key, and every other tile is saved as before
+
+#### Scenario: Client and server disagree on a drop-through
+- **WHEN** a client's level has a drop-through rectangle the server's level does not
+- **THEN** the two levels have different fingerprints
 
 ### Requirement: An object casts a shadow from every light rectangle
 Every light rectangle of every object in the level SHALL cast a shadow from every light, each behaving on its own exactly as an object's single light rectangle does. Light SHALL pass through the space between an object's light rectangles. This SHALL hold in the development build and the release build alike, and the debug overlay SHALL draw every light rectangle of every object.

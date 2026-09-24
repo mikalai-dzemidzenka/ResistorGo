@@ -172,6 +172,19 @@ type Ambient struct {
 // level by outside one.
 var defaultAmbient = Ambient{Color: [3]uint8{120, 140, 255}, Strength: 0.4}
 
+// ambientDarkness is how dark an ambient of strength s leaves a level, as the
+// editor's darkness slider shows it: 0% at full strength or brighter, 100% at
+// none.
+func ambientDarkness(s float32) int32 {
+	return clamp(int32(roundf((1-s)*100)), 0, 100)
+}
+
+// darknessStrength is the ambient strength that leaves a level d% dark - the
+// strength the darkness slider sets.
+func darknessStrength(d int32) float32 {
+	return float32(100-clamp(d, 0, 100)) / 100
+}
+
 // ambientClear is the colour the light map starts from, before any light is
 // added into it: the ambient's colour weighted by its strength. Opaque, because
 // the composite multiplies alpha along with colour and nothing the scene is
@@ -424,7 +437,7 @@ func (le *LevelEditor) placeLight(p rl.Vector2) {
 	le.lightSel = len(le.lights) - 1
 	le.lightDrag = lightDrag{}
 	le.editField = -1
-	le.dirty = true
+	le.edited()
 }
 
 // beginLightDrag takes hold of the light under p, selecting it.
@@ -467,7 +480,7 @@ func (le *LevelEditor) setLight(i int, l LevelLight) {
 		return
 	}
 	le.lights[i] = l
-	le.dirty = true
+	le.edited()
 }
 
 // setAmbient replaces the level's ambient light, if that changes anything.
@@ -476,7 +489,7 @@ func (le *LevelEditor) setAmbient(a Ambient) {
 		return
 	}
 	le.ambient = a
-	le.dirty = true
+	le.edited()
 }
 
 // deselectLight lets go of the selected light without touching it. It is what a
@@ -504,7 +517,7 @@ func (le *LevelEditor) deleteLight(i int) {
 	}
 	le.lightDrag = lightDrag{}
 	le.editField = -1
-	le.dirty = true
+	le.edited()
 }
 
 // updateLightTool is the light tool's handling of the mouse, the cursor being
@@ -563,7 +576,7 @@ func (le *LevelEditor) placeArea(p rl.Vector2) {
 	le.areaSel = len(le.areas) - 1
 	le.areaDrag = rectDrag{}
 	le.editField = -1
-	le.dirty = true
+	le.edited()
 }
 
 // beginAreaDrag takes hold of the area under p, by whichever handle, selecting
@@ -602,7 +615,7 @@ func (le *LevelEditor) setArea(i int, a LitArea) {
 		return
 	}
 	le.areas[i] = a
-	le.dirty = true
+	le.edited()
 }
 
 // deselectArea lets go of the selected area without touching it, as
@@ -628,7 +641,7 @@ func (le *LevelEditor) deleteArea(i int) {
 	}
 	le.areaDrag = rectDrag{}
 	le.editField = -1
-	le.dirty = true
+	le.edited()
 }
 
 // updateAreaTool is the area tool's handling of the mouse, the cursor being at
@@ -729,7 +742,14 @@ func (le *LevelEditor) drawAreaPanel(row func() rl.Rectangle) {
 	na := a
 	na.X, na.Y, na.Width, na.Height, na.Feather = v[0], v[1], v[2], v[3], v[4]
 	le.setArea(le.areaSel, na)
-	rlg.Label(row(), "Drag body/edges; Del, RMB remove; RMB space deselects")
+	b := buttons(row(), 2)
+	if button(b[0], "Remove (Del)", true) {
+		le.deleteArea(le.areaSel)
+	}
+	if button(b[1], "Deselect", true) {
+		le.deselectArea()
+	}
+	rlg.Label(row(), "Drag the body or an edge; RMB removes")
 }
 
 // drawLights marks every light while the light tool is out: the circle its
@@ -785,6 +805,14 @@ func (le *LevelEditor) drawLightPanel(row func() rl.Rectangle) {
 		if v[3] != pct { // only a typed change, so rounding never rewrites the strength
 			na.Strength = float32(v[3]) / 100
 		}
+		dark := ambientDarkness(na.Strength)
+		d := float32(dark)
+		r := row()
+		r.X, r.Width = r.X+70, r.Width-110 // room for the labels either side
+		rlg.Slider(r, "Darkness", fmt.Sprintf("%d%%", dark), &d, 0, 100)
+		if nd := int32(roundf(d)); nd != dark { // only a drag, as with the fields
+			na.Strength = darknessStrength(nd)
+		}
 		le.setAmbient(na)
 		return
 	}
@@ -807,5 +835,12 @@ func (le *LevelEditor) drawLightPanel(row func() rl.Rectangle) {
 	}
 	nl.Color = [3]uint8{uint8(v[4]), uint8(v[5]), uint8(v[6])}
 	le.setLight(le.lightSel, nl)
-	rlg.Label(row(), "Drag center/edge; Del, RMB remove; RMB space deselects")
+	b := buttons(row(), 2)
+	if button(b[0], "Remove (Del)", true) {
+		le.deleteLight(le.lightSel)
+	}
+	if button(b[1], "Deselect", true) {
+		le.deselectLight()
+	}
+	rlg.Label(row(), "Drag the center or the edge; RMB removes")
 }

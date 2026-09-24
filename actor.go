@@ -44,7 +44,14 @@ const (
 	RunJumpLift     = 1.75
 	MaxRunJumpSpeed = MaxJumpSpeed * RunJumpLift
 	MaxFallSpeed    = 900
-	AttackZoomSpeed = 2.0
+	// Climbing down through a drop-through platform plays in place, then hands
+	// the fighter to the fall ClimbDownDrop px lower: the drop that puts the top
+	// of the fall's first frame where the last climb-down frame left the hands.
+	// Both to be tuned by eye in play.
+	ClimbDownSeconds = 0.3
+	ClimbDownFrames  = 5
+	ClimbDownDrop    = 40
+	AttackZoomSpeed  = 2.0
 
 	BackAttackSpeed   = 0.2
 	SecondAttackSpeed = 0.2
@@ -135,6 +142,10 @@ const (
 	// it, and humans can still fight each other. Every bot starts on BotTeam.
 	NoTeam  = 0
 	BotTeam = 1
+	// RedTeam and BlueTeam are the two sides a gamemode puts fighters on; only
+	// these two are drawn, with a line under the feet (team_marker.go).
+	RedTeam  = 2
+	BlueTeam = 3
 
 	// One in three: the odds a bot answers a landed hit by moving its guard to
 	// the height that hit it. A feel number, to be turned by eye in play.
@@ -183,6 +194,7 @@ const (
 	StateFall
 	StatePush
 	StateClash
+	StateClimbDown
 	// stateCount is one past the last state. A replicated state is checked
 	// against it, so appending a state cannot leave that check behind - it was
 	// left at the death when the run-jump and the fall were appended, and every
@@ -293,6 +305,7 @@ type Input struct {
 	Right    bool
 	Attack   bool
 	Jump     bool
+	Down     bool // climb down through the floor; pressed, not held
 	FaceLeft bool
 	Updown   uint8
 	ViewTick uint32
@@ -468,6 +481,18 @@ func (a *Actor) Update(dt float32) {
 		if a.AnimFinished {
 			a.enterIdleState()
 		}
+	case StateClimbDown:
+		// played out where it stands, on top of the platform, then fallen
+		// through without catching a ledge: the platform's neighbours stand
+		// at the height it left, and grabbing one would put it straight back
+		if a.climbingDown() {
+			a.Speed = rl.Vector2{}
+			if a.AnimFinished {
+				a.finishClimbDown()
+			}
+		} else if a.OnGround {
+			a.land()
+		}
 	case StateIdle:
 		prevUpdown := a.Updown
 		a.updateUpdown()
@@ -500,6 +525,10 @@ func (a *Actor) Update(dt float32) {
 			a.enterJumpStartState()
 			return
 		}
+		if a.Input.Down && a.OnGround && a.onDropThrough() {
+			a.enterClimbDownState()
+			return
+		}
 	case StateRun:
 		if prevOrientation != a.Orientation {
 			a.enterTurnoverState()
@@ -517,6 +546,8 @@ func (a *Actor) Update(dt float32) {
 			// fighter goes on running
 		} else if a.Input.Attack {
 			a.enterAttackState()
+		} else if a.Input.Down && a.OnGround && a.onDropThrough() {
+			a.enterClimbDownState()
 		}
 	case StateAttack:
 		a.Speed.X = clamp(a.Speed.X, -AttackMoveSpeed, AttackMoveSpeed)
@@ -848,7 +879,7 @@ func (a *Actor) DrawAnim() {
 func (a *Actor) updateHorSpeed(dt float32) {
 	var movePressed bool
 	prevOrientation := a.Orientation
-	canMove := a.State != StateBlock && a.State != StateAttacked && a.State != StatePush && a.State != StateClash && a.Updown != 3
+	canMove := a.State != StateBlock && a.State != StateAttacked && a.State != StatePush && a.State != StateClash && !a.climbingDown() && a.Updown != 3
 	// a swinging fighter moves, slowly (the attack case caps it), but keeps
 	// facing the way it swings
 	turn := a.State != StateAttack
@@ -914,7 +945,10 @@ func (a *Actor) updateVertSpeed(dt float32) {
 // before the tile the head is actually inside of.
 func (a *Actor) headBlocked(pColCenterX float32) bool {
 	pColUpY := a.Pos.Y + a.CollisionBox.Y
-	for _, c := range LE.solids {
+	for i, c := range LE.solids {
+		if dropThrough(i) {
+			continue // open from below: a jump rises through it
+		}
 		oColY := c.Y
 		oColX := c.X
 		if oColX <= pColCenterX && oColX+c.Width >= pColCenterX &&
@@ -925,17 +959,54 @@ func (a *Actor) headBlocked(pColCenterX float32) bool {
 	return false
 }
 
+// dropThrough reports whether LE.solids[i] is a drop-through rectangle.
+func dropThrough(i int) bool { return i < len(LE.drop) && LE.drop[i] }
+
+// onDropThrough reports whether what the fighter stands on can be climbed down
+// through: something holds it up, by the ground test checkCollision makes, and
+// all of it is drop-through. Solid floor under the same feet would only catch
+// it again where it stood.
+func (a *Actor) onDropThrough() bool {
+	feet := a.Pos.Y + a.CollisionBox.Y + a.CollisionBox.Height
+	x := a.Pos.X + a.CollisionBox.X + a.CollisionBox.Width/2
+	held := false
+	for i, c := range LE.solids {
+		if x >= c.X && x < c.X+c.Width && feet+1 > c.Y && feet < c.Y+c.Height {
+			if !dropThrough(i) {
+				return false
+			}
+			held = true
+		}
+	}
+	return held
+}
+
 func (a *Actor) checkCollision() {
 	a.OnGround = false
 	pColDownY := a.Pos.Y + a.CollisionBox.Y + a.CollisionBox.Height
 	pColCenterX := a.Pos.X + a.CollisionBox.X + a.CollisionBox.Width/2
 	pPosX := a.Pos.X
 	hitTop := a.headBlocked(pColCenterX)
-	for _, c := range LE.solids {
+	// A drop-through rectangle is floor to a fighter that came down onto it -
+	// its feet were at or above the top before this tick's move - and open to
+	// everything else: a jump rises through it from below, and a fighter below
+	// its top, rising or climbed down through it, passes it by. A jump can
+	// still catch its ledge, to be pulled up onto it. All of it follows from
+	// position and speed alone, which every machine has.
+	wasFeet := pColDownY - a.Speed.Y*float32(FixedTimeStep)
+	rising := a.Speed.Y < 0
+	for i, c := range LE.solids {
 		oColY := c.Y
 		oColHeight := c.Height
 		oColX := c.X
 		oColWidth := c.Width
+		if dropThrough(i) && !rising && wasFeet > oColY+1 {
+			continue
+		}
+		if dropThrough(i) && rising {
+			a.catchLedge(c, pColCenterX, hitTop) // and neither stood on nor bumped into
+			continue
+		}
 
 		// The left edge claims the fighter and the right edge does not, so a
 		// tile boundary belongs to exactly one tile. With both edges exclusive
@@ -949,11 +1020,10 @@ func (a *Actor) checkCollision() {
 			a.Pos.Y = float32(int32(math.Ceil(float64(oColY)) - 48))
 			continue
 		}
+		if dropThrough(i) {
+			continue // stood on from above, and that is all
+		}
 		pColUpY := a.Pos.Y + a.CollisionBox.Y
-		// a ledge is caught going either way: rising into it on a jump, or
-		// dropping past it on a fall
-		airborne := a.Speed.Y != 0
-		const climbOffset = 32
 		if oColX <= pColCenterX && oColX+oColWidth >= pColCenterX &&
 			pColUpY >= oColY && pColUpY <= oColY+oColHeight {
 			hitTop = true
@@ -963,20 +1033,36 @@ func (a *Actor) checkCollision() {
 			a.Pos.X = pPosX
 			a.Pos.Y = float32(int32(oColY + oColHeight))
 			continue
-		} else if pColCenterX+climbOffset >= oColX && oColX >= pColCenterX &&
-			pColUpY >= oColY && pColUpY <= oColY+oColHeight && a.Orientation == 1 && airborne && !hitTop {
-			a.CanClimbRight = true
-			a.Pos.X = float32(int32(oColX) - 20)
-			a.Pos.Y = float32(int32(math.Ceil(float64(oColY)) - 48 + 1))
-			continue
-		} else if pColCenterX >= oColX+oColWidth && oColX+oColWidth >= pColCenterX-climbOffset &&
-			pColUpY >= oColY && pColUpY <= oColY+oColHeight && a.Orientation == -1 && airborne && !hitTop {
-			a.CanClimbLeft = true
-			a.Pos.X = oColX + oColWidth - 24
-			a.Pos.Y = float32(int32(math.Ceil(float64(oColY)) - 48 + 1))
-			continue
 		}
+		a.catchLedge(c, pColCenterX, hitTop)
 	}
+}
+
+// catchLedge takes hold of the ledge of solid c if the fighter's head is level
+// with it and it stands no more than a reach ahead, the way the fighter faces,
+// and reports whether it did. A ledge is caught going either way: rising into
+// it on a jump, or dropping past it on a fall - but not by a fighter dropping
+// from a climb-down, which would be put back up on whatever stands beside the
+// platform it came through - and never with the head in a ceiling.
+func (a *Actor) catchLedge(c rl.Rectangle, centerX float32, hitTop bool) bool {
+	const climbOffset = 32
+	airborne := a.Speed.Y != 0 && a.State != StateClimbDown
+	head := a.Pos.Y + a.CollisionBox.Y
+	if !airborne || hitTop || head < c.Y || head > c.Y+c.Height {
+		return false
+	}
+	switch {
+	case a.Orientation == 1 && centerX+climbOffset >= c.X && c.X >= centerX:
+		a.CanClimbRight = true
+		a.Pos.X = float32(int32(c.X) - 20)
+	case a.Orientation == -1 && centerX >= c.X+c.Width && c.X+c.Width >= centerX-climbOffset:
+		a.CanClimbLeft = true
+		a.Pos.X = c.X + c.Width - 24
+	default:
+		return false
+	}
+	a.Pos.Y = float32(int32(math.Ceil(float64(c.Y)) - 48 + 1))
+	return true
 }
 
 // isWall reports whether solid c stands in the fighter's way sideways: some of
@@ -1040,7 +1126,7 @@ func (a *Actor) blockSides(fromX float32) {
 }
 
 // edge-triggered buttons are latched per rendered frame and consumed by the next tick
-var pressedAttack, pressedJump bool
+var pressedAttack, pressedJump, pressedDown bool
 
 func latchInput() {
 	if rl.IsMouseButtonPressed(rl.MouseButtonLeft) {
@@ -1048,6 +1134,9 @@ func latchInput() {
 	}
 	if rl.IsKeyPressed(rl.KeyW) {
 		pressedJump = true
+	}
+	if rl.IsKeyPressed(rl.KeyS) {
+		pressedDown = true
 	}
 }
 
@@ -1063,7 +1152,7 @@ func matchHeld() bool {
 // run. Both paused modes call it as they end, so a click made while the match
 // was held cannot fire the moment it resumes.
 func clearLatchedInput() {
-	pressedAttack, pressedJump = false, false
+	pressedAttack, pressedJump, pressedDown = false, false, false
 }
 
 // sampleInput reads the local player's devices into a command for actor a.
@@ -1073,8 +1162,9 @@ func sampleInput(a *Actor) Input {
 		Left:   rl.IsKeyDown(rl.KeyD),
 		Attack: pressedAttack,
 		Jump:   pressedJump,
+		Down:   pressedDown,
 	}
-	pressedAttack, pressedJump = false, false
+	pressedAttack, pressedJump, pressedDown = false, false, false
 
 	curPos := rl.GetScreenToWorld2D(Cur.AtkPos, Cam.View())
 	switch {
@@ -1255,6 +1345,7 @@ func (a *Actor) takeHit(attacker *Actor) {
 	a.pressured()
 	cost := a.hitCost()
 	a.HitRun = min(a.HitRun+1, HitRunCapped)
+	a.W.scriptEvent(evScriptHit, a, attacker, min(cost, a.Structure))
 	if a.spendStructure(cost) {
 		a.enterDeathState(attacker)
 		return
@@ -1288,6 +1379,7 @@ func (a *Actor) confirmBlock(attacker *Actor) {
 	a.pressured()
 	a.endHitRun() // any attack stopped is the run broken, block-all included
 	a.Blocks++
+	a.W.scriptEvent(evScriptBlock, a, attacker, 0)
 	if a.Updown == 3 {
 		if a.spendStructure(BlockAllStructure) {
 			a.enterDeathState(attacker)
@@ -1506,6 +1598,7 @@ func (a *Actor) enterShovedState(by *Actor) {
 // enterDeathState is where a broken structure goes. The fighter stops acting
 // and stops being part of the fight; the world removes it once it has fallen.
 func (a *Actor) enterDeathState(attacker *Actor) {
+	a.W.scriptEvent(evScriptDeath, a, attacker, 0)
 	a.State = StateDeath
 	a.Attacker = attacker
 	a.Events |= EvHit
@@ -1869,7 +1962,7 @@ func (a *Actor) land() {
 // ends, and the dead are falling in a sense this does not mean.
 func (a *Actor) updateFalling() {
 	switch a.State {
-	case StateFall, StateClimb, StateAttacked, StateDeath:
+	case StateFall, StateClimb, StateClimbDown, StateAttacked, StateDeath:
 		return
 	}
 	if !a.OnGround && a.Speed.Y > 0 {
@@ -1882,6 +1975,46 @@ func (a *Actor) updateFalling() {
 // alone - a fall is steered like anything else airborne.
 func (a *Actor) enterFallState() {
 	a.State = StateFall
+	a.SetAnim("resources/threefour/fall.png", AnimOptions{animDuration: 0.3, totalFrames: 3})
+}
+
+// enterClimbDownState starts down through the drop-through platform the fighter
+// stands on. It is played where the fighter stands; finishClimbDown takes it
+// through.
+func (a *Actor) enterClimbDownState() {
+	a.State = StateClimbDown
+	a.Speed.X = 0
+	a.stopFlicker()
+	a.SetAnim(climbDownAnim, AnimOptions{animDuration: ClimbDownSeconds, totalFrames: ClimbDownFrames, once: true, reset: true})
+}
+
+// climbingDown reports whether the fighter is still lowering itself through the
+// platform, rather than falling from it.
+func (a *Actor) climbingDown() bool {
+	return a.State == StateClimbDown && a.Anim == climbDownAnim
+}
+
+const climbDownAnim = "resources/threefour/climb-down.png"
+
+// finishClimbDown puts the fighter under the platform it climbed down through
+// and lets it fall: ClimbDownDrop px lower, or on the floor below if that is
+// closer, from rest. Placed below the platform's top and not rising, it is
+// past the platform - checkCollision does not stand it back on it. It falls
+// in the fall's animation but stays in the climb-down, which catches no ledge,
+// until it lands.
+func (a *Actor) finishClimbDown() {
+	top := a.Pos.Y + a.CollisionBox.Y + a.CollisionBox.Height
+	x := a.Pos.X + a.CollisionBox.X + a.CollisionBox.Width/2
+	to := top + ClimbDownDrop
+	for _, c := range LE.solids {
+		if x >= c.X && x < c.X+c.Width && c.Y > top && c.Y < to {
+			to = c.Y
+		}
+	}
+	a.Pos.Y += to - top
+	a.PrevPos.Y = a.Pos.Y // put there, not travelled: nothing to draw in between
+	a.Speed.Y = 0
+	a.OnGround = false
 	a.SetAnim("resources/threefour/fall.png", AnimOptions{animDuration: 0.3, totalFrames: 3})
 }
 

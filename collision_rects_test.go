@@ -214,16 +214,23 @@ func TestSolidsFollowTheCollisionOrder(t *testing.T) {
 		{X: 39}:        {X: 39, CollisionRects: one},
 		{X: 78, Y: 83}: {X: 78, Y: 83, CollisionRects: []rl.Rectangle{rect(0, 0, 5, 5), rect(10, 0, 5, 5), rect(20, 0, 5, 5)}},
 		{X: 117}:       {X: 117}, // no collision
+		{X: 156}:       {X: 156, DropRects: []rl.Rectangle{rect(0, 0, 30, 4)}, CollisionRects: []rl.Rectangle{rect(0, 10, 3, 3)}},
 	}
 	le.buildIndex()
-	// objectsIndexed: Y descending, then X descending
+	// objectsIndexed: Y descending, then X descending; an object's drop-through
+	// rectangles straight after its collision ones
 	want := []rl.Rectangle{
 		rect(78, 83, 5, 5), rect(88, 83, 5, 5), rect(98, 83, 5, 5),
+		rect(156, 10, 3, 3), rect(156, 0, 30, 4),
 		rect(54, 86, 40, 20),
 		rect(15, 86, 40, 20),
 	}
 	if !slices.Equal(le.solids, want) {
 		t.Errorf("solids = %+v\nwant     %+v", le.solids, want)
+	}
+	wantDrop := []bool{false, false, false, false, true, false, false}
+	if !slices.Equal(le.drop, wantDrop) {
+		t.Errorf("drop = %v, want %v", le.drop, wantDrop)
 	}
 }
 

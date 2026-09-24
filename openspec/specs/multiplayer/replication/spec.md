@@ -14,7 +14,7 @@ The server SHALL simulate the world at a fixed 60 ticks per second with a monoto
 - **THEN** the server ignores it, and the fighter's state is determined only by server simulation
 
 ### Requirement: Input commands
-Each client simulation tick, the client SHALL produce one input command. The command SHALL contain a sequence number, the movement buttons (left, right), the edge-triggered actions (attack, jump), the guard height (low, mid, high or block-all), the desired facing, and the server tick the client was displaying for other fighters (the view tick). Every packet sent SHALL also repeat the most recent previously sent commands (at least the last 2), so a single lost packet does not lose input.
+Each client simulation tick, the client SHALL produce one input command. The command SHALL contain a sequence number, the movement buttons (left, right), the edge-triggered actions (attack, jump, climb down), the guard height (low, mid, high or block-all), the desired facing, and the server tick the client was displaying for other fighters (the view tick). Every packet sent SHALL also repeat the most recent previously sent commands (at least the last 2), so a single lost packet does not lose input.
 
 #### Scenario: Lost input packet
 - **WHEN** one input packet from a client is lost
@@ -23,6 +23,10 @@ Each client simulation tick, the client SHALL produce one input command. The com
 #### Scenario: Duplicate commands
 - **WHEN** the server receives a command whose sequence number it has already executed
 - **THEN** that command is discarded
+
+#### Scenario: Climb down reaches the server
+- **WHEN** a client presses S while its fighter stands on a drop-through platform
+- **THEN** the server receives a command with climb down set, and its fighter climbs down on the tick that command is executed
 
 ### Requirement: Per-player command execution
 The server SHALL advance each human player's fighter by exactly one simulation tick per executed command of that player, in sequence order. Per server tick it SHALL execute the commands received for that player, limited so a player cannot average more than one command per server tick (a short burst allowance for jitter is permitted). If no commands arrive, the fighter SHALL not advance on its own, except for reactions forced on it by others (being hit or blocking).

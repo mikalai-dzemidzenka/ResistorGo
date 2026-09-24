@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 )
 
 const (
@@ -486,6 +487,7 @@ func runLevel(dt float32) {
 			drawAttackOutline(w.Local, a)
 		}
 		for _, a := range drawList {
+			a.drawTeamMarker()
 			a.drawStructureBar()
 		}
 		LE.DrawOverlay()
@@ -521,6 +523,9 @@ func runLevel(dt float32) {
 		drawSpectatorHUD()
 	} else {
 		Cur.DrawGUI()
+	}
+	if Cli != nil {
+		Cli.Feed.draw(time.Now())
 	}
 
 	if DevTools && Debug {

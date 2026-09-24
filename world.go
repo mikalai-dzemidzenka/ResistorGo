@@ -16,9 +16,12 @@ type World struct {
 	// level is cleared by beating the bots, and R starts it over.
 	BotsStayDead bool
 	History      *LagHistory // server only
-	nextID       uint16
-	pending      []pendingSpawn
-	dying        []*Actor
+	// Script is the scripts the server runs; nil for every other world, which
+	// then records nothing for them.
+	Script  *scriptHost
+	nextID  uint16
+	pending []pendingSpawn
+	dying   []*Actor
 }
 
 var SV, CL *World
@@ -48,6 +51,7 @@ func (w *World) Spawn(pos rl.Vector2, isPlayer bool) *Actor {
 	a := NewActor(pos, isPlayer)
 	a.ID = w.nextID
 	w.Add(a)
+	w.scriptEvent(evScriptSpawn, a, nil, 0)
 	return a
 }
 
