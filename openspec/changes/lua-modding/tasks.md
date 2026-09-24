@@ -83,7 +83,7 @@
       same server; the dedicated one checked headless with bots)
 - [x] 6.2 Host Game from a game started with `-gamemode tdm`: the host plays
       under it; started with a broken gamemode: the Host screen shows the error
-- [ ] 6.3 Single player with `-gamemode tdm`: no script runs, time
+- [x] 6.3 Single player with `-gamemode tdm`: no script runs, time
       manipulation works
 - [x] 6.4 A gamemode with an endless loop in `OnFighterDeath`: the server logs
       it and keeps playing smoothly (dedicated, 4 bots on two teams: each death
