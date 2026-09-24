@@ -40,6 +40,9 @@ without touching a client.
   runaway scripts are contained.
 - `multiplayer/server-messages`: text lines the server sends to one client or
   all of them, and the message feed a client shows them in.
+- `teams`: a red or blue line under the fighters a gamemode puts on teams 2
+  and 3, and no attack outline on an ally. Without it an ally, whom a swing
+  passes through, looks like an enemy that cannot be hurt.
 
 ### Modified Capabilities
 - `multiplayer/session`: the dedicated server and a hosted game accept

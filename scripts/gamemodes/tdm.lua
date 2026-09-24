@@ -5,7 +5,8 @@
 -- Run it with:  resistor -dedicated -gamemode tdm -bots 4
 
 -- Teams 0 (nobody's) and 1 (the bots') are what fighters start on, so the two
--- sides are 2 and 3, and a fighter on either is one already sorted.
+-- sides are 2 and 3, and a fighter on either is one already sorted. The game
+-- draws a red line under a fighter on 2 and a blue one under a fighter on 3.
 local RED, BLUE = 2, 3
 local names = { [RED] = "Red", [BLUE] = "Blue" }
 local score = { [RED] = 0, [BLUE] = 0 }

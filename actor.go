@@ -142,6 +142,10 @@ const (
 	// it, and humans can still fight each other. Every bot starts on BotTeam.
 	NoTeam  = 0
 	BotTeam = 1
+	// RedTeam and BlueTeam are the two sides a gamemode puts fighters on; only
+	// these two are drawn, with a line under the feet (team_marker.go).
+	RedTeam  = 2
+	BlueTeam = 3
 
 	// One in three: the odds a bot answers a landed hit by moving its guard to
 	// the height that hit it. A feel number, to be turned by eye in play.

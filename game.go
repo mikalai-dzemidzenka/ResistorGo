@@ -487,6 +487,7 @@ func runLevel(dt float32) {
 			drawAttackOutline(w.Local, a)
 		}
 		for _, a := range drawList {
+			a.drawTeamMarker()
 			a.drawStructureBar()
 		}
 		LE.DrawOverlay()

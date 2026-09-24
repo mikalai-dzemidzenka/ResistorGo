@@ -19,13 +19,16 @@ var attackOutlineColor = rl.Red
 
 // outlineTarget reports whether aimer's swing marks target this frame. It is
 // the drawing rule in one place: there is a fighter aiming, it is not the one
-// being marked, neither is dead, the aim is an attack height rather than
+// being marked, it is no ally, neither is dead, the aim is an attack height rather than
 // block-all, time is not showing a recorded frame, and the swing reaches.
 //
 // It reads only replicated state, so a client marks what the server would.
 func outlineTarget(aimer, target *Actor) bool {
 	if aimer == nil || target == nil || aimer == target {
 		return false
+	}
+	if aimer.allyOf(target) {
+		return false // a swing passes through an ally, so it is no target
 	}
 	if aimer.State == StateDeath || target.State == StateDeath {
 		return false

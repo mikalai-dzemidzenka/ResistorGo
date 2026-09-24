@@ -89,3 +89,17 @@
       it and keeps playing smoothly (dedicated, 4 bots on two teams: each death
       logs "stopped: ran past 5000000 instructions", the fighter respawns and
       timers keep their period; a runaway call is stopped in ~20 ms)
+
+## 7. Teams on screen
+
+- [x] 7.1 A red line under a fighter on team 2 and a blue one under team 3,
+      the body's width, on the ground under the feet, over the lighting with
+      the bars and hidden with the HUD; no line for no team or the bots' team;
+      verify with tests of the colours (palette entries), when it shows and
+      where it goes
+- [x] 7.2 The attack outline skips an ally; verify in the outline exclusions
+      test that an ally is not marked, an enemy is, and two fighters with no
+      team still are
+- [ ] 7.3 In the game: a TDM host and a second client with bots - each sees
+      its own side's colour and the other's, the bot on its side has its line
+      and no outline, and the enemies take damage
