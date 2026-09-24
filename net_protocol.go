@@ -186,6 +186,7 @@ const (
 	bJump
 	bFaceLeft
 	bDown
+	bRoll
 )
 
 func recOf(a *Actor) ActorRec {
@@ -449,6 +450,9 @@ func encodeCmds(cmds []Input) []byte {
 		if c.Down {
 			buttons |= bDown
 		}
+		if c.Roll {
+			buttons |= bRoll
+		}
 		b = putU32(b, c.Seq)
 		b = append(b, buttons, c.Updown)
 		b = putU32(b, c.ViewTick)
@@ -477,6 +481,7 @@ func decodeCmds(b []byte) ([]Input, error) {
 		c.Jump = buttons&bJump != 0
 		c.FaceLeft = buttons&bFaceLeft != 0
 		c.Down = buttons&bDown != 0
+		c.Roll = buttons&bRoll != 0
 		if c.Updown > 3 {
 			r.bad = true
 		}

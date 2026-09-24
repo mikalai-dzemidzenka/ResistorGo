@@ -486,6 +486,7 @@ func runLevel(dt float32) {
 
 		// the attack outline and the structure bars go on top of the lighting,
 		// so it cannot tint them; the outline first, under the bars
+		drawRollArc(w.Local)
 		for _, a := range drawList {
 			drawAttackOutline(w.Local, a)
 		}
