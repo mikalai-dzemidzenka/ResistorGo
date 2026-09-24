@@ -184,6 +184,29 @@ void main()
 }
 `
 
+// fsBodyMask draws a fighter's silhouette as its id, for fsRim to tell one
+// fighter's body from another's: fully covered pixels only, so an overlap is
+// one body or the other and never a blend of two ids.
+const fsBodyMask = `
+#version 330
+
+in vec2 fragTexCoord;
+in vec4 fragColor;
+
+uniform sampler2D texture0;
+uniform float bodyId;
+
+out vec4 finalColor;
+
+void main()
+{
+    if (texture(texture0, fragTexCoord).a < 0.5) {
+        discard;
+    }
+    finalColor = vec4(bodyId, 0.0, 0.0, 1.0);
+}
+`
+
 // fsRim lights the ring of empty pixels around a sprite frame on the sides that
 // face each given light.
 //
@@ -222,6 +245,9 @@ uniform float lightCount;     // how many of the entries below are in use
 uniform vec2 lightPos[4];     // in the frame's texels
 uniform vec3 lightColor[4];
 uniform float rimCap;         // the brightest a rim may add, as a fraction of white
+uniform sampler2D bodies;     // every fighter's silhouette on screen, by id
+uniform vec2 bodiesSize;      // its size in pixels, the target's own
+uniform float bodyId;         // this fighter's id in it
 
 out vec4 finalColor;
 
@@ -250,6 +276,12 @@ void main()
 
     if (alphaAt(centre) >= 0.5) {
         discard; // the fighter's own pixel: leave it exactly as it was drawn
+    }
+    // another fighter's body: the rim stops at it, so fighters that overlap
+    // are ringed as one shape rather than each drawn across the other
+    vec4 other = texture(bodies, gl_FragCoord.xy / bodiesSize);
+    if (other.a > 0.5 && abs(other.r - bodyId) > 0.5 / 255.0) {
+        discard;
     }
 
     // towards the body: the neighbours the fighter covers
