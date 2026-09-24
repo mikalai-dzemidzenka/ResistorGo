@@ -101,12 +101,20 @@ func TestAreasDoNotChangeTheFingerprint(t *testing.T) {
 	if plain.Hash() != lit.Hash() || plain.Hash() != other.Hash() {
 		t.Errorf("the lit areas changed the fingerprint: %d, %d, %d", plain.Hash(), lit.Hash(), other.Hash())
 	}
-	// and a saved level's tiles are still the bytes the fingerprint is taken over
-	tiles := withoutAmbient([]byte(withoutKey(mustMarshalFile(t, lit), areasKey, lit.areas)), lit.ambient)
-	plainTiles := withoutAmbient(mustMarshalFile(t, plain), plain.ambient)
-	if tiles != plainTiles {
-		t.Errorf("the areas changed the tiles in the file:\n%s\n%s", tiles, plainTiles)
+	// and a saved level's tiles are the ones the fingerprint is taken over
+	if got := savedTilesHash(t, lit); got != plain.Hash() {
+		t.Errorf("the areas changed the tiles in the file: %d, want %d", got, plain.Hash())
 	}
+}
+
+// savedTilesHash is the fingerprint of the tiles a level saves, read back.
+func savedTilesHash(t *testing.T, le *LevelEditor) uint64 {
+	t.Helper()
+	objects, _, _, _, err := parseLevel(mustMarshalFile(t, le))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return (&LevelEditor{objects: objects}).Hash()
 }
 
 func mustMarshalFile(t *testing.T, le *LevelEditor) []byte {
@@ -116,20 +124,6 @@ func mustMarshalFile(t *testing.T, le *LevelEditor) []byte {
 		t.Fatal(err)
 	}
 	return b
-}
-
-// withoutKey is a saved level with one whole key taken back out, the way
-// withoutAmbient takes the ambient out: the key sorts wherever it sorts among
-// the layer numbers, so either the comma before it or the one after it goes
-// with it.
-func withoutKey(b []byte, key string, v any) string {
-	m, err := json.Marshal(map[string]any{key: v})
-	if err != nil {
-		panic(err)
-	}
-	pair := string(m[1 : len(m)-1])
-	s := strings.Replace(string(b), ","+pair, "", 1)
-	return strings.Replace(s, pair+",", "", 1)
 }
 
 // The load path the dedicated server uses keeps the lit areas along with the

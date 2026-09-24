@@ -411,3 +411,39 @@ func TestEveryCollisionRectTravels(t *testing.T) {
 		t.Errorf("saved and loaded %+v (%v)", objects[0][b].CollisionRects, err)
 	}
 }
+
+// A level saved before the block table loads to the same tiles, and saving it
+// keeps each distinct block once however many tiles use it.
+func TestOldLevelFormatLoads(t *testing.T) {
+	old := []byte(`{"0":{` +
+		`"0,0":{"resource":"a","collisionRect":{"X":1,"Y":2,"Width":3,"Height":4}},` +
+		`"39,0":{"resource":"a","x":39,"collisionRect":{"X":1,"Y":2,"Width":3,"Height":4}},` +
+		`"78,83":{"resource":"b","x":78,"y":83}}}`)
+	objects, _, _, _, err := parseLevel(old)
+	if err != nil {
+		t.Fatal(err)
+	}
+	le := &LevelEditor{objects: objects}
+	b, err := le.marshalFile()
+	if err != nil {
+		t.Fatal(err)
+	}
+	back, _, _, _, err := parseLevel(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if (&LevelEditor{objects: back}).Hash() != le.Hash() {
+		t.Errorf("the tiles changed on the way to the new format:\n%s", b)
+	}
+	if n := strings.Count(string(b), `"resource"`); n != 2 {
+		t.Errorf("saved %d blocks for 2 distinct ones:\n%s", n, b)
+	}
+	back[0][Vector2i{X: 39}].CollisionRects[0].Width = 99 // tiles do not share their block's lists
+	if back[0][Vector2i{}].CollisionRects[0].Width != 3 {
+		t.Errorf("two tiles of one block share their rectangles")
+	}
+
+	if _, _, _, _, err := parseLevel([]byte(`{"blocks":[{"resource":"a"}],"0":[[1,0,0]]}`)); err == nil {
+		t.Errorf("a placement of a block the table does not have loaded")
+	}
+}

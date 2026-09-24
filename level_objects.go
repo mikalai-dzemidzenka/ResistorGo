@@ -1,7 +1,10 @@
 package resistor
 
 import (
+	"cmp"
 	"encoding/json"
+	"fmt"
+	"maps"
 	"os"
 	"slices"
 
@@ -260,4 +263,88 @@ func (o *ObjectRects) UnmarshalJSON(b []byte) error {
 		Drop:      rectsFromWire(w.DropRect, w.DropRects, "dropRect"),
 	}
 	return nil
+}
+
+// blocksKey is the level file's table of blocks: every distinct texture, layer
+// and set of rectangles the tiles use, once. A layer is then a list of
+// placements into it, so a file with the same block a hundred times holds its
+// rectangles once.
+const blocksKey = "blocks"
+
+// placement is one tile on disk: its block's index in the table, and where it is.
+type placement [3]int32
+
+// encodeLayers splits the tiles into the block table and each layer's
+// placements. Blocks are ordered by their JSON and placements by row then
+// column, so saving the same level gives the same file.
+func encodeLayers(objects map[int]LevelLayer) ([]json.RawMessage, map[int][]placement, error) {
+	keyOf := func(o LevelObject) (string, error) {
+		o.X, o.Y = 0, 0
+		b, err := json.Marshal(o)
+		return string(b), err
+	}
+	index := make(map[string]int32)
+	for _, layer := range objects {
+		for _, o := range layer {
+			k, err := keyOf(o)
+			if err != nil {
+				return nil, nil, err
+			}
+			index[k] = 0
+		}
+	}
+	keys := slices.Sorted(maps.Keys(index))
+	blocks := make([]json.RawMessage, len(keys))
+	for i, k := range keys {
+		index[k] = int32(i)
+		blocks[i] = json.RawMessage(k)
+	}
+	layers := make(map[int][]placement, len(objects))
+	for n, layer := range objects {
+		ps := make([]placement, 0, len(layer))
+		for _, o := range layer {
+			k, _ := keyOf(o)
+			ps = append(ps, placement{index[k], o.X, o.Y})
+		}
+		slices.SortFunc(ps, func(a, b placement) int { return cmp.Or(cmp.Compare(a[2], b[2]), cmp.Compare(a[1], b[1])) })
+		layers[n] = ps
+	}
+	return blocks, layers, nil
+}
+
+// decodeLayer is a layer's tiles from its placements. Each tile gets its own
+// copy of its block's rectangles, as a placed tile never shares them.
+func decodeLayer(blocks []LevelObject, ps []placement) (LevelLayer, error) {
+	layer := make(LevelLayer, len(ps))
+	for _, p := range ps {
+		if p[0] < 0 || int(p[0]) >= len(blocks) {
+			return nil, fmt.Errorf("placement at %d,%d: no block %d", p[1], p[2], p[0])
+		}
+		o := blocks[p[0]]
+		o.setRects(o.rects().clone())
+		o.X, o.Y = p[1], p[2]
+		layer[Vector2i{X: o.X, Y: o.Y}] = o
+	}
+	return layer, nil
+}
+
+// jsonLines is a JSON array with one element per line, so a saved level's diff
+// is the lines that changed rather than the whole file.
+func jsonLines[T any](xs []T) ([]byte, error) {
+	if len(xs) == 0 {
+		return []byte("[]"), nil
+	}
+	b := []byte("[\n")
+	for i, x := range xs {
+		e, err := json.Marshal(x)
+		if err != nil {
+			return nil, err
+		}
+		b = append(b, e...)
+		if i < len(xs)-1 {
+			b = append(b, ',')
+		}
+		b = append(b, '\n')
+	}
+	return append(b, ']'), nil
 }
