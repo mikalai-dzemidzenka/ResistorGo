@@ -3,7 +3,6 @@ package resistor
 import (
 	"encoding/json"
 	"os"
-	"strings"
 	"testing"
 
 	rl "github.com/gen2brain/raylib-go/raylib"
@@ -69,20 +68,6 @@ func TestLevelFileWithoutAmbient(t *testing.T) {
 	if _, _, _, back, err := parseLevel(b); err != nil || back != le.ambient {
 		t.Errorf("the saved ambient came back as %+v (%v), want %+v", back, err, le.ambient)
 	}
-}
-
-// withoutAmbient is a saved level with its ambient key taken back out, for the
-// tests that compare one against the bytes its tiles alone give. The key sorts
-// wherever it sorts among the layer numbers, so either the comma before it or
-// the one after it goes with it.
-func withoutAmbient(b []byte, a Ambient) string {
-	m, err := json.Marshal(map[string]Ambient{ambientKey: a})
-	if err != nil {
-		panic(err)
-	}
-	key := string(m[1 : len(m)-1])
-	s := strings.Replace(string(b), ","+key, "", 1)
-	return strings.Replace(s, key+",", "", 1)
 }
 
 // A level that carries an ambient gets it as written - a strength of zero is a

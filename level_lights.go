@@ -1,8 +1,11 @@
 package resistor
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
+	"maps"
+	"slices"
 	"strconv"
 
 	rlg "github.com/gen2brain/raylib-go/raygui"
@@ -196,20 +199,22 @@ func ambientClear(a Ambient) rl.Color {
 	return rl.Color{R: ch(a.Color[0]), G: ch(a.Color[1]), B: ch(a.Color[2]), A: 255}
 }
 
-// The level file is an object keyed by layer number, plus one key for the
-// lights, one for the lit areas and one for the ambient. It kept its shape
-// when lights were added to it, and again when the ambient and the areas were:
-// a level with none of them is exactly the file it always was.
+// The level file is an object: the blocks key is the table of blocks the tiles
+// use, each layer number is that layer's tiles as placements into the table,
+// and one key each holds the lights, the lit areas and the ambient. Every list
+// is one entry to a line, so a save's diff is the entries it changed. A file
+// saved before the block table - each layer an object of whole tiles keyed by
+// position - still loads, and is written the new way on the next save.
 const (
 	lightsKey  = "lights"
 	areasKey   = "litAreas"
 	ambientKey = "ambient"
 )
 
-// parseLevel reads a level file: every integer key is a layer of tiles, the
-// lights key is the lights, the areas key is the lit areas, the ambient key is
-// the ambient, and anything else is skipped rather than failing the whole
-// level. A file with no ambient key gets the default one - a file that carries
+// parseLevel reads a level file: the blocks key is the block table, every
+// integer key is a layer of tiles, the lights key is the lights, the areas key
+// is the lit areas, the ambient key is the ambient, and anything else is
+// skipped rather than failing the whole level. A file with no ambient key gets the default one - a file that carries
 // an ambient gets it as written, a strength of zero included, which is a level
 // that is black outside its lights.
 func parseLevel(b []byte) (map[int]LevelLayer, []LevelLight, []LitArea, Ambient, error) {
@@ -219,6 +224,12 @@ func parseLevel(b []byte) (map[int]LevelLayer, []LevelLight, []LitArea, Ambient,
 	var raw map[string]json.RawMessage
 	if err := json.Unmarshal(b, &raw); err != nil {
 		return fail(err)
+	}
+	var blocks []LevelObject
+	if v, ok := raw[blocksKey]; ok {
+		if err := json.Unmarshal(v, &blocks); err != nil {
+			return fail(err)
+		}
 	}
 	objects := make(map[int]LevelLayer)
 	var lights []LevelLight
@@ -243,14 +254,23 @@ func parseLevel(b []byte) (map[int]LevelLayer, []LevelLight, []LitArea, Ambient,
 			}
 			ambient = a
 			continue
+		case blocksKey:
+			continue
 		}
 		n, err := strconv.Atoi(k)
 		if err != nil {
 			rl.TraceLog(rl.LogWarning, "level: skipping unknown key %q", k)
 			continue
 		}
+		// a list of placements into the blocks, or - in a file saved before
+		// there was a block table - the tiles themselves, keyed by position
 		var layer LevelLayer
-		if err := json.Unmarshal(v, &layer); err != nil {
+		var ps []placement
+		if err := json.Unmarshal(v, &ps); err == nil {
+			if layer, err = decodeLayer(blocks, ps); err != nil {
+				return fail(err)
+			}
+		} else if err := json.Unmarshal(v, &layer); err != nil {
 			return fail(err)
 		}
 		objects[n] = layer
@@ -261,22 +281,43 @@ func parseLevel(b []byte) (map[int]LevelLayer, []LevelLight, []LitArea, Ambient,
 // marshalFile is the level file as saved: the tiles, as marshal gives them to
 // the fingerprint, with the lights, the lit areas and the ambient beside them.
 func (le *LevelEditor) marshalFile() ([]byte, error) {
-	m := make(map[string]any)
-	for n, layer := range le.objects {
-		m[strconv.Itoa(n)] = layer
+	blocks, layers, err := encodeLayers(le.objects)
+	if err != nil {
+		return nil, err
 	}
-	if len(le.lights) > 0 {
-		m[lightsKey] = le.lights
+	b := []byte("{")
+	field := func(key string) func([]byte, error) {
+		return func(v []byte, e error) {
+			if err = cmp.Or(err, e); err != nil {
+				return
+			}
+			if len(b) > 1 {
+				b = append(b, ',')
+			}
+			b = append(b, '\n')
+			b = strconv.AppendQuote(b, key)
+			b = append(append(b, ':'), v...)
+		}
 	}
-	if len(le.areas) > 0 {
-		m[areasKey] = le.areas
+	field(blocksKey)(jsonLines(blocks))
+	for _, n := range slices.Sorted(maps.Keys(layers)) {
+		field(strconv.Itoa(n))(jsonLines(layers[n]))
 	}
 	// Always written, even when it matches the default: a level that carries
 	// its own ambient goes on looking as it was authored when the default
 	// changes under it, and a file without the key is only ever one written
 	// before the level had an ambient at all.
-	m[ambientKey] = le.ambient
-	return json.Marshal(m)
+	field(ambientKey)(json.Marshal(le.ambient))
+	if len(le.lights) > 0 {
+		field(lightsKey)(jsonLines(le.lights))
+	}
+	if len(le.areas) > 0 {
+		field(areasKey)(jsonLines(le.areas))
+	}
+	if err != nil {
+		return nil, err
+	}
+	return append(b, "\n}\n"...), nil
 }
 
 // lightVisible reports whether any of a light's area is in view. A light that

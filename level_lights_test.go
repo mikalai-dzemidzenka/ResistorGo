@@ -58,10 +58,8 @@ func TestLevelFileWithoutLights(t *testing.T) {
 	if strings.Contains(string(b), lightsKey) {
 		t.Errorf("a level without lights was saved with a lights key: %s", b)
 	}
-	plain, _ := le.marshal()
-	tiles := withoutAmbient(b, le.ambient) // every level saves its ambient
-	if tiles != string(plain) {
-		t.Errorf("a level without lights is not the file it always was:\n%s\n%s", tiles, plain)
+	if got := savedTilesHash(t, le); got != le.Hash() {
+		t.Errorf("a level without lights saved other tiles: %d, want %d", got, le.Hash())
 	}
 	objects, lights, _, _, err := parseLevel(b)
 	if err != nil || len(lights) != 0 || len(objects[0]) != 2 {
@@ -106,7 +104,7 @@ func level1Bytes(t *testing.T) []byte {
 }
 
 // checkLevelLights checks a level file's lights: they survive a save unchanged,
-// and the fingerprint is the one the loader before lights gave its tiles. It
+// and the fingerprint is the one its tiles alone give. It
 // returns that fingerprint.
 func checkLevelLights(t *testing.T, name string, b []byte) uint64 {
 	t.Helper()
@@ -130,13 +128,13 @@ func checkLevelLights(t *testing.T, name string, b []byte) uint64 {
 	}
 	delete(raw, lightsKey)
 	delete(raw, ambientKey)
-	delete(raw, areasKey) // the loader before any of them knew only the tiles
+	delete(raw, areasKey) // the same file, with only its tiles
 	stripped, _ := json.Marshal(raw)
-	old := newLevelEditor(39, 83, nil, nil)
-	if err := json.Unmarshal(stripped, &old.objects); err != nil { // the loader before lights
+	tiles, _, _, _, err := parseLevel(stripped)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if le.Hash() != old.Hash() {
+	if le.Hash() != (&LevelEditor{objects: tiles}).Hash() {
 		t.Errorf("%s: the lights changed the level's fingerprint", name)
 	}
 	return le.Hash()
