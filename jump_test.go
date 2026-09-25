@@ -399,6 +399,7 @@ func TestFallCatchesALedge(t *testing.T) {
 	}{
 		{"rising", StateJump, -5},
 		{"falling", StateFall, 5},
+		{"rolling", StateRoll, -5},
 	} {
 		tiles(Vector2i{X: 96}) // a tile at x 96..144, top at y 0
 		a := jumper(90, 16)    // just left of it, head level with its top

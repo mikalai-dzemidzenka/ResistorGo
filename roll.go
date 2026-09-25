@@ -1,16 +1,23 @@
 package resistor
 
-import rl "github.com/gen2brain/raylib-go/raylib"
+import (
+	"math"
 
-// The roll's launch grows with how long the duck was held, from the Min pair on
-// the first tick to the Max pair after RollChargeTicks, and no further. Speeds
-// in px/s; to be tuned by eye in play. RollMaxX stays under MaxSpeed.
+	rl "github.com/gen2brain/raylib-go/raylib"
+)
+
+// The roll's launch speed grows with how long the duck was held, from
+// RollMinSpeed on the first tick to RollMaxSpeed after RollChargeTicks, and no
+// further. The cursor picks the angle it leaves at, from RollFlatDeg to
+// RollSteepDeg above the ground. Speeds in px/s; to be tuned by eye in play.
+// RollMaxX stays under MaxSpeed, which would cut a flat launch short anyway.
 const (
 	RollChargeTicks = 60
-	RollMinX        = 260
+	RollMinSpeed    = 300
+	RollMaxSpeed    = 520
 	RollMaxX        = 300
-	RollMinY        = -150
-	RollMaxY        = -420
+	RollFlatDeg     = 15
+	RollSteepDeg    = 75
 	RollPathTicks   = 300 // the drawn arc gives up on a roll that has not landed by then
 )
 
@@ -22,13 +29,24 @@ func (a *Actor) rolling() bool {
 
 // rollLaunch is the speed a duck released now would roll off with. The charge
 // is read from the duck's animation start, which is replicated and recorded
-// already, so every machine arrives at the same one.
+// already, and the angle from the command's RollAim, so every machine arrives
+// at the same one.
 func (a *Actor) rollLaunch() rl.Vector2 {
 	t := float32(min(a.Ticks-a.AnimStartTick, RollChargeTicks)) / RollChargeTicks
+	speed := lerp(RollMinSpeed, RollMaxSpeed, t)
+	angle := float64(lerp(RollFlatDeg, RollSteepDeg, float32(a.Input.RollAim)/255)) * math.Pi / 180
 	return rl.Vector2{
-		X: lerp(RollMinX, RollMaxX, t) * float32(a.Orientation),
-		Y: lerp(RollMinY, RollMaxY, t),
+		X: min(speed*float32(math.Cos(angle)), RollMaxX) * float32(a.Orientation),
+		Y: -speed * float32(math.Sin(angle)),
 	}
+}
+
+// rollAim turns the cursor's direction from the fighter into a RollAim: 0 at
+// RollFlatDeg or lower, 255 at RollSteepDeg or higher, so the roll leaves at
+// the angle the cursor points along.
+func rollAim(from, cursor rl.Vector2) uint8 {
+	deg := math.Atan2(float64(from.Y-cursor.Y), math.Abs(float64(cursor.X-from.X))) * 180 / math.Pi
+	return uint8(clamp((deg-RollFlatDeg)/(RollSteepDeg-RollFlatDeg), 0, 1) * 255)
 }
 
 // enterDuckState crouches to charge a roll, if the fighter can pay for one.
@@ -67,7 +85,12 @@ func (a *Actor) updateRoll() {
 			a.launchRoll()
 		}
 	case StateRoll:
-		if a.OnGround {
+		// a roll that carries the head up to a ledge takes hold of it, as a
+		// jump does
+		if (a.CanClimbRight && a.Orientation == 1) || (a.CanClimbLeft && a.Orientation == -1) {
+			a.exitJumpState()
+			a.enterClimbState()
+		} else if a.OnGround {
 			a.enterRollRecoverState()
 		}
 	case StateRollRecover:
@@ -84,7 +107,7 @@ func (a *Actor) updateRoll() {
 // recorded and restored by value - and a roll touches no other fighter.
 func (a *Actor) rollPath() []rl.Vector2 {
 	b := *a
-	b.Input = Input{FaceLeft: a.Input.FaceLeft, Updown: a.Input.Updown}
+	b.Input = Input{FaceLeft: a.Input.FaceLeft, Updown: a.Input.Updown, RollAim: a.Input.RollAim}
 	b.FreezeTicks = 0
 	feet := func() rl.Vector2 {
 		return rl.Vector2{X: b.Pos.X + b.CollisionBox.X + b.CollisionBox.Width/2, Y: b.Pos.Y + b.CollisionBox.Y + b.CollisionBox.Height}
