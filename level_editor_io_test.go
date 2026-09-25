@@ -1,5 +1,3 @@
-//go:build !release
-
 package resistor
 
 import (
@@ -197,5 +195,97 @@ func TestPresetsRoundTrip(t *testing.T) {
 		if (got[i] == nil) != (want[i] == nil) || got[i] != nil && !sameRects(*got[i], *want[i]) {
 			t.Errorf("slot %d = %+v, want %+v", i+1, got[i], want[i])
 		}
+	}
+}
+
+// The save dialog takes a bare file name, adds .json, and refuses paths and the
+// editor's and game's own files.
+func TestLevelFileName(t *testing.T) {
+	for in, want := range map[string]string{
+		"arena":         "arena.json",
+		" arena.json ":  "arena.json",
+		"Arena.JSON":    "Arena.JSON",
+		"level_1.json":  "level_1.json",
+		"":              "",
+		"../x":          "",
+		`dir\x.json`:    "",
+		"C:x.json":      "",
+		"settings.json": "",
+		"level_objects": "",
+		"LEVEL_PRESETS": "",
+	} {
+		got, err := levelFileName(in)
+		if got != want || (want == "") != (err != nil) {
+			t.Errorf("levelFileName(%q) = %q, %v; want %q", in, got, err, want)
+		}
+	}
+}
+
+// Saving from the dialog writes the named file and makes it the level Ctrl+S
+// writes; a refused name changes nothing and keeps the dialog up. Loading it
+// back from the dialog opens it, clean.
+func TestDialogSaveAndLoad(t *testing.T) {
+	t.Chdir(t.TempDir())
+	prev := LevelPath
+	defer func() { LevelPath = prev }()
+	le := NewLevelEditor(39, 83)
+	le.LoadLevel("level_1.json")
+	le.dirty = true
+
+	le.openDialog(dlgSave)
+	le.dlgName = "../escape"
+	le.dialogOK()
+	if LevelPath != prev || le.dialog != dlgSave || le.dlgErr == "" {
+		t.Fatalf("a path was accepted: LevelPath %q, dialog %d, err %q", LevelPath, le.dialog, le.dlgErr)
+	}
+	le.dlgName = "arena"
+	le.dialogOK()
+	if _, err := os.Stat("arena.json"); err != nil {
+		t.Fatalf("arena.json not written: %v", err)
+	}
+	if LevelPath != "arena.json" || le.dialog != dlgNone || le.dirty {
+		t.Errorf("after saving: LevelPath %q, dialog %d, dirty %t", LevelPath, le.dialog, le.dirty)
+	}
+	if got := levelFiles(); !slices.Equal(got, []string{"arena.json", "level_1.json"}) {
+		t.Errorf("levels to load: %v", got)
+	}
+
+	want := le.Hash()
+	other := NewLevelEditor(39, 83)
+	other.dirty = true
+	other.openDialog(dlgLoad)
+	other.dlgName = "missing"
+	other.dialogOK()
+	if other.dialog != dlgLoad || other.dlgErr == "" {
+		t.Errorf("loading a missing level closed the dialog: err %q", other.dlgErr)
+	}
+	LevelPath = prev
+	other.dlgName = "arena.json"
+	other.dialogOK()
+	if other.Hash() != want || LevelPath != "arena.json" || other.dirty || other.dialog != dlgNone {
+		t.Errorf("after loading: same level %t, LevelPath %q, dirty %t, dialog %d", other.Hash() == want, LevelPath, other.dirty, other.dialog)
+	}
+}
+
+// New writes an empty level under the name and opens it.
+func TestDialogNewLevel(t *testing.T) {
+	t.Chdir(t.TempDir())
+	prev := LevelPath
+	defer func() { LevelPath = prev }()
+	le := NewLevelEditor(39, 83)
+	le.LoadLevel("level_1.json")
+	le.dirty = true
+
+	le.openDialog(dlgNew)
+	if le.dlgName != "" {
+		t.Errorf("new level dialog opened with name %q", le.dlgName)
+	}
+	le.dlgName = "fresh"
+	le.dialogOK()
+	if _, err := os.Stat("fresh.json"); err != nil {
+		t.Fatalf("fresh.json not written: %v", err)
+	}
+	if LevelPath != "fresh.json" || le.dirty || le.dialog != dlgNone || len(le.objectsIndexed) != 0 || len(le.lights) != 0 {
+		t.Errorf("after New: LevelPath %q, dirty %t, dialog %d, %d tiles, %d lights", LevelPath, le.dirty, le.dialog, len(le.objectsIndexed), len(le.lights))
 	}
 }

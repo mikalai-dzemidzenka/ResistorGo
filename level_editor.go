@@ -110,6 +110,11 @@ type LevelEditor struct {
 	activeIdx  int                    // which rectangle of the activeRect kind
 	drag       rectDrag
 	editField  int     // which numeric field has the keyboard, -1 for none
+	dialog     int     // the file dialog that is up, dlgNone for none
+	dlgName    string  // the file name typed into it
+	dlgErr     string  // why its last Save or Load did not happen
+	dlgPick    int32   // the level picked from its list, -1 for none
+	dlgScroll  int32   // how far its list is scrolled
 	fieldVals  []int32 // what the panel's numeric fields show
 
 	clip     ObjectRects // rectangles copied with Ctrl+C, pasted with Ctrl+V
@@ -200,6 +205,15 @@ func (le *LevelEditor) Update(dt float32) {
 	le.commitEdit(le.midGesture(rl.IsMouseButtonDown(rl.MouseButtonLeft) || rl.IsMouseButtonDown(rl.MouseButtonRight)))
 	ctrl := rl.IsKeyDown(rl.KeyLeftControl) || rl.IsKeyDown(rl.KeyRightControl)
 	shift := rl.IsKeyDown(rl.KeyLeftShift) || rl.IsKeyDown(rl.KeyRightShift)
+	if le.dialog != dlgNone {
+		if rl.IsKeyPressed(rl.KeyEscape) {
+			le.dialog = dlgNone
+		}
+		if rl.IsKeyPressed(rl.KeyEnter) || rl.IsKeyPressed(rl.KeyKpEnter) {
+			le.dialogOK()
+		}
+		return
+	}
 	if ctrl && rl.IsKeyPressed(rl.KeyS) {
 		le.Save()
 		return
@@ -817,11 +831,11 @@ func (le *LevelEditor) Draw() {
 	for _, obj := range le.objectsIndexed {
 		if tex, ok := resources[obj.Resource]; ok {
 			rl.DrawTexture(tex, obj.X, obj.Y, rl.White)
-		} else if DevTools {
+		} else {
 			le.drawMissing(obj)
 		}
 	}
-	if DevTools && Debug {
+	if (DevTools && Debug) || Editing {
 		for _, obj := range le.objectsIndexed {
 			for _, c := range obj.CollisionRects {
 				rl.DrawRectangleLinesEx(rectToWorld(c, objOrigin(obj)), 1, rl.SkyBlue)
@@ -837,7 +851,7 @@ func (le *LevelEditor) Draw() {
 
 		le.DrawGrid()
 	}
-	if DevTools && Editing {
+	if Editing {
 		// Art that is only on disk would be missing from a build made now.
 		for _, obj := range le.objectsIndexed {
 			if _, ok := resources[obj.Resource]; ok && !inBuild(obj.Resource) {
@@ -933,26 +947,23 @@ func (le *LevelEditor) DrawGrid() {
 	rl.PopMatrix()
 }
 
-func (le *LevelEditor) LoadLevel(path string) {
-	// A development build reads the disk first, so a level saved from the editor
-	// takes effect on the next run. A release build plays the level it was built
-	// with, whatever lies beside it, so every copy agrees on the level fingerprint.
-	var b []byte
-	err := os.ErrNotExist
-	if DevTools {
-		b, err = os.ReadFile(path)
-	}
+// LoadLevel reads the level in path, reporting whether it did.
+func (le *LevelEditor) LoadLevel(path string) bool {
+	// The disk comes first, so a level saved from the editor takes effect on the
+	// next run; the level the game was built with is the fallback. An edited level
+	// fingerprints differently, so the handshake keeps it out of other players' matches.
+	b, err := os.ReadFile(path)
 	if err != nil {
 		b, err = assetFS.ReadFile(path)
 	}
 	if err != nil {
 		rl.TraceLog(rl.LogError, "failed to load level: read file: %s", err.Error())
-		return
+		return false
 	}
 	objects, lights, areas, ambient, err := parseLevel(b)
 	if err != nil {
 		rl.TraceLog(rl.LogError, "failed to load level: json unmarshal: %s", err.Error())
-		return
+		return false
 	}
 	le.objects, le.lights, le.lightSel, le.ambient = objects, lights, -1, ambient
 	le.areas, le.areaSel = areas, -1
@@ -960,6 +971,7 @@ func (le *LevelEditor) LoadLevel(path string) {
 	le.markOwnRects()
 	le.buildIndex()
 	le.hist = editHistory{} // another level's edits are not this one's to undo
+	return true
 }
 
 // marshal returns the canonical JSON of the level's tiles (map keys are sorted
@@ -979,45 +991,195 @@ func (le *LevelEditor) Hash() uint64 {
 	return levelHash(b)
 }
 
-func (le *LevelEditor) SaveLevel(path string) {
-	if !DevTools {
-		return // a release build never writes the level
-	}
+// SaveLevel writes the level to path, reporting whether it is on disk.
+func (le *LevelEditor) SaveLevel(path string) bool {
 	b, err := le.marshalFile()
 	if err != nil {
 		rl.TraceLog(rl.LogError, "failed to save level: marshal level: %s", err.Error())
-		return
+		return false
 	}
-	f, err := os.Create(path)
-	if err != nil {
-		rl.TraceLog(rl.LogError, "failed to save level: create file: %s", err.Error())
-		return
-	}
-	defer f.Close()
-
-	_, err = f.Write(b)
-	if err != nil {
-		rl.TraceLog(rl.LogError, "failed to save level: save file: %s", err.Error())
-		return
+	if err := os.WriteFile(path, b, 0o644); err != nil {
+		rl.TraceLog(rl.LogError, "failed to save level: %s", err.Error())
+		return false
 	}
 	le.dirty = false
+	return true
 }
 
 func (le *LevelEditor) OpenObjects() {
 	le.isObjectsViewerEnabled = !le.isObjectsViewerEnabled
 }
 
-// Save writes the level and the palette defaults. It is Ctrl+S in edit mode,
-// and nothing else writes either file.
-func (le *LevelEditor) Save() {
+// Save writes the level and the palette defaults, reporting whether all of it
+// is on disk. It is Ctrl+S and the save dialog in edit mode, and nothing else
+// writes either file.
+func (le *LevelEditor) Save() bool {
 	ok := saveObjectDefaults(objectDefaultsPath, le.defaults)
 	ok = savePresets(presetsPath, le.presets) && ok
-	le.SaveLevel(LevelPath)
+	saved := le.SaveLevel(LevelPath)
 	if !ok {
 		le.dirty = true // the level is saved, but not everything is
 	}
 	if !le.dirty {
 		le.saved() // undoing back to here is back to what is on disk
+	}
+	return ok && saved
+}
+
+// The editor's file dialogs. One is up at a time, and while it is it has the
+// keyboard and the mouse.
+const (
+	dlgNone = iota
+	dlgNew
+	dlgSave
+	dlgLoad
+)
+
+// openDialog puts a file dialog up, its name field on the open level - or
+// empty, for a new one.
+func (le *LevelEditor) openDialog(d int) {
+	le.dialog, le.dlgName, le.dlgErr, le.dlgPick, le.dlgScroll = d, LevelPath, "", -1, 0
+	if d == dlgNew {
+		le.dlgName = ""
+	}
+}
+
+// dialogOK is the dialog's Save or Load, pressed or Enter.
+func (le *LevelEditor) dialogOK() {
+	name, err := levelFileName(le.dlgName)
+	if err != nil {
+		le.dlgErr = err.Error()
+		return
+	}
+	switch le.dialog {
+	case dlgNew:
+		le.newLevel(name)
+	case dlgSave:
+		le.saveTo(name)
+	case dlgLoad:
+		le.loadFrom(name)
+	}
+}
+
+// saveTo writes the level under name, which from then on is the level Ctrl+S
+// writes and the game loads. On any failure the dialog stays up with the
+// reason, and LevelPath is left alone.
+func (le *LevelEditor) saveTo(name string) {
+	prev := LevelPath
+	LevelPath = name
+	if !le.Save() {
+		LevelPath = prev
+		le.dlgErr = "could not write " + name
+		return
+	}
+	le.dialog = dlgNone
+}
+
+// loadFrom opens the level in name in place of the one being edited, unsaved
+// edits and all, and makes it the level Ctrl+S writes and the game loads.
+func (le *LevelEditor) loadFrom(name string) {
+	if !le.LoadLevel(name) {
+		le.dlgErr = "could not load " + name
+		return
+	}
+	LevelPath = name
+	le.dirty = false
+	le.sel = selection{proto: true} // a tile of the old level is not one of this one
+	le.setTool(le.tool)
+	le.dialog = dlgNone
+}
+
+// newLevel starts an empty level in name: written out empty, then opened like
+// any other, so it is on disk from the start and Ctrl+S has somewhere to write.
+func (le *LevelEditor) newLevel(name string) {
+	if err := os.WriteFile(name, []byte("{}\n"), 0o644); err != nil {
+		le.dlgErr = "could not write " + name
+		return
+	}
+	le.loadFrom(name)
+}
+
+// levelFileName checks a name typed into a file dialog and gives it the .json
+// it may lack. Levels live beside the game, so a path is refused, and so are
+// the files beside it that are not levels.
+func levelFileName(s string) (string, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return "", fmt.Errorf("type a file name")
+	}
+	if !strings.EqualFold(filepath.Ext(s), ".json") {
+		s += ".json"
+	}
+	if filepath.Base(s) != s || strings.ContainsAny(s, `/\:`) {
+		return "", fmt.Errorf("a file name only, not a path")
+	}
+	for _, other := range []string{objectDefaultsPath, presetsPath, settingsPath} {
+		if strings.EqualFold(s, other) {
+			return "", fmt.Errorf("%s is not a level", other)
+		}
+	}
+	return s, nil
+}
+
+// levelFiles lists the levels there are to load: those beside the game, and
+// the one it was built with.
+func levelFiles() []string {
+	files := []string{"level_1.json"}
+	entries, _ := os.ReadDir(".")
+	for _, e := range entries {
+		if name, err := levelFileName(e.Name()); err == nil && name == e.Name() && !e.IsDir() {
+			files = append(files, name)
+		}
+	}
+	slices.Sort(files)
+	return slices.Compact(files)
+}
+
+// drawDialog draws the file dialog over the middle of the screen: the file
+// name, the levels to pick from when loading, and what the button will throw
+// away.
+func (le *LevelEditor) drawDialog() {
+	title, ok, h := "Save level", "Save (Enter)", float32(176)
+	switch le.dialog {
+	case dlgNew:
+		title, ok = "New level", "Create (Enter)"
+	case dlgLoad:
+		title, ok, h = "Load level", "Load (Enter)", 380
+	}
+	const w = 460
+	box := rl.Rectangle{X: (VW - w) / 2, Y: (VH - h) / 2, Width: w, Height: h}
+	if rlg.WindowBox(box, title) {
+		le.dialog = dlgNone
+		return
+	}
+	x, y := box.X+12, box.Y+34
+	rlg.Label(rl.Rectangle{X: x, Y: y, Width: w - 24, Height: 24}, "File name (beside the game)")
+	rlg.TextBox(rl.Rectangle{X: x, Y: y + 28, Width: w - 24, Height: 30}, &le.dlgName, 64, true)
+	y += 66
+	if le.dialog == dlgLoad {
+		files := levelFiles()
+		if rlg.ListView(rl.Rectangle{X: x, Y: y, Width: w - 24, Height: 200}, strings.Join(files, ";"), &le.dlgScroll, &le.dlgPick); le.dlgPick >= 0 && int(le.dlgPick) < len(files) {
+			le.dlgName = files[le.dlgPick]
+		}
+		y += 204
+	}
+	note := le.dlgErr
+	if name, err := levelFileName(le.dlgName); note == "" && err == nil {
+		_, statErr := os.Stat(name)
+		switch {
+		case statErr == nil && (le.dialog == dlgNew || le.dialog == dlgSave && name != LevelPath):
+			note = "replaces the existing " + name
+		case le.dialog != dlgSave && le.dirty:
+			note = "discards the unsaved edits"
+		}
+	}
+	rl.DrawText(note, int32(x), int32(y), 20, rl.Orange)
+	b := buttons(rl.Rectangle{X: x, Y: box.Y + h - 40, Width: w - 24, Height: 28}, 2)
+	if rlg.Button(b[0], ok) {
+		le.dialogOK()
+	}
+	if rlg.Button(b[1], "Cancel (Esc)") {
+		le.dialog = dlgNone
 	}
 }
 
@@ -1052,9 +1214,6 @@ func droppedTextureName(p string) (string, bool) {
 // copied, so a bad drop cannot leave a file that breaks the next run's palette.
 // A name that is already taken is never overwritten: that entry is selected.
 func (le *LevelEditor) importTexture(src string) bool {
-	if !DevTools {
-		return false
-	}
 	name, ok := droppedTextureName(src)
 	if !ok {
 		rl.TraceLog(rl.LogWarning, "import: not a texture that can be placed: %s", src)
@@ -1142,6 +1301,10 @@ func (le *LevelEditor) overGui(p rl.Vector2) bool {
 }
 
 func (le *LevelEditor) DrawGui() {
+	// the dialog has the mouse: nothing behind it can be pressed
+	if le.dialog != dlgNone {
+		rlg.Lock()
+	}
 	if le.isObjectsViewerEnabled {
 		rlg.SetStyle(rlg.BUTTON, rlg.BASE_COLOR_NORMAL, rlg.PropertyValue(rl.ColorToInt(color.RGBA{0, 0, 0, 0})))
 		rlg.SetStyle(rlg.BUTTON, rlg.BASE_COLOR_FOCUSED, rlg.PropertyValue(rl.ColorToInt(color.RGBA{0, 0, 0, 25})))
@@ -1169,6 +1332,10 @@ func (le *LevelEditor) DrawGui() {
 		}
 	}
 	le.drawPanel()
+	if le.dialog != dlgNone {
+		rlg.Unlock()
+		le.drawDialog()
+	}
 }
 
 // drawPanel shows the tool, what is selected and - with the rect tool - the
@@ -1190,15 +1357,21 @@ func (le *LevelEditor) drawPanel() {
 	if int(tool) != le.tool {
 		le.setTool(int(tool))
 	}
-	b := buttons(row(), 3)
-	if button(b[0], "Undo (Ctrl+Z)", len(le.hist.undo) > 0 || le.hist.gen != le.hist.stableGen) {
+	b := buttons(row(), 5)
+	if button(b[0], "Undo", len(le.hist.undo) > 0 || le.hist.gen != le.hist.stableGen) {
 		le.undo()
 	}
-	if button(b[1], "Redo (Ctrl+Y)", len(le.hist.redo) > 0) {
+	if button(b[1], "Redo", len(le.hist.redo) > 0) {
 		le.redo()
 	}
-	if button(b[2], "Save (Ctrl+S)", le.dirty) {
-		le.Save()
+	if button(b[2], "New", true) {
+		le.openDialog(dlgNew)
+	}
+	if button(b[3], "Save", true) {
+		le.openDialog(dlgSave)
+	}
+	if button(b[4], "Load", true) {
+		le.openDialog(dlgLoad)
 	}
 
 	switch le.tool {
@@ -1406,16 +1579,43 @@ func (le *LevelEditor) LightOccluders() []rl.Rectangle {
 // also an edit.
 var Editing bool
 
+// editorCam moves the camera freely while editing, instead of following the
+// fighter: WASD or the arrows pan it, and dragging with the middle button
+// carries the level along under the cursor. The keys are left alone while
+// something else has the keyboard - a dialog, a numeric field, a Ctrl chord.
+func editorCam(dt float32) {
+	pos := Cam.Camera2D.Target
+	ctrl := rl.IsKeyDown(rl.KeyLeftControl) || rl.IsKeyDown(rl.KeyRightControl)
+	if LE.dialog == dlgNone && LE.editField < 0 && !ctrl {
+		var pan rl.Vector2
+		if rl.IsKeyDown(rl.KeyA) || rl.IsKeyDown(rl.KeyLeft) {
+			pan.X--
+		}
+		if rl.IsKeyDown(rl.KeyD) || rl.IsKeyDown(rl.KeyRight) {
+			pan.X++
+		}
+		if rl.IsKeyDown(rl.KeyW) || rl.IsKeyDown(rl.KeyUp) {
+			pan.Y--
+		}
+		if rl.IsKeyDown(rl.KeyS) || rl.IsKeyDown(rl.KeyDown) {
+			pan.Y++
+		}
+		pos = panStep(pos, pan, Cam.Zoom, dt)
+	}
+	if rl.IsMouseButtonDown(rl.MouseButtonMiddle) {
+		pos = dragStep(pos, rl.GetMouseDelta(), Cam.Zoom)
+	}
+	Cam.Target, Cam.Camera2D.Target = pos, pos
+}
+
 // toggleEditing handles a press of the edit-mode key. Edit mode is only for a
-// development build's single-player match, and never while time manipulation
+// single-player match, and never while time manipulation
 // holds the match. Leaving it drops any click latched while editing, so it
 // does not fire as an attack on the first tick back.
 func toggleEditing(offline, timeManipulating bool) {
-	if !DevTools {
-		return
-	}
 	if Editing {
 		Editing = false
+		LE.dialog = dlgNone
 		clearLatchedInput()
 		return
 	}
@@ -1427,9 +1627,9 @@ func toggleEditing(offline, timeManipulating bool) {
 // drawEditMarker says that edit mode is on, and whether the level has edits
 // that Ctrl+S has not saved yet. Drawn in screen space, after the palette pass.
 func drawEditMarker() {
-	text := "EDIT"
+	text := "EDIT   WASD/MMB camera"
 	if LE.dirty {
-		text = "EDIT (unsaved - Ctrl+S)"
+		text = "EDIT (unsaved - Ctrl+S)   WASD/MMB camera"
 	}
 	if n, m := len(LE.hist.undo), len(LE.hist.redo); n+m > 0 {
 		text += fmt.Sprintf("   undo %d (Ctrl+Z), redo %d (Ctrl+Y)", n, m)

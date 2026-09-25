@@ -14,8 +14,7 @@ import (
 // objectDefaultsPath holds the rectangles the editor's palette entries are born
 // with, keyed by texture path. It sits beside the level rather than inside it:
 // the level's fingerprint is a network contract, and the editor's defaults have
-// no business changing it. It is not embedded either - only the editor reads it,
-// and a release build has no editor.
+// no business changing it. It is not embedded either - only the editor reads it.
 const objectDefaultsPath = "level_objects.json"
 
 // ObjectRects is an object's rectangles: the ones fighters collide with, the
@@ -63,12 +62,12 @@ func loadObjectDefaults(path string) map[string]ObjectRects {
 }
 
 // saveObjectDefaults writes the palette's rectangles. Like the level, it is
-// written only by a development build, and only when asked. Nothing edited
+// written only when asked. Nothing edited
 // writes nothing, so saving a level does not litter the repo with an empty file.
 // It reports whether the defaults are safely on disk.
 func saveObjectDefaults(path string, defaults map[string]ObjectRects) bool {
 	if len(defaults) == 0 {
-		return DevTools
+		return true
 	}
 	return writeEditorJSON(path, "object defaults", defaults)
 }
@@ -95,17 +94,14 @@ func loadPresets(path string) Presets {
 // savePresets writes the presets. No preset writes nothing.
 func savePresets(path string, p Presets) bool {
 	if p == (Presets{}) {
-		return DevTools
+		return true
 	}
 	return writeEditorJSON(path, "presets", p)
 }
 
 // readEditorJSON reads one of the editor's own files into v, reporting whether
-// it did. Only a development build has an editor to read them.
+// it did.
 func readEditorJSON(path, what string, v any) bool {
-	if !DevTools {
-		return false
-	}
 	b, err := os.ReadFile(path)
 	if err != nil {
 		return false
@@ -120,9 +116,6 @@ func readEditorJSON(path, what string, v any) bool {
 // writeEditorJSON writes one of the editor's own files, reporting whether it is
 // safely on disk.
 func writeEditorJSON(path, what string, v any) bool {
-	if !DevTools {
-		return false
-	}
 	b, err := json.MarshalIndent(v, "", "  ")
 	if err != nil {
 		rl.TraceLog(rl.LogError, "failed to save %s: marshal: %s", what, err.Error())
