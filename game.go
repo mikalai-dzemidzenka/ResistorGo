@@ -419,7 +419,9 @@ func runLevel(dt float32) {
 	if DevTools && Debug && Cli != nil {
 		Cli.Sim.controls()
 	}
-	if local != nil {
+	if Editing {
+		editorCam(dt)
+	} else if local != nil {
 		Cam.SetTarget(rl.Vector2{X: local.Pos.X + 24, Y: local.Pos.Y + 24})
 	} else if spectating {
 		updateSpectatorCam(dt, w)

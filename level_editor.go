@@ -1579,6 +1579,35 @@ func (le *LevelEditor) LightOccluders() []rl.Rectangle {
 // also an edit.
 var Editing bool
 
+// editorCam moves the camera freely while editing, instead of following the
+// fighter: WASD or the arrows pan it, and dragging with the middle button
+// carries the level along under the cursor. The keys are left alone while
+// something else has the keyboard - a dialog, a numeric field, a Ctrl chord.
+func editorCam(dt float32) {
+	pos := Cam.Camera2D.Target
+	ctrl := rl.IsKeyDown(rl.KeyLeftControl) || rl.IsKeyDown(rl.KeyRightControl)
+	if LE.dialog == dlgNone && LE.editField < 0 && !ctrl {
+		var pan rl.Vector2
+		if rl.IsKeyDown(rl.KeyA) || rl.IsKeyDown(rl.KeyLeft) {
+			pan.X--
+		}
+		if rl.IsKeyDown(rl.KeyD) || rl.IsKeyDown(rl.KeyRight) {
+			pan.X++
+		}
+		if rl.IsKeyDown(rl.KeyW) || rl.IsKeyDown(rl.KeyUp) {
+			pan.Y--
+		}
+		if rl.IsKeyDown(rl.KeyS) || rl.IsKeyDown(rl.KeyDown) {
+			pan.Y++
+		}
+		pos = panStep(pos, pan, Cam.Zoom, dt)
+	}
+	if rl.IsMouseButtonDown(rl.MouseButtonMiddle) {
+		pos = dragStep(pos, rl.GetMouseDelta(), Cam.Zoom)
+	}
+	Cam.Target, Cam.Camera2D.Target = pos, pos
+}
+
 // toggleEditing handles a press of the edit-mode key. Edit mode is only for a
 // single-player match, and never while time manipulation
 // holds the match. Leaving it drops any click latched while editing, so it
@@ -1598,9 +1627,9 @@ func toggleEditing(offline, timeManipulating bool) {
 // drawEditMarker says that edit mode is on, and whether the level has edits
 // that Ctrl+S has not saved yet. Drawn in screen space, after the palette pass.
 func drawEditMarker() {
-	text := "EDIT"
+	text := "EDIT   WASD/MMB camera"
 	if LE.dirty {
-		text = "EDIT (unsaved - Ctrl+S)"
+		text = "EDIT (unsaved - Ctrl+S)   WASD/MMB camera"
 	}
 	if n, m := len(LE.hist.undo), len(LE.hist.redo); n+m > 0 {
 		text += fmt.Sprintf("   undo %d (Ctrl+Z), redo %d (Ctrl+Y)", n, m)
