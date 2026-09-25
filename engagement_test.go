@@ -868,3 +868,178 @@ func TestTheLineFillsThePlaceOfTheFallen(t *testing.T) {
 		}
 	}
 }
+
+// A closed place opens again after exactly RollClosesTicks.
+func TestAClosedPlaceOpensAfterTwoSeconds(t *testing.T) {
+	_, a := walker(t, -400)
+	a.ClosedSide, a.ClosedTicks = 1, RollClosesTicks
+	steps(a, RollClosesTicks-1, Input{})
+	if a.ClosedTicks == 0 {
+		t.Fatal("the place opened a tick early")
+	}
+	steps(a, 1, Input{})
+	if a.ClosedTicks != 0 {
+		t.Errorf("after %d ticks the place is still closed for %d more", RollClosesTicks, a.ClosedTicks)
+	}
+}
+
+// closedScene is a player at x 0 whose right-hand place a landed roll has
+// just closed, and a bot at each x given.
+func closedScene(xs ...float32) (*Actor, []*Actor) {
+	floor()
+	w := NewWorld(true)
+	p := w.Spawn(rl.Vector2{}, true)
+	p.ClosedSide, p.ClosedTicks = 1, RollClosesTicks
+	bots := make([]*Actor, 0, len(xs))
+	for _, x := range xs {
+		bots = append(bots, w.Spawn(rl.Vector2{X: x}, false))
+	}
+	return p, bots
+}
+
+func TestAClosedPlaceIsNotTaken(t *testing.T) {
+	p, b := closedScene(40)
+	if b[0].claimPlace(p) || p.Engaged != [2]*Actor{} {
+		t.Errorf("a bot on the closed side took a place: %v", p.Engaged)
+	}
+}
+
+func TestNoCrossingToAClosedPlace(t *testing.T) {
+	p, b := closedScene(-40, -60)
+	if !b[0].claimPlace(p) {
+		t.Fatal("the first bot on the open side took no place")
+	}
+	if b[1].claimPlace(p) || p.Engaged[1] != nil {
+		t.Errorf("the second bot crossed to the closed place: %v", p.Engaged)
+	}
+}
+
+func TestHoldersStandBackFromAClosedPlace(t *testing.T) {
+	// one holds the closed place, one holds the open place from the closed side
+	p, b := closedScene(40, 20)
+	p.Engaged = [2]*Actor{b[1], b[0]}
+	b[0].Bot.target, b[0].Bot.side = p, 1
+	b[1].Bot.target, b[1].Bot.side = p, -1
+	for i, bot := range b {
+		if bot.claimPlace(p) || bot.holdsPlace() {
+			t.Errorf("bot %d kept its place", i)
+		}
+		if bot.Bot.target != p || bot.Bot.side != 1 {
+			t.Errorf("bot %d is not waiting on the side it stands: target %v side %d", i, bot.Bot.target, bot.Bot.side)
+		}
+	}
+	if p.Engaged != [2]*Actor{} {
+		t.Errorf("places still held: %v", p.Engaged)
+	}
+}
+
+// Driven the way play drives it: a bot coming at the fighter from the closed
+// side stands in the line there for as long as the place is closed, with the
+// open place free the whole time, and swings at nobody.
+func TestABotAheadOfTheRollWaits(t *testing.T) {
+	p, b := closedScene(120)
+	b[0].Orientation = -1 // facing the player
+	if swung := runFight(p.W, RollClosesTicks-10, p); swung {
+		t.Error("a bot with no place swung")
+	}
+	if b[0].holdsPlace() || p.Engaged != [2]*Actor{} {
+		t.Errorf("a bot on the closed side got a place: %v", p.Engaged)
+	}
+	if b[0].Bot.target != p || b[0].Pos.X <= p.Pos.X {
+		t.Errorf("the bot is not waiting on the closed side: target %v x %v", b[0].Bot.target, b[0].Pos.X)
+	}
+}
+
+// Once the window has run out the second attacker comes round again.
+func TestTheSurroundComesBack(t *testing.T) {
+	p, b := closedScene(-40, -60)
+	if !b[0].claimPlace(p) || b[1].claimPlace(p) {
+		t.Fatal("the scene did not start with one place held and the far one refused")
+	}
+	steps(p, RollClosesTicks, Input{})
+	if p.ClosedTicks != 0 {
+		t.Fatalf("the place is still closed for %d ticks", p.ClosedTicks)
+	}
+	if !b[1].claimPlace(p) || p.Engaged[1] != b[1] {
+		t.Errorf("the second bot did not cross to the far place once it opened: %v", p.Engaged)
+	}
+}
+
+// The whole escape, as it is played: surrounded, the player rolls out over the
+// bot on its right and lands. For the next 2 seconds nobody holds the place on
+// the side it rolled toward and nobody comes round to it; after that the
+// surround is allowed back. The player is kept on its feet and never stunned -
+// a stun would end the roll before it landed, and is its own test. Bots guard
+// at random, so it is played a few times.
+func TestRollingOutOfASurround(t *testing.T) {
+	for run := range 10 {
+		tiles(row(-960, 48, 60)...) // long enough that the roll lands on it
+		w := NewWorld(true)
+		p := w.Spawn(rl.Vector2{}, true)
+		w.Spawn(rl.Vector2{X: -40}, false)
+		right := w.Spawn(rl.Vector2{X: 40}, false)
+		right.Orientation = -1
+		tick := func(in Input) {
+			w.Tick++
+			p.Structure, p.HitCount, p.Energy = MaxStructure, 0, max(p.Energy, EnergyRunJump)
+			p.Input = in
+			for _, a := range w.Actors {
+				if !a.IsPlayer {
+					a.Input = botInput(a)
+				}
+				a.Update(float32(FixedTimeStep))
+			}
+		}
+		surrounded := func() bool { return p.Engaged[0] != nil && p.Engaged[1] != nil }
+		for range 300 {
+			if surrounded() {
+				break
+			}
+			tick(Input{})
+		}
+		if !surrounded() {
+			t.Fatalf("run %d: the player was never surrounded: %v", run, p.Engaged)
+		}
+
+		p.Energy = MaxEnergy
+		for range RollChargeTicks + 1 {
+			tick(Input{Roll: true, RollAim: 128})
+		}
+		for range RollPathTicks {
+			tick(Input{RollAim: 128})
+			if p.State == StateRollRecover {
+				break
+			}
+		}
+		if p.State != StateRollRecover || p.ClosedSide != 1 || p.ClosedTicks == 0 {
+			t.Fatalf("run %d: the roll did not land and close the right: state %d side %d ticks %d", run, p.State, p.ClosedSide, p.ClosedTicks)
+		}
+
+		fought := false
+		for p.ClosedTicks > 1 {
+			tick(Input{})
+			fought = fought || p.Engaged[0] != nil
+			if p.Engaged[1] != nil {
+				t.Fatalf("run %d: %d ticks into the window a bot holds the closed place", run, RollClosesTicks-p.ClosedTicks)
+			}
+			if h := p.Engaged[0]; h != nil && h.engageSide(p) == p.ClosedSide {
+				t.Fatalf("run %d: the holder of the open place is on the closed side", run)
+			}
+		}
+
+		if !fought {
+			t.Fatalf("run %d: nobody fought the player from the open side during the window", run)
+		}
+
+		came := false
+		for range 600 {
+			tick(Input{})
+			if came = surrounded(); came {
+				break
+			}
+		}
+		if !came {
+			t.Errorf("run %d: the surround never came back once the window closed: %v", run, p.Engaged)
+		}
+	}
+}

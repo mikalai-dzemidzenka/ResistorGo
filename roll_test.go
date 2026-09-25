@@ -284,10 +284,14 @@ func TestAHighRollClimbs(t *testing.T) {
 		a.Orientation = 1
 		steps(a, 20, Input{})
 		steps(a, c.hold, Input{Roll: true, RollAim: c.aim})
-		climbed := false
+		climbed, closed := false, false
 		for range 180 {
 			steps(a, 1, Input{RollAim: c.aim})
 			climbed = climbed || a.State == StateClimb
+			closed = closed || a.ClosedTicks > 0
+		}
+		if climbed && closed {
+			t.Errorf("%s: a roll that ended on a ledge closed a place", c.name)
 		}
 		if climbed != c.climb {
 			t.Errorf("%s: climbed %t, want %t (ended at %v in state %d)", c.name, climbed, c.climb, a.Pos, a.State)
@@ -295,5 +299,51 @@ func TestAHighRollClimbs(t *testing.T) {
 		if c.climb && a.Pos.Y > -143 {
 			t.Errorf("%s: ended at y %v, want on top of the wall", c.name, a.Pos.Y)
 		}
+	}
+}
+
+// Landing a roll closes the place on the side it was going toward; a roll a
+// stun knocks out of the air closes nothing. A flinch does not end a roll, so
+// the hit here is the one that stuns.
+func TestALandedRollClosesThePlaceAhead(t *testing.T) {
+	for _, dir := range []int8{1, -1} {
+		_, a := ducked(t, -400, 20)
+		a.Orientation = dir
+		rollOut(t, a)
+		if a.ClosedSide != dir || a.ClosedTicks == 0 {
+			t.Errorf("rolling toward %d: closed side %d for %d ticks, want side %d closed", dir, a.ClosedSide, a.ClosedTicks, dir)
+		}
+	}
+
+	w, a := ducked(t, -400, 20)
+	steps(a, 3, Input{}) // released, and in the air
+	if a.State != StateRoll || a.OnGround {
+		t.Fatalf("the roll is not in the air: state %d", a.State)
+	}
+	a.HitCount = StunEveryHits - 1
+	a.takeHit(w.Spawn(rl.Vector2{X: a.Pos.X - 20}, false))
+	if a.State != StateAttacked {
+		t.Fatalf("the hit did not stun: state %d", a.State)
+	}
+	for range 180 {
+		steps(a, 1, Input{})
+		if a.ClosedTicks > 0 {
+			t.Fatalf("a roll stunned out of the air closed side %d", a.ClosedSide)
+		}
+	}
+}
+
+// The closed side is where the roll was going, not where the fighter looks: a
+// player turning to face the crowd it rolled out of leaves it where it was.
+func TestTurningRoundLeavesTheClosedSide(t *testing.T) {
+	_, a := ducked(t, -400, 20)
+	rollOut(t, a)
+	a.IsPlayer = true
+	steps(a, 90, Input{FaceLeft: true}) // through the recovery and the slide, then turned to the cursor
+	if a.Orientation != -1 {
+		t.Fatalf("the fighter did not turn round: facing %d", a.Orientation)
+	}
+	if a.ClosedTicks == 0 || a.ClosedSide != 1 {
+		t.Errorf("after turning, closed side %d for %d ticks, want side 1 still closed", a.ClosedSide, a.ClosedTicks)
 	}
 }

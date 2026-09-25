@@ -91,6 +91,9 @@ func (a *Actor) updateRoll() {
 			a.exitJumpState()
 			a.enterClimbState()
 		} else if a.OnGround {
+			// the place ahead closes, so the crowd rolled out of comes at
+			// the fighter from one side only for a while; see claimPlace
+			a.ClosedSide, a.ClosedTicks = a.Orientation, RollClosesTicks
 			a.enterRollRecoverState()
 		}
 	case StateRollRecover:

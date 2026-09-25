@@ -64,6 +64,34 @@ func TestBloodStainsAWall(t *testing.T) {
 	}
 }
 
+// Blood on a wall runs down it over BloodRunTime, never into the floor; blood
+// on the floor stays put.
+func TestBloodRunsDownTheWall(t *testing.T) {
+	walls()
+	clearBlood()
+	t.Cleanup(clearBlood)
+	blood.spray(rl.Vector2{X: wallX + 6, Y: floorY - 24}, -1, 60)
+	flyFor(BloodLife+1, 0)
+	done := uint32(BloodRunTime/FixedTimeStep) + 1
+	ran := false
+	for i := range blood.n {
+		s := blood.stainAt(i)
+		if int(s.y) == floorY-1 && s.run != 0 {
+			t.Errorf("a floor stain runs %d px", s.run)
+		}
+		if int(s.y)+int(s.run) > floorY-1 {
+			t.Errorf("a stain at y=%d runs %d px, into the floor", s.y, s.run)
+		}
+		if ranDown(s, 0) != 0 || ranDown(s, done) != int(s.run) || ranDown(s, done/4) > int(s.run) {
+			t.Errorf("run %d: %d at landing, %d at a quarter, %d when done", s.run, ranDown(s, 0), ranDown(s, done/4), ranDown(s, done))
+		}
+		ran = ran || s.run > 0
+	}
+	if !ran {
+		t.Error("no blood ran down the wall")
+	}
+}
+
 // Past the caps, the oldest droplets and stains give way to the newest.
 func TestBloodIsCapped(t *testing.T) {
 	floor()
