@@ -8,7 +8,7 @@ A blow stopped by a guard is silent too; `block1.mp3` was added for that.
 
 - Every landed hit plays a punch sound, one of the two at random, on every
   machine that shows the match: single player, hosting, joining and
-  spectating. Whiffs, blocks, block-all, clashes and shoves make no punch.
+  spectating. Whiffs, blocks, block-all and shoves make no punch; a clash punches at each impact of its exchange.
 - Every blow stopped by a guard or by block-all plays the block sound, on
   every machine likewise. Hits, whiffs, clashes and shoves make no block.
 - Hits close together overlap rather than cutting each other off.
