@@ -726,7 +726,7 @@ var markerBacking = rl.Fade(rl.Black, 0.8)
 // brightest at the very center its marker is on and an area is full brightness
 // throughout, and either would wash an outline drawn under it out.
 func (le *LevelEditor) DrawOverlay() {
-	if !DevTools || !Editing {
+	if !Editing {
 		return
 	}
 	switch le.tool {

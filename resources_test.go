@@ -66,15 +66,10 @@ func TestInBuildFollowsTheEmbeddedSet(t *testing.T) {
 	}
 }
 
-// A release build plays with what it was built with: it must not read the
-// textures folder at all.
-func TestDiskBlockPathsOnlyInDevBuild(t *testing.T) {
-	got := diskBlockPaths()
-	if !DevTools && got != nil {
-		t.Errorf("a release build listed textures on disk: %v", got)
-	}
-	if DevTools && len(got) == 0 {
-		t.Errorf("a development build found no textures in %s", blocksDir)
+// Both builds list the textures beside the game, so the editor can place them.
+func TestDiskBlockPaths(t *testing.T) {
+	if len(diskBlockPaths()) == 0 {
+		t.Errorf("found no textures in %s", blocksDir)
 	}
 }
 
