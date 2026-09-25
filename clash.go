@@ -5,6 +5,12 @@ const (
 	clashRightAnim = "resources/threefour/battle-low-1-right.png"
 )
 
+// clashImpacts are the frames of the clash where a blow meets the other
+// fighter and a punch is heard: the left fighter's punch meeting the knee, and
+// the right fighter's two kicks landing on the guard. Both sheets share their
+// frame count and timing; to be tuned by eye in play.
+var clashImpacts = []uint8{4, 7, 10}
+
 // openingLowSwing reports whether the fighter is in the first blow of a low
 // attack: the one enterAttackState started. A chained blow or a change of
 // height replaces the animation, so the animation alone says which it is.

@@ -145,6 +145,7 @@ type seenFighter struct {
 	state     ActorState
 	updown    uint8
 	blocks    uint8
+	frame     uint8 // the animation frame, for the clash's impacts
 }
 
 type bloodState struct {
@@ -370,6 +371,26 @@ func bled(was seenFighter, a *Actor) int {
 	return BloodFlinch
 }
 
+// clashImpactsPassed is how many of the clash's impacts a fighter's animation
+// has reached since the last look. Only the left fighter of the two is
+// counted, so each impact is heard once.
+func clashImpactsPassed(was seenFighter, a *Actor) int {
+	if a.State != StateClash || a.Orientation != 1 {
+		return 0
+	}
+	from := -1
+	if was.state == StateClash {
+		from = int(was.frame)
+	}
+	n := 0
+	for _, f := range clashImpacts {
+		if int(f) > from && f <= a.AnimCurrentFrame {
+			n++
+		}
+	}
+	return n
+}
+
 // sprayDir is the way blood leaves a fighter: away from whoever hit it, or, with
 // nobody to blame, backwards.
 func sprayDir(a *Actor) float32 {
@@ -395,6 +416,9 @@ func (b *bloodState) watch(w *World) {
 			if a.Blocks != was.blocks {
 				blockHeard()
 			}
+			for range clashImpactsPassed(was, a) {
+				punchHeard()
+			}
 		}
 	}
 	b.reseed(w)
@@ -406,7 +430,7 @@ func (b *bloodState) watch(w *World) {
 func (b *bloodState) reseed(w *World) {
 	clear(b.seen)
 	for _, a := range w.Actors {
-		b.seen[a] = seenFighter{a.Structure, a.State, a.Updown, a.Blocks}
+		b.seen[a] = seenFighter{a.Structure, a.State, a.Updown, a.Blocks, a.AnimCurrentFrame}
 	}
 }
 

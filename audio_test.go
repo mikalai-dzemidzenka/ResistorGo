@@ -105,7 +105,7 @@ func TestAudioHasItsOwnRandom(t *testing.T) {
 }
 
 // A landed hit is heard once, whether it flinches, stuns or kills; a blocked
-// blow, block-all, a clash and a shove are silent.
+// blow, block-all, the start of a clash and a shove are silent.
 func TestAPunchIsHeardWhenAHitLands(t *testing.T) {
 	heard := 0
 	onPunch = func() { heard++ }
@@ -196,5 +196,41 @@ func TestABlockIsNotHeardAfterAReseed(t *testing.T) {
 	blood.watch(w)
 	if blocked != 0 {
 		t.Errorf("a reseed was heard as %d blocks", blocked)
+	}
+}
+
+// A clash is heard as a punch at each of its impacts, once each, as it plays
+// out - not twice for the two fighters in it, and not at its start.
+func TestAClashIsHeardAtItsImpacts(t *testing.T) {
+	heard := 0
+	onPunch = func() { heard++ }
+	t.Cleanup(func() { onPunch = nil })
+	floor()
+	clearBlood()
+	t.Cleanup(clearBlood)
+	w := NewWorld(true)
+	a := w.Spawn(rl.Vector2{X: 0}, false)
+	b := w.Spawn(rl.Vector2{X: 30}, false)
+	blood.watch(w)
+	startClash(a, b)
+	blood.watch(w)
+	if heard != 0 {
+		t.Fatalf("the clash was heard %d times as it started, want silence", heard)
+	}
+	for range 120 {
+		w.Tick++
+		for _, f := range w.Actors {
+			f.Update(float32(FixedTimeStep))
+		}
+		blood.watch(w)
+		if a.State != StateClash && b.State != StateClash {
+			break
+		}
+	}
+	if a.State == StateClash || b.State == StateClash {
+		t.Fatalf("the clash never ended")
+	}
+	if heard != len(clashImpacts) {
+		t.Errorf("the clash was heard %d times, want %d", heard, len(clashImpacts))
 	}
 }

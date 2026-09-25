@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Punch sounds
-Every landed hit SHALL play a punch sound, chosen at random from the punch sounds, on every machine that shows the match - in single player, when hosting, when joining and when spectating. A hit that flinches, stuns or kills SHALL sound alike. A swing that misses, a blow stopped by a guard or by block-all, a clash and a shove SHALL make no punch sound. Hits close together SHALL each be heard, overlapping rather than cutting one another off. While time manipulation shows a recorded frame no punch sound SHALL play. Punch sounds SHALL be played at the sound volume setting, and at 0 SHALL be inaudible.
+Every landed hit SHALL play a punch sound, chosen at random from the punch sounds, on every machine that shows the match - in single player, when hosting, when joining and when spectating. A hit that flinches, stuns or kills SHALL sound alike. A swing that misses, a blow stopped by a guard or by block-all and a shove SHALL make no punch sound. A clash SHALL play a punch at each of its impacts - where a blow of the exchange meets the other fighter - once per impact however many fighters are in it, and none as it starts. Hits close together SHALL each be heard, overlapping rather than cutting one another off. While time manipulation shows a recorded frame no punch sound SHALL play. Punch sounds SHALL be played at the sound volume setting, and at 0 SHALL be inaudible.
 
 #### Scenario: A punch lands
 - **WHEN** a hit lands on a fighter
