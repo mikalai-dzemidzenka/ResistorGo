@@ -1030,13 +1030,18 @@ func (le *LevelEditor) Save() bool {
 // keyboard and the mouse.
 const (
 	dlgNone = iota
+	dlgNew
 	dlgSave
 	dlgLoad
 )
 
-// openDialog puts a file dialog up, its name field on the open level.
+// openDialog puts a file dialog up, its name field on the open level - or
+// empty, for a new one.
 func (le *LevelEditor) openDialog(d int) {
 	le.dialog, le.dlgName, le.dlgErr, le.dlgPick, le.dlgScroll = d, LevelPath, "", -1, 0
+	if d == dlgNew {
+		le.dlgName = ""
+	}
 }
 
 // dialogOK is the dialog's Save or Load, pressed or Enter.
@@ -1047,6 +1052,8 @@ func (le *LevelEditor) dialogOK() {
 		return
 	}
 	switch le.dialog {
+	case dlgNew:
+		le.newLevel(name)
 	case dlgSave:
 		le.saveTo(name)
 	case dlgLoad:
@@ -1080,6 +1087,16 @@ func (le *LevelEditor) loadFrom(name string) {
 	le.sel = selection{proto: true} // a tile of the old level is not one of this one
 	le.setTool(le.tool)
 	le.dialog = dlgNone
+}
+
+// newLevel starts an empty level in name: written out empty, then opened like
+// any other, so it is on disk from the start and Ctrl+S has somewhere to write.
+func (le *LevelEditor) newLevel(name string) {
+	if err := os.WriteFile(name, []byte("{}\n"), 0o644); err != nil {
+		le.dlgErr = "could not write " + name
+		return
+	}
+	le.loadFrom(name)
 }
 
 // levelFileName checks a name typed into a file dialog and gives it the .json
@@ -1123,7 +1140,10 @@ func levelFiles() []string {
 // away.
 func (le *LevelEditor) drawDialog() {
 	title, ok, h := "Save level", "Save (Enter)", float32(176)
-	if le.dialog == dlgLoad {
+	switch le.dialog {
+	case dlgNew:
+		title, ok = "New level", "Create (Enter)"
+	case dlgLoad:
 		title, ok, h = "Load level", "Load (Enter)", 380
 	}
 	const w = 460
@@ -1145,13 +1165,12 @@ func (le *LevelEditor) drawDialog() {
 	}
 	note := le.dlgErr
 	if name, err := levelFileName(le.dlgName); note == "" && err == nil {
+		_, statErr := os.Stat(name)
 		switch {
-		case le.dialog == dlgLoad && le.dirty:
+		case statErr == nil && (le.dialog == dlgNew || le.dialog == dlgSave && name != LevelPath):
+			note = "replaces the existing " + name
+		case le.dialog != dlgSave && le.dirty:
 			note = "discards the unsaved edits"
-		case le.dialog == dlgSave && name != LevelPath:
-			if _, err := os.Stat(name); err == nil {
-				note = "replaces the existing " + name
-			}
 		}
 	}
 	rl.DrawText(note, int32(x), int32(y), 20, rl.Orange)
@@ -1338,17 +1357,20 @@ func (le *LevelEditor) drawPanel() {
 	if int(tool) != le.tool {
 		le.setTool(int(tool))
 	}
-	b := buttons(row(), 4)
+	b := buttons(row(), 5)
 	if button(b[0], "Undo", len(le.hist.undo) > 0 || le.hist.gen != le.hist.stableGen) {
 		le.undo()
 	}
 	if button(b[1], "Redo", len(le.hist.redo) > 0) {
 		le.redo()
 	}
-	if button(b[2], "Save...", true) {
+	if button(b[2], "New", true) {
+		le.openDialog(dlgNew)
+	}
+	if button(b[3], "Save", true) {
 		le.openDialog(dlgSave)
 	}
-	if button(b[3], "Load...", true) {
+	if button(b[4], "Load", true) {
 		le.openDialog(dlgLoad)
 	}
 

@@ -266,3 +266,26 @@ func TestDialogSaveAndLoad(t *testing.T) {
 		t.Errorf("after loading: same level %t, LevelPath %q, dirty %t, dialog %d", other.Hash() == want, LevelPath, other.dirty, other.dialog)
 	}
 }
+
+// New writes an empty level under the name and opens it.
+func TestDialogNewLevel(t *testing.T) {
+	t.Chdir(t.TempDir())
+	prev := LevelPath
+	defer func() { LevelPath = prev }()
+	le := NewLevelEditor(39, 83)
+	le.LoadLevel("level_1.json")
+	le.dirty = true
+
+	le.openDialog(dlgNew)
+	if le.dlgName != "" {
+		t.Errorf("new level dialog opened with name %q", le.dlgName)
+	}
+	le.dlgName = "fresh"
+	le.dialogOK()
+	if _, err := os.Stat("fresh.json"); err != nil {
+		t.Fatalf("fresh.json not written: %v", err)
+	}
+	if LevelPath != "fresh.json" || le.dirty || le.dialog != dlgNone || len(le.objectsIndexed) != 0 || len(le.lights) != 0 {
+		t.Errorf("after New: LevelPath %q, dirty %t, dialog %d, %d tiles, %d lights", LevelPath, le.dirty, le.dialog, len(le.objectsIndexed), len(le.lights))
+	}
+}
