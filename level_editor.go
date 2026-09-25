@@ -110,6 +110,9 @@ type LevelEditor struct {
 	activeIdx  int                    // which rectangle of the activeRect kind
 	drag       rectDrag
 	editField  int     // which numeric field has the keyboard, -1 for none
+	saveOpen   bool    // the save dialog is up and has the keyboard
+	saveName   string  // the file name typed into it
+	saveErr    string  // why the last save from it did not happen
 	fieldVals  []int32 // what the panel's numeric fields show
 
 	clip     ObjectRects // rectangles copied with Ctrl+C, pasted with Ctrl+V
@@ -200,6 +203,15 @@ func (le *LevelEditor) Update(dt float32) {
 	le.commitEdit(le.midGesture(rl.IsMouseButtonDown(rl.MouseButtonLeft) || rl.IsMouseButtonDown(rl.MouseButtonRight)))
 	ctrl := rl.IsKeyDown(rl.KeyLeftControl) || rl.IsKeyDown(rl.KeyRightControl)
 	shift := rl.IsKeyDown(rl.KeyLeftShift) || rl.IsKeyDown(rl.KeyRightShift)
+	if le.saveOpen {
+		if rl.IsKeyPressed(rl.KeyEscape) {
+			le.saveOpen = false
+		}
+		if rl.IsKeyPressed(rl.KeyEnter) || rl.IsKeyPressed(rl.KeyKpEnter) {
+			le.saveTo(le.saveName)
+		}
+		return
+	}
 	if ctrl && rl.IsKeyPressed(rl.KeyS) {
 		le.Save()
 		return
@@ -975,42 +987,107 @@ func (le *LevelEditor) Hash() uint64 {
 	return levelHash(b)
 }
 
-func (le *LevelEditor) SaveLevel(path string) {
+// SaveLevel writes the level to path, reporting whether it is on disk.
+func (le *LevelEditor) SaveLevel(path string) bool {
 	b, err := le.marshalFile()
 	if err != nil {
 		rl.TraceLog(rl.LogError, "failed to save level: marshal level: %s", err.Error())
-		return
+		return false
 	}
-	f, err := os.Create(path)
-	if err != nil {
-		rl.TraceLog(rl.LogError, "failed to save level: create file: %s", err.Error())
-		return
-	}
-	defer f.Close()
-
-	_, err = f.Write(b)
-	if err != nil {
-		rl.TraceLog(rl.LogError, "failed to save level: save file: %s", err.Error())
-		return
+	if err := os.WriteFile(path, b, 0o644); err != nil {
+		rl.TraceLog(rl.LogError, "failed to save level: %s", err.Error())
+		return false
 	}
 	le.dirty = false
+	return true
 }
 
 func (le *LevelEditor) OpenObjects() {
 	le.isObjectsViewerEnabled = !le.isObjectsViewerEnabled
 }
 
-// Save writes the level and the palette defaults. It is Ctrl+S in edit mode,
-// and nothing else writes either file.
-func (le *LevelEditor) Save() {
+// Save writes the level and the palette defaults, reporting whether all of it
+// is on disk. It is Ctrl+S and the save dialog in edit mode, and nothing else
+// writes either file.
+func (le *LevelEditor) Save() bool {
 	ok := saveObjectDefaults(objectDefaultsPath, le.defaults)
 	ok = savePresets(presetsPath, le.presets) && ok
-	le.SaveLevel(LevelPath)
+	saved := le.SaveLevel(LevelPath)
 	if !ok {
 		le.dirty = true // the level is saved, but not everything is
 	}
 	if !le.dirty {
 		le.saved() // undoing back to here is back to what is on disk
+	}
+	return ok && saved
+}
+
+// saveTo is the save dialog's Save: it writes the level under the typed name,
+// which from then on is the level Ctrl+S writes and the game loads. On any
+// failure the dialog stays up with the reason, and LevelPath is left alone.
+func (le *LevelEditor) saveTo(name string) {
+	name, err := levelFileName(name)
+	if err != nil {
+		le.saveErr = err.Error()
+		return
+	}
+	prev := LevelPath
+	LevelPath = name
+	if !le.Save() {
+		LevelPath = prev
+		le.saveErr = "could not write " + name
+		return
+	}
+	le.saveOpen = false
+}
+
+// levelFileName checks a name typed into the save dialog and gives it the
+// .json it may lack. A level is saved beside the game, so a path is refused,
+// and so are the files beside it that are not levels.
+func levelFileName(s string) (string, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return "", fmt.Errorf("type a file name")
+	}
+	if !strings.EqualFold(filepath.Ext(s), ".json") {
+		s += ".json"
+	}
+	if filepath.Base(s) != s || strings.ContainsAny(s, `/\:`) {
+		return "", fmt.Errorf("a file name only, not a path")
+	}
+	for _, other := range []string{objectDefaultsPath, presetsPath, settingsPath} {
+		if strings.EqualFold(s, other) {
+			return "", fmt.Errorf("%s is not a level", other)
+		}
+	}
+	return s, nil
+}
+
+// drawSaveDialog draws the save dialog over the middle of the screen: the file
+// name, and whether saving will replace a file that is not the open level.
+func (le *LevelEditor) drawSaveDialog() {
+	const w, h = 460, 176
+	box := rl.Rectangle{X: (VW - w) / 2, Y: (VH - h) / 2, Width: w, Height: h}
+	if rlg.WindowBox(box, "Save level") {
+		le.saveOpen = false
+		return
+	}
+	x, y := box.X+12, box.Y+34
+	rlg.Label(rl.Rectangle{X: x, Y: y, Width: w - 24, Height: 24}, "File name (saved beside the game)")
+	rlg.TextBox(rl.Rectangle{X: x, Y: y + 28, Width: w - 24, Height: 30}, &le.saveName, 64, true)
+	note := le.saveErr
+	if name, err := levelFileName(le.saveName); note == "" && err == nil && name != LevelPath {
+		if _, err := os.Stat(name); err == nil {
+			note = "replaces the existing " + name
+		}
+	}
+	rl.DrawText(note, int32(x), int32(y+66), 20, rl.Orange)
+	b := buttons(rl.Rectangle{X: x, Y: box.Y + h - 40, Width: w - 24, Height: 28}, 2)
+	if rlg.Button(b[0], "Save (Enter)") {
+		le.saveTo(le.saveName)
+	}
+	if rlg.Button(b[1], "Cancel (Esc)") {
+		le.saveOpen = false
 	}
 }
 
@@ -1132,6 +1209,10 @@ func (le *LevelEditor) overGui(p rl.Vector2) bool {
 }
 
 func (le *LevelEditor) DrawGui() {
+	// the dialog has the mouse: nothing behind it can be pressed
+	if le.saveOpen {
+		rlg.Lock()
+	}
 	if le.isObjectsViewerEnabled {
 		rlg.SetStyle(rlg.BUTTON, rlg.BASE_COLOR_NORMAL, rlg.PropertyValue(rl.ColorToInt(color.RGBA{0, 0, 0, 0})))
 		rlg.SetStyle(rlg.BUTTON, rlg.BASE_COLOR_FOCUSED, rlg.PropertyValue(rl.ColorToInt(color.RGBA{0, 0, 0, 25})))
@@ -1159,6 +1240,10 @@ func (le *LevelEditor) DrawGui() {
 		}
 	}
 	le.drawPanel()
+	if le.saveOpen {
+		rlg.Unlock()
+		le.drawSaveDialog()
+	}
 }
 
 // drawPanel shows the tool, what is selected and - with the rect tool - the
@@ -1187,8 +1272,8 @@ func (le *LevelEditor) drawPanel() {
 	if button(b[1], "Redo (Ctrl+Y)", len(le.hist.redo) > 0) {
 		le.redo()
 	}
-	if button(b[2], "Save (Ctrl+S)", le.dirty) {
-		le.Save()
+	if button(b[2], "Save as...", true) {
+		le.saveOpen, le.saveName, le.saveErr = true, LevelPath, ""
 	}
 
 	switch le.tool {
@@ -1403,6 +1488,7 @@ var Editing bool
 func toggleEditing(offline, timeManipulating bool) {
 	if Editing {
 		Editing = false
+		LE.saveOpen = false
 		clearLatchedInput()
 		return
 	}

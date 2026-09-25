@@ -197,3 +197,48 @@ func TestPresetsRoundTrip(t *testing.T) {
 		}
 	}
 }
+
+// The save dialog takes a bare file name, adds .json, and refuses paths and the
+// editor's and game's own files.
+func TestLevelFileName(t *testing.T) {
+	for in, want := range map[string]string{
+		"arena":         "arena.json",
+		" arena.json ":  "arena.json",
+		"Arena.JSON":    "Arena.JSON",
+		"level_1.json":  "level_1.json",
+		"":              "",
+		"../x":          "",
+		`dir\x.json`:    "",
+		"C:x.json":      "",
+		"settings.json": "",
+		"level_objects": "",
+		"LEVEL_PRESETS": "",
+	} {
+		got, err := levelFileName(in)
+		if got != want || (want == "") != (err != nil) {
+			t.Errorf("levelFileName(%q) = %q, %v; want %q", in, got, err, want)
+		}
+	}
+}
+
+// Saving from the dialog writes the named file and makes it the level Ctrl+S
+// writes; a refused name changes nothing and keeps the dialog up.
+func TestSaveDialogSavesAs(t *testing.T) {
+	t.Chdir(t.TempDir())
+	prev := LevelPath
+	defer func() { LevelPath = prev }()
+	le := NewLevelEditor(39, 83)
+	le.dirty, le.saveOpen = true, true
+
+	le.saveTo("../escape")
+	if LevelPath != prev || !le.saveOpen || le.saveErr == "" {
+		t.Fatalf("a path was accepted: LevelPath %q, open %t, err %q", LevelPath, le.saveOpen, le.saveErr)
+	}
+	le.saveTo("arena")
+	if _, err := os.Stat("arena.json"); err != nil {
+		t.Fatalf("arena.json not written: %v", err)
+	}
+	if LevelPath != "arena.json" || le.saveOpen || le.dirty {
+		t.Errorf("after saving: LevelPath %q, open %t, dirty %t", LevelPath, le.saveOpen, le.dirty)
+	}
+}

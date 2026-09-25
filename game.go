@@ -356,7 +356,7 @@ func runLevel(dt float32) {
 		BodyMask = rl.LoadRenderTexture(SW*WindowScale, SH*WindowScale)
 		cornerFade = newCornerFade()
 	}
-	if rl.IsKeyPressed(rl.KeyEscape) {
+	if rl.IsKeyPressed(rl.KeyEscape) && !(Editing && LE.saveOpen) { // Esc closes the save dialog
 		leaveMatch("", menuMain)
 		return
 	}
