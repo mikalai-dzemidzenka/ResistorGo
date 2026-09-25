@@ -72,10 +72,10 @@ that had gone down was still the nearest thing a bot could see. The bot walked
 to the body and swung at it until the world got round to removing it, and the
 living fighter standing past it was never chosen.
 
-- [ ] 6f.1 Skip the dead in `seen()`, so a body is neither approached nor swung
+- [x] 6f.1 Skip the dead in `seen()`, so a body is neither approached nor swung
       at; verify the `A body is not a target` and `The living are found past the
       dead` scenarios
-- [ ] 6f.2 Verify the course test still measures pathing rather than a kill: a
+- [x] 6f.2 Verify the course test still measures pathing rather than a kill: a
       bot that catches the leader and fights it long enough kills it, and with
       the dead no longer seen there is nothing left to follow and nothing the
       rest of the course can say. Hold the bot's swing back in

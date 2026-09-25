@@ -39,7 +39,7 @@
 
 - [ ] 6.1 Verify the wire is unchanged for everything that already existed: run the protocol round-trip and replication tests, and confirm a fighter in each new state and animation survives `recOf`/`apply` with its state and animation intact.
 - [ ] 6.2 Verify the standing jump is untouched: a fighter jumping from a standstill still plays the wind-up, still leaves the ground when it finishes, and reaches the same height as a run-jump.
-- [ ] 6.3 Run `go test ./...` and `go test -tags release ./...` and confirm both pass.
+- [x] 6.3 Run `go test ./...` and `go test -tags release ./...` and confirm both pass.
 - [ ] 6.4 Play a local match (`go run ./cmd`): run, jump, and confirm the energy bar drops by half, that a third jump on an empty pool is refused with the bar flashing, that the take-off is immediate, the running-jump animation plays, the fighter steers in the air, the fall animation takes over at the apex, and landing at speed continues the run.
 - [ ] 6.5 Confirm in play that walking off a ledge falls, that a ledge caught on the way down still climbs, and that a fighter knocked off an edge falls without disturbing the hit reaction.
 - [ ] 6.6 Play a networked match against the dedicated server (`go run ./cmd -dedicated` plus a client): confirm a remote fighter's run-jump and fall look the same on the client as on the host, with no correction spike at take-off under `F5`-`F8` latency simulation.
@@ -53,19 +53,19 @@ state was rejected as malformed - and rejection throws away the whole snapshot,
 so every other actor in it went too. A fighter falling anywhere in the match
 stalled replication for everyone.
 
-- [ ] 7.1 Add `stateCount` as a sentinel one past the last state in the
+- [x] 7.1 Add `stateCount` as a sentinel one past the last state in the
       `ActorState` enum, with a comment saying what it is for; verify `go build
       ./...` succeeds and that no existing state's number moved
-- [ ] 7.2 Change `decodeSnapshot`'s bound from `a.State > uint8(StateDeath)` to
+- [x] 7.2 Change `decodeSnapshot`'s bound from `a.State > uint8(StateDeath)` to
       `a.State >= uint8(stateCount)`; verify a snapshot carrying a fighter in
       `StateRunJump` or `StateFall` is now accepted
-- [ ] 7.3 Add a test that sweeps every state from zero to `stateCount` through
+- [x] 7.3 Add a test that sweeps every state from zero to `stateCount` through
       `encodeSnapshot`/`decodeSnapshot` and asserts each survives with its state
       intact, and that `stateCount` itself is still refused; verify it fails
       against the old bound - the `Every state round-trips`, `A state that does
       not exist is refused` and `Appending a state does not break the check`
       scenarios
-- [ ] 7.4 Verify no other validity check in `net_protocol.go` names a state or an
+- [x] 7.4 Verify no other validity check in `net_protocol.go` names a state or an
       animation by value where it means the count; grep for `StateDeath` and for
       `len(animTable)` and confirm each use is deliberate
 - [ ] 7.5 Play a networked match and confirm a remote fighter that run-jumps or

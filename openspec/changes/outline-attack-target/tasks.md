@@ -29,7 +29,7 @@
 
 ## 5. Whole-change verification
 
-- [ ] 5.1 Run `go test ./...` and `go test -tags release ./...` and confirm both pass, the combat and replication suites included.
+- [x] 5.1 Run `go test ./...` and `go test -tags release ./...` and confirm both pass, the combat and replication suites included.
 - [ ] 5.2 Play a local match (`go run ./cmd`): confirm the band slides up and down the bot as the aim moves, appears as the bot comes into reach and goes as it leaves, and that block-all clears it.
 - [ ] 5.3 Confirm in play that the outline tracks a moving target without lag at several camera zooms, and that its edges stay on the pixel grid.
 - [ ] 5.4 Play a networked match against the dedicated server (`go run ./cmd -dedicated` plus a client): confirm each player sees the other outlined and never itself, that it holds under `F5`–`F8` latency simulation, and that a spectator sees no outlines at all.

@@ -23,7 +23,7 @@
 - [x] 4.1 Add a test for the full run against a fresh fighter: five hits cost 1, 1.5, 2, 2.5 and 3, leaving 2 structure, and a sixth kills — the `A run costs more as it goes` and `Six hits end a fight` scenarios. Verify it fails against a flat cost.
 - [x] 4.2 Add a test that the run survives the stun: the fourth hit of a run costs 2.5 although the third stunned — the `The stun does not relieve it` scenario. Verify it fails if the run is cleared where the stun count is.
 - [x] 4.3 Verify the existing structure tests still hold, with their expectations updated only where the escalation is what changed them: `TestEveryThirdHitStuns`, `TestFlinchKeepsControl`, `TestOneLandingPerSwing` and the block tests still describe the same behaviour.
-- [ ] 4.4 Run `go test ./...` and `go test -tags release ./...` and confirm both pass.
+- [x] 4.4 Run `go test ./...` and `go test -tags release ./...` and confirm both pass.
 
 ## 5. Verify against the spec
 
@@ -33,4 +33,4 @@
 
 ## Before archiving
 
-- [ ] Merge the `structure` delta by hand, not by replacing the block: `move-while-swinging` (archived 2026-09-23) rewrote "A landed hit costs structure and flinches" after this delta was written. Keep its knockback paragraph ("The knockback SHALL move the fighter ...") and its two scenarios (`The small knockback actually moves the fighter`, `A flinch stays smaller than a stun`) alongside this change's edits; verify with `openspec validate --specs --strict`
+- [x] Merge the `structure` delta by hand, not by replacing the block: `move-while-swinging` (archived 2026-09-23) rewrote "A landed hit costs structure and flinches" after this delta was written. Keep its knockback paragraph ("The knockback SHALL move the fighter ...") and its two scenarios (`The small knockback actually moves the fighter`, `A flinch stays smaller than a stun`) alongside this change's edits; verify with `openspec validate --specs --strict`

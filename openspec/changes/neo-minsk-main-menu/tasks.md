@@ -28,4 +28,4 @@
 
 ## Before archiving
 
-- [ ] Merge the `main-menu` delta by hand, not by replacing blocks: `add-menu-music-and-options` (archived 2026-09-23) rewrote "Pixel-art menu scene" and "Menu widgets fit inside the menu panel" after this delta was written - the virtual screen instead of the window, and the Options screen with its fullscreen, window size and music volume rows. Keep those edits alongside this change's; verify with `openspec validate --specs --strict`
+- [x] Merge the `main-menu` delta by hand, not by replacing blocks: `add-menu-music-and-options` (archived 2026-09-23) rewrote "Pixel-art menu scene" and "Menu widgets fit inside the menu panel" after this delta was written - the virtual screen instead of the window, and the Options screen with its fullscreen, window size and music volume rows. Keep those edits alongside this change's; verify with `openspec validate --specs --strict`

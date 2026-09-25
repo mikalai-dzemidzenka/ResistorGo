@@ -16,6 +16,6 @@
 
 ## 4. Verify against the spec
 
-- [ ] 4.1 Run `go test ./...` and `go test -tags release ./...` and confirm both pass.
+- [x] 4.1 Run `go test ./...` and `go test -tags release ./...` and confirm both pass.
 - [ ] 4.2 Build with `./build.ps1` to a scratch `-Out`, and with `./build.ps1 -Linux`, and confirm both pack.
 - [ ] 4.3 In `go run ./cmd`, use the editor to give a tile a collision rectangle taller than a step, standing on a floor. Check that you run into it and stop, jump against it and climb it, walk up a 4 px step, and that `level_1.json` plays as before. Note how a fighter held against the wall looks, which is the design's first risk.
