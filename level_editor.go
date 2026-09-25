@@ -817,11 +817,11 @@ func (le *LevelEditor) Draw() {
 	for _, obj := range le.objectsIndexed {
 		if tex, ok := resources[obj.Resource]; ok {
 			rl.DrawTexture(tex, obj.X, obj.Y, rl.White)
-		} else if DevTools {
+		} else {
 			le.drawMissing(obj)
 		}
 	}
-	if DevTools && Debug {
+	if (DevTools && Debug) || Editing {
 		for _, obj := range le.objectsIndexed {
 			for _, c := range obj.CollisionRects {
 				rl.DrawRectangleLinesEx(rectToWorld(c, objOrigin(obj)), 1, rl.SkyBlue)
@@ -837,7 +837,7 @@ func (le *LevelEditor) Draw() {
 
 		le.DrawGrid()
 	}
-	if DevTools && Editing {
+	if Editing {
 		// Art that is only on disk would be missing from a build made now.
 		for _, obj := range le.objectsIndexed {
 			if _, ok := resources[obj.Resource]; ok && !inBuild(obj.Resource) {
@@ -934,14 +934,10 @@ func (le *LevelEditor) DrawGrid() {
 }
 
 func (le *LevelEditor) LoadLevel(path string) {
-	// A development build reads the disk first, so a level saved from the editor
-	// takes effect on the next run. A release build plays the level it was built
-	// with, whatever lies beside it, so every copy agrees on the level fingerprint.
-	var b []byte
-	err := os.ErrNotExist
-	if DevTools {
-		b, err = os.ReadFile(path)
-	}
+	// The disk comes first, so a level saved from the editor takes effect on the
+	// next run; the level the game was built with is the fallback. An edited level
+	// fingerprints differently, so the handshake keeps it out of other players' matches.
+	b, err := os.ReadFile(path)
 	if err != nil {
 		b, err = assetFS.ReadFile(path)
 	}
@@ -980,9 +976,6 @@ func (le *LevelEditor) Hash() uint64 {
 }
 
 func (le *LevelEditor) SaveLevel(path string) {
-	if !DevTools {
-		return // a release build never writes the level
-	}
 	b, err := le.marshalFile()
 	if err != nil {
 		rl.TraceLog(rl.LogError, "failed to save level: marshal level: %s", err.Error())
@@ -1052,9 +1045,6 @@ func droppedTextureName(p string) (string, bool) {
 // copied, so a bad drop cannot leave a file that breaks the next run's palette.
 // A name that is already taken is never overwritten: that entry is selected.
 func (le *LevelEditor) importTexture(src string) bool {
-	if !DevTools {
-		return false
-	}
 	name, ok := droppedTextureName(src)
 	if !ok {
 		rl.TraceLog(rl.LogWarning, "import: not a texture that can be placed: %s", src)
@@ -1407,13 +1397,10 @@ func (le *LevelEditor) LightOccluders() []rl.Rectangle {
 var Editing bool
 
 // toggleEditing handles a press of the edit-mode key. Edit mode is only for a
-// development build's single-player match, and never while time manipulation
+// single-player match, and never while time manipulation
 // holds the match. Leaving it drops any click latched while editing, so it
 // does not fire as an attack on the first tick back.
 func toggleEditing(offline, timeManipulating bool) {
-	if !DevTools {
-		return
-	}
 	if Editing {
 		Editing = false
 		clearLatchedInput()

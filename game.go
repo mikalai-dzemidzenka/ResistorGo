@@ -31,7 +31,7 @@ const (
 )
 
 // LevelPath is the level the game plays. It is the one level there has ever
-// been, unless a development build was given another with -level: a test course
+// been, unless the game was given another with -level: a test course
 // of walls, ledges and holes is worth playing a bot against, and is not worth
 // putting into the level people are actually building. Loading and saving both
 // go through it, so a level opened this way cannot be saved over level_1.json.
@@ -158,7 +158,7 @@ func Game() {
 		// edit mode acts on it.
 		if rl.IsFileDropped() {
 			dropped := rl.LoadDroppedFiles()
-			if DevTools && Editing && Stage == StageLevel {
+			if Editing && Stage == StageLevel {
 				LE.importDropped(dropped)
 			}
 		}
@@ -369,7 +369,7 @@ func runLevel(dt float32) {
 		latchInput()
 	}
 	if NetMode == NetOffline {
-		if DevTools && rl.IsKeyPressed(rl.KeyF2) {
+		if rl.IsKeyPressed(rl.KeyF2) {
 			toggleEditing(true, TimeMode != TimeOff)
 		}
 		if rl.IsKeyPressed(RestartKey) && !Editing {

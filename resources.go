@@ -122,12 +122,8 @@ func embeddedBlockPaths() []string {
 	return names
 }
 
-// diskBlockPaths lists the block textures beside the game on disk. A release
-// build never looks: it plays with the textures it was built with.
+// diskBlockPaths lists the block textures beside the game on disk.
 func diskBlockPaths() []string {
-	if !DevTools {
-		return nil
-	}
 	entries, err := os.ReadDir(blocksDir)
 	if err != nil {
 		return nil
@@ -157,7 +153,7 @@ func mergeTextureLists(embedded, disk []string) []string {
 }
 
 // blockTextures is every placeable block texture: what the build carries, plus
-// whatever a development build finds beside it on disk. It reads no textures, so
+// whatever lies beside it on disk. It reads no textures, so
 // it is safe before there is a window to read them into.
 func blockTextures() []string {
 	return mergeTextureLists(embeddedBlockPaths(), diskBlockPaths())
@@ -261,12 +257,8 @@ func imageDecodable(ext string, data []byte) bool {
 	return true
 }
 
-// loadTexDisk registers a texture read from disk under name. Only a development
-// build calls it: a release build has nothing but the assets it was built with.
+// loadTexDisk registers a texture read from disk under name.
 func loadTexDisk(name, diskPath string) bool {
-	if !DevTools {
-		return false
-	}
 	data, err := os.ReadFile(diskPath)
 	if err != nil {
 		rl.TraceLog(rl.LogError, "texture: read %s: %s", diskPath, err.Error())
@@ -276,7 +268,7 @@ func loadTexDisk(name, diskPath string) bool {
 }
 
 // loadBlockTex loads a block texture from wherever it is: the binary, or - for
-// one a development build found beside the game - the disk.
+// one found beside the game - the disk.
 func loadBlockTex(name string) {
 	if inBuild(name) {
 		loadTex(name)

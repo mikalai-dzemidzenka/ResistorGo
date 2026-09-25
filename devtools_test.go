@@ -5,11 +5,9 @@ import (
 	"testing"
 )
 
-// Where the level comes from, in both builds. With a modified level_1.json in
-// the working directory, a development build plays it (so a saved edit takes
-// effect) and a release build plays the embedded level (so every copy of a
-// release agrees on the level fingerprint). The dedicated server loads the
-// same way.
+// Where the level comes from, in both builds: a modified level_1.json in the
+// working directory is played over the embedded one, so a saved edit takes
+// effect. The dedicated server loads the same way.
 func TestLoadLevelSource(t *testing.T) {
 	embedded := func() *LevelEditor {
 		le := NewLevelEditor(39, 83)
@@ -44,10 +42,7 @@ func TestLoadLevelSource(t *testing.T) {
 	le := NewLevelEditor(39, 83)
 	le.LoadLevel("level_1.json")
 	got := le.Hash()
-	switch {
-	case DevTools && got == want:
-		t.Errorf("a development build ignored the level file on disk")
-	case !DevTools && got != want:
-		t.Errorf("a release build played the level file on disk instead of the embedded level")
+	if got == want {
+		t.Errorf("the level file on disk was ignored")
 	}
 }
