@@ -110,9 +110,11 @@ type LevelEditor struct {
 	activeIdx  int                    // which rectangle of the activeRect kind
 	drag       rectDrag
 	editField  int     // which numeric field has the keyboard, -1 for none
-	saveOpen   bool    // the save dialog is up and has the keyboard
-	saveName   string  // the file name typed into it
-	saveErr    string  // why the last save from it did not happen
+	dialog     int     // the file dialog that is up, dlgNone for none
+	dlgName    string  // the file name typed into it
+	dlgErr     string  // why its last Save or Load did not happen
+	dlgPick    int32   // the level picked from its list, -1 for none
+	dlgScroll  int32   // how far its list is scrolled
 	fieldVals  []int32 // what the panel's numeric fields show
 
 	clip     ObjectRects // rectangles copied with Ctrl+C, pasted with Ctrl+V
@@ -203,12 +205,12 @@ func (le *LevelEditor) Update(dt float32) {
 	le.commitEdit(le.midGesture(rl.IsMouseButtonDown(rl.MouseButtonLeft) || rl.IsMouseButtonDown(rl.MouseButtonRight)))
 	ctrl := rl.IsKeyDown(rl.KeyLeftControl) || rl.IsKeyDown(rl.KeyRightControl)
 	shift := rl.IsKeyDown(rl.KeyLeftShift) || rl.IsKeyDown(rl.KeyRightShift)
-	if le.saveOpen {
+	if le.dialog != dlgNone {
 		if rl.IsKeyPressed(rl.KeyEscape) {
-			le.saveOpen = false
+			le.dialog = dlgNone
 		}
 		if rl.IsKeyPressed(rl.KeyEnter) || rl.IsKeyPressed(rl.KeyKpEnter) {
-			le.saveTo(le.saveName)
+			le.dialogOK()
 		}
 		return
 	}
@@ -945,7 +947,8 @@ func (le *LevelEditor) DrawGrid() {
 	rl.PopMatrix()
 }
 
-func (le *LevelEditor) LoadLevel(path string) {
+// LoadLevel reads the level in path, reporting whether it did.
+func (le *LevelEditor) LoadLevel(path string) bool {
 	// The disk comes first, so a level saved from the editor takes effect on the
 	// next run; the level the game was built with is the fallback. An edited level
 	// fingerprints differently, so the handshake keeps it out of other players' matches.
@@ -955,12 +958,12 @@ func (le *LevelEditor) LoadLevel(path string) {
 	}
 	if err != nil {
 		rl.TraceLog(rl.LogError, "failed to load level: read file: %s", err.Error())
-		return
+		return false
 	}
 	objects, lights, areas, ambient, err := parseLevel(b)
 	if err != nil {
 		rl.TraceLog(rl.LogError, "failed to load level: json unmarshal: %s", err.Error())
-		return
+		return false
 	}
 	le.objects, le.lights, le.lightSel, le.ambient = objects, lights, -1, ambient
 	le.areas, le.areaSel = areas, -1
@@ -968,6 +971,7 @@ func (le *LevelEditor) LoadLevel(path string) {
 	le.markOwnRects()
 	le.buildIndex()
 	le.hist = editHistory{} // another level's edits are not this one's to undo
+	return true
 }
 
 // marshal returns the canonical JSON of the level's tiles (map keys are sorted
@@ -1022,28 +1026,65 @@ func (le *LevelEditor) Save() bool {
 	return ok && saved
 }
 
-// saveTo is the save dialog's Save: it writes the level under the typed name,
-// which from then on is the level Ctrl+S writes and the game loads. On any
-// failure the dialog stays up with the reason, and LevelPath is left alone.
-func (le *LevelEditor) saveTo(name string) {
-	name, err := levelFileName(name)
+// The editor's file dialogs. One is up at a time, and while it is it has the
+// keyboard and the mouse.
+const (
+	dlgNone = iota
+	dlgSave
+	dlgLoad
+)
+
+// openDialog puts a file dialog up, its name field on the open level.
+func (le *LevelEditor) openDialog(d int) {
+	le.dialog, le.dlgName, le.dlgErr, le.dlgPick, le.dlgScroll = d, LevelPath, "", -1, 0
+}
+
+// dialogOK is the dialog's Save or Load, pressed or Enter.
+func (le *LevelEditor) dialogOK() {
+	name, err := levelFileName(le.dlgName)
 	if err != nil {
-		le.saveErr = err.Error()
+		le.dlgErr = err.Error()
 		return
 	}
+	switch le.dialog {
+	case dlgSave:
+		le.saveTo(name)
+	case dlgLoad:
+		le.loadFrom(name)
+	}
+}
+
+// saveTo writes the level under name, which from then on is the level Ctrl+S
+// writes and the game loads. On any failure the dialog stays up with the
+// reason, and LevelPath is left alone.
+func (le *LevelEditor) saveTo(name string) {
 	prev := LevelPath
 	LevelPath = name
 	if !le.Save() {
 		LevelPath = prev
-		le.saveErr = "could not write " + name
+		le.dlgErr = "could not write " + name
 		return
 	}
-	le.saveOpen = false
+	le.dialog = dlgNone
 }
 
-// levelFileName checks a name typed into the save dialog and gives it the
-// .json it may lack. A level is saved beside the game, so a path is refused,
-// and so are the files beside it that are not levels.
+// loadFrom opens the level in name in place of the one being edited, unsaved
+// edits and all, and makes it the level Ctrl+S writes and the game loads.
+func (le *LevelEditor) loadFrom(name string) {
+	if !le.LoadLevel(name) {
+		le.dlgErr = "could not load " + name
+		return
+	}
+	LevelPath = name
+	le.dirty = false
+	le.sel = selection{proto: true} // a tile of the old level is not one of this one
+	le.setTool(le.tool)
+	le.dialog = dlgNone
+}
+
+// levelFileName checks a name typed into a file dialog and gives it the .json
+// it may lack. Levels live beside the game, so a path is refused, and so are
+// the files beside it that are not levels.
 func levelFileName(s string) (string, error) {
 	s = strings.TrimSpace(s)
 	if s == "" {
@@ -1063,31 +1104,63 @@ func levelFileName(s string) (string, error) {
 	return s, nil
 }
 
-// drawSaveDialog draws the save dialog over the middle of the screen: the file
-// name, and whether saving will replace a file that is not the open level.
-func (le *LevelEditor) drawSaveDialog() {
-	const w, h = 460, 176
+// levelFiles lists the levels there are to load: those beside the game, and
+// the one it was built with.
+func levelFiles() []string {
+	files := []string{"level_1.json"}
+	entries, _ := os.ReadDir(".")
+	for _, e := range entries {
+		if name, err := levelFileName(e.Name()); err == nil && name == e.Name() && !e.IsDir() {
+			files = append(files, name)
+		}
+	}
+	slices.Sort(files)
+	return slices.Compact(files)
+}
+
+// drawDialog draws the file dialog over the middle of the screen: the file
+// name, the levels to pick from when loading, and what the button will throw
+// away.
+func (le *LevelEditor) drawDialog() {
+	title, ok, h := "Save level", "Save (Enter)", float32(176)
+	if le.dialog == dlgLoad {
+		title, ok, h = "Load level", "Load (Enter)", 380
+	}
+	const w = 460
 	box := rl.Rectangle{X: (VW - w) / 2, Y: (VH - h) / 2, Width: w, Height: h}
-	if rlg.WindowBox(box, "Save level") {
-		le.saveOpen = false
+	if rlg.WindowBox(box, title) {
+		le.dialog = dlgNone
 		return
 	}
 	x, y := box.X+12, box.Y+34
-	rlg.Label(rl.Rectangle{X: x, Y: y, Width: w - 24, Height: 24}, "File name (saved beside the game)")
-	rlg.TextBox(rl.Rectangle{X: x, Y: y + 28, Width: w - 24, Height: 30}, &le.saveName, 64, true)
-	note := le.saveErr
-	if name, err := levelFileName(le.saveName); note == "" && err == nil && name != LevelPath {
-		if _, err := os.Stat(name); err == nil {
-			note = "replaces the existing " + name
+	rlg.Label(rl.Rectangle{X: x, Y: y, Width: w - 24, Height: 24}, "File name (beside the game)")
+	rlg.TextBox(rl.Rectangle{X: x, Y: y + 28, Width: w - 24, Height: 30}, &le.dlgName, 64, true)
+	y += 66
+	if le.dialog == dlgLoad {
+		files := levelFiles()
+		if rlg.ListView(rl.Rectangle{X: x, Y: y, Width: w - 24, Height: 200}, strings.Join(files, ";"), &le.dlgScroll, &le.dlgPick); le.dlgPick >= 0 && int(le.dlgPick) < len(files) {
+			le.dlgName = files[le.dlgPick]
+		}
+		y += 204
+	}
+	note := le.dlgErr
+	if name, err := levelFileName(le.dlgName); note == "" && err == nil {
+		switch {
+		case le.dialog == dlgLoad && le.dirty:
+			note = "discards the unsaved edits"
+		case le.dialog == dlgSave && name != LevelPath:
+			if _, err := os.Stat(name); err == nil {
+				note = "replaces the existing " + name
+			}
 		}
 	}
-	rl.DrawText(note, int32(x), int32(y+66), 20, rl.Orange)
+	rl.DrawText(note, int32(x), int32(y), 20, rl.Orange)
 	b := buttons(rl.Rectangle{X: x, Y: box.Y + h - 40, Width: w - 24, Height: 28}, 2)
-	if rlg.Button(b[0], "Save (Enter)") {
-		le.saveTo(le.saveName)
+	if rlg.Button(b[0], ok) {
+		le.dialogOK()
 	}
 	if rlg.Button(b[1], "Cancel (Esc)") {
-		le.saveOpen = false
+		le.dialog = dlgNone
 	}
 }
 
@@ -1210,7 +1283,7 @@ func (le *LevelEditor) overGui(p rl.Vector2) bool {
 
 func (le *LevelEditor) DrawGui() {
 	// the dialog has the mouse: nothing behind it can be pressed
-	if le.saveOpen {
+	if le.dialog != dlgNone {
 		rlg.Lock()
 	}
 	if le.isObjectsViewerEnabled {
@@ -1240,9 +1313,9 @@ func (le *LevelEditor) DrawGui() {
 		}
 	}
 	le.drawPanel()
-	if le.saveOpen {
+	if le.dialog != dlgNone {
 		rlg.Unlock()
-		le.drawSaveDialog()
+		le.drawDialog()
 	}
 }
 
@@ -1265,15 +1338,18 @@ func (le *LevelEditor) drawPanel() {
 	if int(tool) != le.tool {
 		le.setTool(int(tool))
 	}
-	b := buttons(row(), 3)
-	if button(b[0], "Undo (Ctrl+Z)", len(le.hist.undo) > 0 || le.hist.gen != le.hist.stableGen) {
+	b := buttons(row(), 4)
+	if button(b[0], "Undo", len(le.hist.undo) > 0 || le.hist.gen != le.hist.stableGen) {
 		le.undo()
 	}
-	if button(b[1], "Redo (Ctrl+Y)", len(le.hist.redo) > 0) {
+	if button(b[1], "Redo", len(le.hist.redo) > 0) {
 		le.redo()
 	}
-	if button(b[2], "Save as...", true) {
-		le.saveOpen, le.saveName, le.saveErr = true, LevelPath, ""
+	if button(b[2], "Save...", true) {
+		le.openDialog(dlgSave)
+	}
+	if button(b[3], "Load...", true) {
+		le.openDialog(dlgLoad)
 	}
 
 	switch le.tool {
@@ -1488,7 +1564,7 @@ var Editing bool
 func toggleEditing(offline, timeManipulating bool) {
 	if Editing {
 		Editing = false
-		LE.saveOpen = false
+		LE.dialog = dlgNone
 		clearLatchedInput()
 		return
 	}

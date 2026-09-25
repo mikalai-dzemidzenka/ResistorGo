@@ -222,23 +222,47 @@ func TestLevelFileName(t *testing.T) {
 }
 
 // Saving from the dialog writes the named file and makes it the level Ctrl+S
-// writes; a refused name changes nothing and keeps the dialog up.
-func TestSaveDialogSavesAs(t *testing.T) {
+// writes; a refused name changes nothing and keeps the dialog up. Loading it
+// back from the dialog opens it, clean.
+func TestDialogSaveAndLoad(t *testing.T) {
 	t.Chdir(t.TempDir())
 	prev := LevelPath
 	defer func() { LevelPath = prev }()
 	le := NewLevelEditor(39, 83)
-	le.dirty, le.saveOpen = true, true
+	le.LoadLevel("level_1.json")
+	le.dirty = true
 
-	le.saveTo("../escape")
-	if LevelPath != prev || !le.saveOpen || le.saveErr == "" {
-		t.Fatalf("a path was accepted: LevelPath %q, open %t, err %q", LevelPath, le.saveOpen, le.saveErr)
+	le.openDialog(dlgSave)
+	le.dlgName = "../escape"
+	le.dialogOK()
+	if LevelPath != prev || le.dialog != dlgSave || le.dlgErr == "" {
+		t.Fatalf("a path was accepted: LevelPath %q, dialog %d, err %q", LevelPath, le.dialog, le.dlgErr)
 	}
-	le.saveTo("arena")
+	le.dlgName = "arena"
+	le.dialogOK()
 	if _, err := os.Stat("arena.json"); err != nil {
 		t.Fatalf("arena.json not written: %v", err)
 	}
-	if LevelPath != "arena.json" || le.saveOpen || le.dirty {
-		t.Errorf("after saving: LevelPath %q, open %t, dirty %t", LevelPath, le.saveOpen, le.dirty)
+	if LevelPath != "arena.json" || le.dialog != dlgNone || le.dirty {
+		t.Errorf("after saving: LevelPath %q, dialog %d, dirty %t", LevelPath, le.dialog, le.dirty)
+	}
+	if got := levelFiles(); !slices.Equal(got, []string{"arena.json", "level_1.json"}) {
+		t.Errorf("levels to load: %v", got)
+	}
+
+	want := le.Hash()
+	other := NewLevelEditor(39, 83)
+	other.dirty = true
+	other.openDialog(dlgLoad)
+	other.dlgName = "missing"
+	other.dialogOK()
+	if other.dialog != dlgLoad || other.dlgErr == "" {
+		t.Errorf("loading a missing level closed the dialog: err %q", other.dlgErr)
+	}
+	LevelPath = prev
+	other.dlgName = "arena.json"
+	other.dialogOK()
+	if other.Hash() != want || LevelPath != "arena.json" || other.dirty || other.dialog != dlgNone {
+		t.Errorf("after loading: same level %t, LevelPath %q, dirty %t, dialog %d", other.Hash() == want, LevelPath, other.dirty, other.dialog)
 	}
 }
