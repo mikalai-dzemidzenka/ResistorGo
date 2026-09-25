@@ -174,7 +174,7 @@ var (
 )
 
 // menuMainLabels are the rows of the main screen, in order.
-var menuMainLabels = []string{"Single Player", "Host Game", "Join Game", "Options", "Quit"}
+var menuMainLabels = []string{"Single Player", "Level Editor", "Host Game", "Join Game", "Options", "Quit"}
 
 // menuInput reads the keys the chrome advertises: the highlight on the main
 // screen, and Escape backing out of any other screen the way its Back button
@@ -401,14 +401,18 @@ func drawMenuUI() {
 			startOffline()
 		case 1:
 			menuError = ""
-			menuScreen = menuHost
+			startOffline()
+			Editing = true
 		case 2:
 			menuError = ""
-			menuScreen = menuJoin
+			menuScreen = menuHost
 		case 3:
 			menuError = ""
-			menuScreen = menuOptions
+			menuScreen = menuJoin
 		case 4:
+			menuError = ""
+			menuScreen = menuOptions
+		case 5:
 			quit = true
 		}
 	case menuHost:

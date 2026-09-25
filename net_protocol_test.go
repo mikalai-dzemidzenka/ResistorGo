@@ -8,6 +8,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	rl "github.com/gen2brain/raylib-go/raylib"
 )
 
 func sampleRec(id uint16) ActorRec {
@@ -345,5 +347,18 @@ func TestEveryStateSurvivesTheWire(t *testing.T) {
 	s := Snapshot{Tick: 1, Actors: []ActorRec{{ID: 1, State: uint8(stateCount), AnimTotal: 1}}}
 	if _, err := decodeSnapshot(encodeSnapshot(s)); err == nil {
 		t.Errorf("a snapshot carrying state %d was accepted", uint8(stateCount))
+	}
+}
+
+// Jumped rides in the Updown byte: both come back out of the record intact.
+func TestRecCarriesJumped(t *testing.T) {
+	for _, jumped := range []bool{false, true} {
+		a := NewActor(rl.Vector2{}, false)
+		a.Updown, a.Jumped = 3, jumped
+		b := NewActor(rl.Vector2{}, false)
+		recOf(a).apply(b, NewWorld(false))
+		if b.Updown != 3 || b.Jumped != jumped {
+			t.Errorf("jumped %t: came back as updown %d, jumped %t", jumped, b.Updown, b.Jumped)
+		}
 	}
 }

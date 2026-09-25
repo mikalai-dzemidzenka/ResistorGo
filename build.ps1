@@ -6,8 +6,8 @@
 #
 #   -trimpath   drops absolute build paths
 #   -s -w       drops the symbol table and DWARF, roughly halving the binary
-#   -tags release  leaves the developer tools out: no level editor, debug overlay,
-#                  network-simulation keys or level writes (devtools_release.go)
+#   -tags release  leaves the developer tools out: no debug overlay or
+#                  network-simulation keys (devtools_release.go)
 #
 # UPX packs it further (~1.7x, 9.0 MB -> 5.2 MB) and is required: resistor.exe is
 # tracked in the repo, so an unpacked build silently doubles what every clone

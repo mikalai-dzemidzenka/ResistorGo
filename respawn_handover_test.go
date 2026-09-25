@@ -94,3 +94,15 @@ func TestOfflineRespawnRestoresLocalEffects(t *testing.T) {
 		t.Errorf("the respawned fighter's attack raised the zoom by %v, want %v", Cam.ZoomSpeed, float32(AttackZoomSpeed))
 	}
 }
+
+// A new match opens with the camera on the fighter, not where the last match
+// left it.
+func TestNewMatchSnapsTheCamera(t *testing.T) {
+	pl := offlineMatch(t)
+	Cam.Target = rl.Vector2{X: 5000, Y: 5000}
+	Cam.Camera2D.Target = Cam.Target
+	snapCamera()
+	if want := camFocus(pl); Cam.Target != want || Cam.Camera2D.Target != want {
+		t.Errorf("camera target %v, view %v, want both on the fighter at %v", Cam.Target, Cam.Camera2D.Target, want)
+	}
+}

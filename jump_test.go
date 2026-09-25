@@ -389,25 +389,30 @@ func TestSteeringInTheAir(t *testing.T) {
 	}
 }
 
-// Falling costs the fighter nothing it had on the way up: a ledge reached while
-// descending is climbed, exactly as a rising fighter climbs it.
-func TestFallCatchesALedge(t *testing.T) {
+// A ledge is caught rising into it, or coming down on the far side of a jump.
+// A fighter that is only falling - off an edge, or knocked out of its jump -
+// passes it by.
+func TestOnlyAJumpCatchesALedge(t *testing.T) {
 	for _, c := range []struct {
-		name  string
-		state ActorState
-		vy    float32
+		name   string
+		state  ActorState
+		vy     float32
+		jumped bool
+		climb  bool
 	}{
-		{"rising", StateJump, -5},
-		{"falling", StateFall, 5},
-		{"rolling", StateRoll, -5},
+		{"rising", StateJump, -300, true, true},
+		{"rolling up", StateRoll, -300, false, true},
+		{"far side of a jump", StateFall, 5, true, true},
+		{"falling off an edge", StateFall, 5, false, false},
+		{"rolling off an edge", StateRoll, 5, false, false},
 	} {
 		tiles(Vector2i{X: 96}) // a tile at x 96..144, top at y 0
 		a := jumper(90, 16)    // just left of it, head level with its top
-		a.State, a.Speed.Y = c.state, c.vy
+		a.State, a.Speed.Y, a.Jumped = c.state, c.vy, c.jumped
 
 		a.Update(float32(FixedTimeStep))
-		if a.State != StateClimb {
-			t.Errorf("%s at a ledge left state %d, want the climb %d", c.name, a.State, StateClimb)
+		if got := a.State == StateClimb; got != c.climb {
+			t.Errorf("%s at a ledge: climbing %t, want %t (state %d)", c.name, got, c.climb, a.State)
 		}
 	}
 }

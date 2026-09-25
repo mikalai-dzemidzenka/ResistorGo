@@ -266,25 +266,29 @@ type Actor struct {
 	AttackCount      uint8
 	CanClimbRight    bool
 	CanClimbLeft     bool
-	Structure        float32
-	HitCount         uint8   // landed hits since the last stun or recovery
-	HitRun           uint8   // hits landed in a row; unlike HitCount a stun does not clear it
-	Blocks           uint8   // blows this fighter has stopped, counted round; the view hears a change as a block
-	CalmTicks        uint16  // ticks since structure was last lost
-	EnergyCalm       uint16  // ticks since energy was last spent
-	EnergyUntouched  uint16  // ticks since an attack last reached it, hit or blocked
-	FlinchTicks      uint8   // ticks a hit that did not stun keeps the fighter flickering
-	SwingHit         bool    // this fighter's current swing has already landed
-	SwingTick        uint32  // the world tick this fighter last opened a swing; the authority's alone
-	PushDone         bool    // this fighter's current shove has already moved someone
-	PushStuck        *Actor  // the fighter its last shove landed on; not shoved again until the two are apart
-	ShoveLeft        uint8   // pixels a shove still has to carry this fighter
-	ShoveDir         int8    // which way that shove is carrying it
-	Dying            bool    // dead and waiting to be taken out of the world
-	DeathTicks       uint16  // ticks since the death animation finished
-	DenyUntil        float64 // game time a refused swing stops flashing; local only, never replicated
-	Owner            uint16  // network player this fighter belongs to; 0 for bots
-	Team             uint8   // fighters on the same team do not fight; NoTeam is on nobody's
+	// Jumped is set by a jump and cleared by the ground or a hit: it is what
+	// lets a fighter on the far side of a jump still catch a ledge that a fall
+	// passes by (see catchLedge).
+	Jumped          bool
+	Structure       float32
+	HitCount        uint8   // landed hits since the last stun or recovery
+	HitRun          uint8   // hits landed in a row; unlike HitCount a stun does not clear it
+	Blocks          uint8   // blows this fighter has stopped, counted round; the view hears a change as a block
+	CalmTicks       uint16  // ticks since structure was last lost
+	EnergyCalm      uint16  // ticks since energy was last spent
+	EnergyUntouched uint16  // ticks since an attack last reached it, hit or blocked
+	FlinchTicks     uint8   // ticks a hit that did not stun keeps the fighter flickering
+	SwingHit        bool    // this fighter's current swing has already landed
+	SwingTick       uint32  // the world tick this fighter last opened a swing; the authority's alone
+	PushDone        bool    // this fighter's current shove has already moved someone
+	PushStuck       *Actor  // the fighter its last shove landed on; not shoved again until the two are apart
+	ShoveLeft       uint8   // pixels a shove still has to carry this fighter
+	ShoveDir        int8    // which way that shove is carrying it
+	Dying           bool    // dead and waiting to be taken out of the world
+	DeathTicks      uint16  // ticks since the death animation finished
+	DenyUntil       float64 // game time a refused swing stops flashing; local only, never replicated
+	Owner           uint16  // network player this fighter belongs to; 0 for bots
+	Team            uint8   // fighters on the same team do not fight; NoTeam is on nobody's
 	// The two places at this fighter: the bot fighting it from the left, and
 	// the one fighting it from the right. Two bots engage a fighter and no
 	// more; the rest wait in line. Like the bot's mind below, this is worked
@@ -615,8 +619,8 @@ func (a *Actor) Update(dt float32) {
 			a.enterClimbState()
 		}
 	case StateFall:
-		// a fall catches a ledge on the same terms a jump does: falling costs
-		// the fighter nothing it had on the way up
+		// the far side of a jump is a fall too, and still catches a ledge
+		// (see catchLedge)
 		if (a.CanClimbRight && a.Orientation == 1) || (a.CanClimbLeft && a.Orientation == -1) {
 			a.exitJumpState()
 			a.enterClimbState()
@@ -1040,6 +1044,7 @@ func (a *Actor) checkCollision() {
 		if pColCenterX >= oColX && pColCenterX < oColX+oColWidth &&
 			pColDownY+1 > oColY && pColDownY < oColY+oColHeight {
 			a.OnGround = true
+			a.Jumped = false
 			a.Speed.Y = 0
 			a.Pos.Y = float32(int32(math.Ceil(float64(oColY)) - 48))
 			continue
@@ -1064,16 +1069,15 @@ func (a *Actor) checkCollision() {
 
 // catchLedge takes hold of the ledge of solid c if the fighter's head is level
 // with it and it stands no more than a reach ahead, the way the fighter faces,
-// and reports whether it did. A ledge is caught going either way: rising into
-// it on a jump or a roll high enough to reach it, or dropping past it on a
-// fall - but not by a fighter dropping
-// from a climb-down, which would be put back up on whatever stands beside the
-// platform it came through - and never with the head in a ceiling.
+// and reports whether it did. A ledge is caught rising into it, on a jump or a
+// roll high enough to reach it, and coming down on the far side of a jump. A
+// fighter that is only falling - off an edge, knocked off one, dropped through
+// a platform - passes it by, and so does one with its head in a ceiling.
 func (a *Actor) catchLedge(c rl.Rectangle, centerX float32, hitTop bool) bool {
 	const climbOffset = 32
-	airborne := a.Speed.Y != 0 && a.State != StateClimbDown
+	reaching := (a.Speed.Y < 0 || a.Speed.Y > 0 && a.Jumped) && a.State != StateClimbDown
 	head := a.Pos.Y + a.CollisionBox.Y
-	if !airborne || hitTop || head < c.Y || head > c.Y+c.Height {
+	if !reaching || hitTop || head < c.Y || head > c.Y+c.Height {
 		return false
 	}
 	switch {
@@ -1447,6 +1451,7 @@ func (a *Actor) enterFlinchState(attacker *Actor) {
 // hit that plays the hit animation.
 func (a *Actor) enterAttackedState(attacker *Actor) {
 	a.State = StateAttacked
+	a.Jumped = false // knocked out of a jump, it only falls
 	a.stopFlicker()
 	a.hitFeedback(attacker, StunKnockback)
 	a.SetAnim("resources/threefour/hit-top.png", AnimOptions{animDuration: 0.3, totalFrames: 4, once: true})
@@ -1936,6 +1941,7 @@ func (a *Actor) updateBlock() {
 }
 func (a *Actor) enterJumpState(dt float32) {
 	a.OnGround = false
+	a.Jumped = true
 	a.Speed.Y = MaxJumpSpeed * dt
 	a.State = StateJump
 }
@@ -1965,6 +1971,7 @@ func (a *Actor) enterRunJumpState() bool {
 // what carries it.
 func (a *Actor) launchRunJump(dt float32) {
 	a.OnGround = false
+	a.Jumped = true
 	a.Speed.Y = MaxRunJumpSpeed * dt
 }
 
@@ -2000,6 +2007,9 @@ func (a *Actor) updateFalling() {
 		return
 	}
 	if !a.OnGround && a.Speed.Y > 0 {
+		if a.State == StateRunJump || a.State == StateJumpStart {
+			a.Jumped = true // committed to the jump, off the edge before the push-off
+		}
 		a.enterFallState()
 	}
 }

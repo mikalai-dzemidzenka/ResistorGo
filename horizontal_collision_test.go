@@ -328,11 +328,11 @@ func TestLedgeAgainstAWall(t *testing.T) {
 		}
 	})
 
-	t.Run("falling past it", func(t *testing.T) {
+	t.Run("coming down past it from a jump", func(t *testing.T) {
 		defer solidsLevel(wallFloor, wall)()
 		a := stander(100)
 		a.Pos.Y = 14 // head at 20, above the top at 50; feet at 62, below it, so it is beside the wall
-		a.OnGround, a.State, a.Speed.Y = false, StateFall, 40
+		a.OnGround, a.State, a.Speed.Y, a.Jumped = false, StateFall, 40, true
 		a.SetAnim("resources/threefour/fall.png", AnimOptions{animDuration: 0.3, totalFrames: 3})
 		for range 60 {
 			hold(a, 1, 1, nil)
