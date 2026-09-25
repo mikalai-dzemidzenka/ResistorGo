@@ -312,6 +312,7 @@ type Input struct {
 	Roll     bool // duck and charge a roll; held, and released to roll
 	FaceLeft bool
 	Updown   uint8
+	RollAim  uint8 // the roll's launch angle, flattest 0 to steepest 255; see rollAim
 	ViewTick uint32
 	ViewFrac uint8
 }
@@ -1055,12 +1056,13 @@ func (a *Actor) checkCollision() {
 // catchLedge takes hold of the ledge of solid c if the fighter's head is level
 // with it and it stands no more than a reach ahead, the way the fighter faces,
 // and reports whether it did. A ledge is caught going either way: rising into
-// it on a jump, or dropping past it on a fall - but not by a fighter dropping
+// it on a jump or a roll high enough to reach it, or dropping past it on a
+// fall - but not by a fighter dropping
 // from a climb-down, which would be put back up on whatever stands beside the
 // platform it came through - and never with the head in a ceiling.
 func (a *Actor) catchLedge(c rl.Rectangle, centerX float32, hitTop bool) bool {
 	const climbOffset = 32
-	airborne := a.Speed.Y != 0 && a.State != StateClimbDown && a.State != StateRoll
+	airborne := a.Speed.Y != 0 && a.State != StateClimbDown
 	head := a.Pos.Y + a.CollisionBox.Y
 	if !airborne || hitTop || head < c.Y || head > c.Y+c.Height {
 		return false
@@ -1193,6 +1195,7 @@ func sampleInput(a *Actor) Input {
 		in.Updown = 0
 	}
 	in.FaceLeft = float32(MouseWorldPos.X) < a.Pos.X+24
+	in.RollAim = rollAim(a.eye(), rl.Vector2{X: float32(MouseWorldPos.X), Y: float32(MouseWorldPos.Y)})
 	return in
 }
 

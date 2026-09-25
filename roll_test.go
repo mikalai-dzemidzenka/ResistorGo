@@ -1,6 +1,7 @@
 package resistor
 
 import (
+	"math"
 	"testing"
 
 	rl "github.com/gen2brain/raylib-go/raylib"
@@ -38,13 +39,14 @@ func rollOut(t *testing.T, a *Actor) (peak, landX float32) {
 }
 
 func TestRollLaunchGrowsAndCaps(t *testing.T) {
-	a := &Actor{Orientation: 1, AnimStartTick: 100}
+	a := &Actor{Orientation: 1, AnimStartTick: 100, Input: Input{RollAim: 255}}
 	at := func(held uint32) rl.Vector2 {
 		a.Ticks = a.AnimStartTick + held
 		return a.rollLaunch()
 	}
-	if v := at(0); v.X != RollMinX || v.Y != RollMinY {
-		t.Errorf("a tap launches at %v, want the minimum (%d, %d)", v, RollMinX, RollMinY)
+	speed := func(v rl.Vector2) float32 { return float32(math.Hypot(float64(v.X), float64(v.Y))) }
+	if s := speed(at(0)); abs(s-RollMinSpeed) > 0.01 {
+		t.Errorf("a tap launches at speed %v, want the minimum %d", s, RollMinSpeed)
 	}
 	short, long := at(15), at(45)
 	if !(long.X > short.X && long.Y < short.Y) {
@@ -54,8 +56,43 @@ func TestRollLaunchGrowsAndCaps(t *testing.T) {
 		t.Errorf("holds past the cap launch differently: %v %v %v", capped, at(180), at(600))
 	}
 	a.Orientation = -1
-	if v := at(0); v.X != -RollMinX {
+	if v := at(0); v.X >= 0 {
 		t.Errorf("facing left the roll launches at %v, want it going left", v)
+	}
+}
+
+// The same charge aimed higher goes higher and less far, and a flat launch at
+// full charge is held to RollMaxX.
+func TestRollAimSetsTheAngle(t *testing.T) {
+	a := &Actor{Orientation: 1, AnimStartTick: 100, Ticks: 100 + RollChargeTicks}
+	a.Input.RollAim = 0
+	flat := a.rollLaunch()
+	a.Input.RollAim = 255
+	steep := a.rollLaunch()
+	if !(steep.Y < flat.Y && steep.X < flat.X) {
+		t.Errorf("aimed steep the roll launches at %v, flat at %v: want steep higher and shorter", steep, flat)
+	}
+	if flat.X > RollMaxX {
+		t.Errorf("a flat launch goes %v, past RollMaxX %d", flat.X, RollMaxX)
+	}
+}
+
+func TestRollAimFollowsTheCursor(t *testing.T) {
+	from := rl.Vector2{X: 100, Y: 100}
+	cases := []struct {
+		name   string
+		cursor rl.Vector2
+		want   uint8
+	}{
+		{"level with the fighter", rl.Vector2{X: 200, Y: 100}, 0},
+		{"below it", rl.Vector2{X: 200, Y: 200}, 0},
+		{"straight up", rl.Vector2{X: 100, Y: 0}, 255},
+		{"45 degrees, the middle of the range", rl.Vector2{X: 0, Y: 0}, 127},
+	}
+	for _, c := range cases {
+		if got := rollAim(from, c.cursor); got != c.want {
+			t.Errorf("%s: aim %d, want %d", c.name, got, c.want)
+		}
 	}
 }
 
@@ -226,5 +263,37 @@ func TestATapEscapes(t *testing.T) {
 	steps(a, 40, Input{})
 	if clear := a.Pos.X - right.Pos.X; clear < 48 {
 		t.Errorf("after a tapped roll the fighter rests %v px past the enemy it rolled over, want at least 48", clear)
+	}
+}
+
+// A roll that carries the head up to a ledge climbs it, as a jump does; one
+// that stays too low passes under it and lands.
+func TestAHighRollClimbs(t *testing.T) {
+	for _, c := range []struct {
+		name  string
+		hold  int
+		aim   uint8
+		climb bool
+	}{
+		{"full charge aimed steep", RollChargeTicks, 255, true},
+		{"a flat tap", 1, 0, false},
+	} {
+		tiles(append(row(-480, 48, 20), Vector2i{X: 0, Y: -96})...) // a ledge hanging at y -96..-48, x 0..48
+		w := NewWorld(true)
+		a := w.Spawn(rl.Vector2{X: -60}, false)
+		a.Orientation = 1
+		steps(a, 20, Input{})
+		steps(a, c.hold, Input{Roll: true, RollAim: c.aim})
+		climbed := false
+		for range 180 {
+			steps(a, 1, Input{RollAim: c.aim})
+			climbed = climbed || a.State == StateClimb
+		}
+		if climbed != c.climb {
+			t.Errorf("%s: climbed %t, want %t (ended at %v in state %d)", c.name, climbed, c.climb, a.Pos, a.State)
+		}
+		if c.climb && a.Pos.Y > -143 {
+			t.Errorf("%s: ended at y %v, want on top of the wall", c.name, a.Pos.Y)
+		}
 	}
 }

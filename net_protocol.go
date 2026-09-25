@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	ProtocolVersion  uint16 = 10
+	ProtocolVersion  uint16 = 11
 	DefaultPort             = 27015
 	ChanUnreliable   uint8  = 0 // commands, snapshots
 	ChanReliable     uint8  = 1 // hello, welcome, reject, bye
@@ -454,7 +454,7 @@ func encodeCmds(cmds []Input) []byte {
 			buttons |= bRoll
 		}
 		b = putU32(b, c.Seq)
-		b = append(b, buttons, c.Updown)
+		b = append(b, buttons, c.Updown, c.RollAim)
 		b = putU32(b, c.ViewTick)
 		b = append(b, c.ViewFrac)
 	}
@@ -473,6 +473,7 @@ func decodeCmds(b []byte) ([]Input, error) {
 		c.Seq = r.u32()
 		buttons := r.u8()
 		c.Updown = r.u8()
+		c.RollAim = r.u8()
 		c.ViewTick = r.u32()
 		c.ViewFrac = r.u8()
 		c.Left = buttons&bLeft != 0
