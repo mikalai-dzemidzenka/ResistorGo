@@ -1123,6 +1123,18 @@ func botInput(a *Actor) Input {
 		return a.waitInLine(in, t)
 	}
 
+	// The fighter it is fighting rolled out of view: the fight is not over
+	// until it lands. A roll over the bot's head is lost overhead, in front,
+	// and comes down behind - or wherever a blow knocked it out of the roll -
+	// so a bot that searched where it was last seen would stand staring at
+	// the spot the roll took off from. Once it lands the spot is where it
+	// came down. A jump is not followed: one over a gap is searched for from
+	// the edge it left, which is what gets the bot across after it.
+	if t := a.Bot.target; t != nil && !t.OnGround && (t.State == StateRoll || t.State == StateAttacked) {
+		a.Bot.mark(t.Pos)
+		return a.walk(in, t.Pos)
+	}
+
 	// Nothing in view at all. The fight is over as far as this bot is
 	// concerned, so the place goes back: one held at a fighter nobody can see
 	// is a place no other bot can ever take.
