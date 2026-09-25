@@ -202,3 +202,37 @@ func TestFightersOnTopOfEachOtherAreNotBlind(t *testing.T) {
 		t.Error("a bot saw a fighter well behind it")
 	}
 }
+
+// A fighter rolling over a bot's head is lost overhead and lands behind it. The
+// bot follows the roll down rather than standing staring at where it took off
+// from. The bot drifts its guard at random, so each distance is tried a few
+// times.
+func TestABotTurnsToAFighterThatRolledOverIt(t *testing.T) {
+	for _, gap := range []float32{20, 35, 50} {
+		for range 10 {
+			bot, target := botScene(t, row(-480, 48, 40), rl.Vector2{X: 200}, rl.Vector2{X: 200 + gap})
+			tick := func(in Input) {
+				bot.Input = botInput(bot)
+				bot.Update(float32(FixedTimeStep))
+				target.Input = in
+				target.Update(float32(FixedTimeStep))
+			}
+			for range 30 { // the fight starts
+				tick(Input{FaceLeft: true})
+			}
+			for range RollChargeTicks + 1 {
+				tick(Input{Roll: true, FaceLeft: true})
+			}
+			found := false
+			for i := range 240 {
+				tick(Input{FaceLeft: true})
+				if found = i > 60 && bot.canSee(target); found {
+					break
+				}
+			}
+			if !found {
+				t.Fatalf("gap %v: the bot lost the fighter that rolled over it: bot x=%v facing %d, fighter x=%v", gap, bot.Pos.X, bot.Orientation, target.Pos.X)
+			}
+		}
+	}
+}
