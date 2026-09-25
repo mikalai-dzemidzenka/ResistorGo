@@ -240,11 +240,28 @@ func restartOffline() {
 func enterLevel() {
 	Stage = StageLevel
 	Accumulator = 0
+	snapCamera()
 	Spec = SpecCam{Follow: true, Pos: Cam.Camera2D.Target}
 	// the menu paints the raygui widgets in its own reds (menuWidgetStyle);
 	// the editor and the level HUD get the dark style back
 	loadStyle()
 	rl.DisableCursor()
+}
+
+// snapCamera puts the camera straight on the local fighter. The camera outlives
+// a match, and without this a new one opens where the last one ended and pans
+// across the level to the fighter.
+func snapCamera() {
+	if CL == nil || CL.Local == nil {
+		return
+	}
+	Cam.SetTarget(camFocus(CL.Local))
+	Cam.Camera2D.Target = Cam.Target
+}
+
+// camFocus is where the camera looks to follow a fighter.
+func camFocus(a *Actor) rl.Vector2 {
+	return rl.Vector2{X: a.Pos.X + 24, Y: a.Pos.Y + 24}
 }
 
 // leaveMatch tears down any network session and returns to the menu.
@@ -422,7 +439,7 @@ func runLevel(dt float32) {
 	if Editing {
 		editorCam(dt)
 	} else if local != nil {
-		Cam.SetTarget(rl.Vector2{X: local.Pos.X + 24, Y: local.Pos.Y + 24})
+		Cam.SetTarget(camFocus(local))
 	} else if spectating {
 		updateSpectatorCam(dt, w)
 	}
