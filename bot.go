@@ -792,6 +792,10 @@ const (
 	// straight back - it is usually the nearest one to the target, which is
 	// exactly what makes it the first to claim.
 	EngageYieldTicks = 30
+	// How long a landed roll keeps the place ahead of it closed: 2 seconds.
+	// Long enough to turn and face the crowd it rolled out of, one bot at a
+	// time; see claimPlace.
+	RollClosesTicks = 120
 	// How far either side of its spot a waiting bot drifts, and how long it
 	// settles on one drift before shifting to another: three quarters of a
 	// second, plus up to a second and a half more.
@@ -921,6 +925,18 @@ func (a *Actor) claimPlace(t *Actor) bool {
 		a.leaveFight()
 		a.Bot.target = t
 	}
+	// A landed roll has closed the place ahead of it: that fighter is fought
+	// from the open side, by a bot standing there, and by nobody else. The
+	// holder of the closed place stands back, and so does a holder of the
+	// open one caught on the closed side - crossing through to it is the
+	// surround the roll just broke.
+	closed := t.ClosedTicks > 0
+	if closed && a.holdsPlace() && (a.Bot.side == t.ClosedSide || a.engageSide(t) == t.ClosedSide) {
+		a.releasePlace()
+		a.Bot.side = a.engageSide(t)
+		a.Bot.yieldWait = EngageYieldTicks
+		return false
+	}
 	if a.holdsPlace() {
 		// A holder that finds itself on the other side takes the place there
 		// instead, when that one is free. A bot overshoots all the time - the
@@ -938,6 +954,9 @@ func (a *Actor) claimPlace(t *Actor) bool {
 	side := a.engageSide(t)
 	if a.Bot.yieldWait == 0 {
 		for _, s := range [2]int8{side, -side} {
+			if closed && (s != side || s == t.ClosedSide) {
+				continue
+			}
 			if i := placeIndex(s); t.Engaged[i] == nil {
 				t.Engaged[i], a.Bot.side, a.Bot.holdTicks = a, s, 0
 				return true

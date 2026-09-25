@@ -37,6 +37,11 @@ const (
 	// to BloodSplatMax more when it lands.
 	BloodDropMax  = 3
 	BloodSplatMax = 4
+
+	// Blood on a wall runs down it up to BloodRunMax pixels, slowing as it goes,
+	// for BloodRunTime seconds after it lands.
+	BloodRunMax  = 12
+	BloodRunTime = 3.0
 )
 
 // A blot is the shape of a clump of blood: which pixels of the 5x5 square
@@ -130,10 +135,13 @@ type droplet struct {
 // A stain on the backdrop is a streak: tx, ty is its tail, back along the way
 // the droplet flew. A stain on a floor or a wall it hit has no tail. Either is
 // a clump at its head, its shape the droplet's splashed out where it landed.
+// One on a wall runs run pixels down it; how much of that has run by now is
+// the ticks since it landed, so the stain itself still never changes.
 type stain struct {
 	x, y   int16
 	tx, ty int8
 	red    uint8
+	run    uint8
 	tick   uint32
 	shape  blot
 }
@@ -274,7 +282,7 @@ func paintedAt(tiles []LevelObject, p rl.Vector2) bool {
 // streak is the stain a droplet leaves splashing onto the backdrop at p: its
 // head there, its tail up to BloodStreakMax pixels back along its flight. The
 // head's clump covers only painted pixels, so no blood hangs off a tile's edge.
-func (b *bloodState) streak(d droplet, p rl.Vector2, tiles []LevelObject, tick uint32) stain {
+func (b *bloodState) streak(d droplet, p rl.Vector2, solids []rl.Rectangle, tiles []LevelObject, tick uint32) stain {
 	x, y := int(math.Floor(float64(p.X))), int(math.Floor(float64(p.Y)))
 	s := stain{x: int16(x), y: int16(y), red: d.red, tick: tick}
 	s.shape = b.splat(d).keep(x, y, func(x, y int) bool {
@@ -285,7 +293,23 @@ func (b *bloodState) streak(d droplet, p rl.Vector2, tiles []LevelObject, tick u
 		s.tx = int8(math.Round(-float64(d.vel.X) / speed * l))
 		s.ty = int8(math.Round(-float64(d.vel.Y) / speed * l))
 	}
+	s.run = b.runDown(x, y, func(x, y int) bool {
+		p := rl.Vector2{X: float32(x) + 0.5, Y: float32(y) + 0.5}
+		return paintedAt(tiles, p) && !pixelSolid(solids, p)
+	})
 	return s
+}
+
+// runDown is how far a stain at x, y runs: a random length, cut short where
+// the pixel below is no longer wall it can run on.
+func (b *bloodState) runDown(x, y int, onWall func(x, y int) bool) uint8 {
+	n := b.rng.Intn(BloodRunMax + 1)
+	for k := 1; k <= n; k++ {
+		if !onWall(x, y+k) {
+			return uint8(k - 1)
+		}
+	}
+	return uint8(n)
 }
 
 // splat is the clump a droplet leaves where it lands: its own, splashed out.
@@ -304,7 +328,11 @@ func (b *bloodState) hug(d droplet, p rl.Vector2, solids []rl.Rectangle, tick ui
 	shape := b.splat(d).keep(x, y, func(x, y int) bool {
 		return solid(x, y) || solid(x+1, y) || solid(x-1, y) || solid(x, y+1) || solid(x, y-1)
 	})
-	return stain{x: int16(x), y: int16(y), red: d.red, tick: tick, shape: shape}
+	// on the side of a wall it runs down along it; on a floor it has nowhere to go
+	run := b.runDown(x, y, func(x, y int) bool {
+		return !solid(x, y) && (solid(x+1, y) || solid(x-1, y))
+	})
+	return stain{x: int16(x), y: int16(y), red: d.red, run: run, tick: tick, shape: shape}
 }
 
 // fly moves every droplet on by dt under gravity. One that meets the level's
@@ -335,7 +363,7 @@ func (b *bloodState) fly(solids []rl.Rectangle, tiles []LevelObject, dt float32,
 			}
 			d.pos = next
 			if d.age >= d.reach && paintedAt(tiles, d.pos) {
-				b.addStain(b.streak(d, d.pos, tiles, tick))
+				b.addStain(b.streak(d, d.pos, solids, tiles, tick))
 				landed = true
 				break
 			}
@@ -453,10 +481,10 @@ func drawStains(w *World, view rl.Rectangle) {
 		s := b.stainAt(i)
 		x, y := float32(s.x), float32(s.y)
 		const m = max(blotR, BloodStreakMax) // a clump or a tail reaches past its head
-		if x < view.X-m || x >= view.X+view.Width+m || y < view.Y-m || y >= view.Y+view.Height+m || !stainShown(s, w) {
+		if x < view.X-m || x >= view.X+view.Width+m || y < view.Y-m-BloodRunMax || y >= view.Y+view.Height+m || !stainShown(s, w) {
 			continue
 		}
-		drawStain(s)
+		drawStain(s, ranDown(s, w.Tick))
 	}
 }
 
@@ -473,9 +501,27 @@ func drawBlot(bl blot, x, y int32, red uint8) {
 	})
 }
 
+// ranDown is how many pixels of its run a stain has run by tick: fast at
+// first, slowing to a stop BloodRunTime seconds after it landed.
+func ranDown(s *stain, tick uint32) int {
+	if s.run == 0 || tick <= s.tick {
+		return 0
+	}
+	t := min(1, float64(tick-s.tick)*FixedTimeStep/BloodRunTime)
+	return int(math.Round(float64(s.run) * (1 - (1-t)*(1-t))))
+}
+
 // drawStain draws a stain's clump, and a streak's tail as its line of pixels
-// back from the head, one red darker.
-func drawStain(s *stain) {
+// back from the head, one red darker; then ran pixels of its run below the
+// head, ending in a bead of its own red.
+func drawStain(s *stain, ran int) {
+	for k := 1; k <= ran; k++ {
+		col := bloodReds[max(int(s.red)-1, 0)]
+		if k == ran {
+			col = bloodReds[s.red]
+		}
+		rl.DrawRectangle(int32(s.x), int32(s.y)+int32(k), 1, 1, col)
+	}
 	drawBlot(s.shape, int32(s.x), int32(s.y), s.red)
 	n := max(iabs(int(s.tx)), iabs(int(s.ty)))
 	tail := bloodReds[max(int(s.red)-1, 0)]

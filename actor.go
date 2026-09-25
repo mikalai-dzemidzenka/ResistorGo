@@ -292,6 +292,12 @@ type Actor struct {
 	// a client is told where the bots went, not whose turn it is. Time
 	// manipulation records and restores it with the rest of the fighter.
 	Engaged [2]*Actor
+	// The place a landed roll closed, and the ticks left until it opens: the
+	// side the roll was going toward, recorded as it landed so turning round
+	// afterwards does not move it. Worked out and never replicated, like
+	// Engaged, since only the authority hands out places.
+	ClosedSide  int8
+	ClosedTicks uint16
 	// What the bot has in mind. Never replicated: it is worked out afresh by
 	// whichever world is actually simulating the match, and a client is told
 	// what the bot did, not what it was thinking. Time manipulation records and
@@ -456,6 +462,9 @@ func (a *Actor) Update(dt float32) {
 	}
 	a.regenStructure()
 	a.regenEnergy()
+	if a.ClosedTicks > 0 {
+		a.ClosedTicks--
+	}
 	if a.FlinchTicks > 0 {
 		a.FlinchTicks--
 		if a.FlinchTicks == 0 {
