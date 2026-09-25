@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	ProtocolVersion  uint16 = 11
+	ProtocolVersion  uint16 = 12
 	DefaultPort             = 27015
 	ChanUnreliable   uint8  = 0 // commands, snapshots
 	ChanReliable     uint8  = 1 // hello, welcome, reject, bye
@@ -179,6 +179,18 @@ const (
 // apart, far longer than snapshots are, so none is missed between two.
 const fBlockOdd uint16 = 1 << 15
 
+// Jumped rides in the top bit of the Updown byte, which only ever holds 0..3,
+// so the record does not grow to carry it. Prediction needs it: it decides
+// whether a fighter coming down catches a ledge.
+const updownJumped uint8 = 1 << 7
+
+func jumpedBit(j bool) uint8 {
+	if j {
+		return updownJumped
+	}
+	return 0
+}
+
 const (
 	bLeft uint8 = 1 << iota
 	bRight
@@ -197,7 +209,7 @@ func recOf(a *Actor) ActorRec {
 		SX:              a.Speed.X,
 		SY:              a.Speed.Y,
 		State:           uint8(a.State),
-		Updown:          a.Updown,
+		Updown:          a.Updown | jumpedBit(a.Jumped),
 		PrevUpdown:      a.PrevUpdown,
 		Anim:            animID(a.Anim),
 		AnimFrame:       a.AnimFrame,
@@ -262,7 +274,8 @@ func (r ActorRec) apply(a *Actor, w *World) {
 	a.CanClimbLeft = r.Flags&fClimbLeft != 0
 	a.HitCount = min(uint8((r.Flags&fHitCountMask)>>fHitCountShift), StunEveryHits-1)
 	a.HitRun = min(uint8((r.Flags&fHitRunMask)>>fHitRunShift), HitRunCapped)
-	a.Updown = r.Updown
+	a.Updown = r.Updown &^ updownJumped
+	a.Jumped = r.Updown&updownJumped != 0
 	a.PrevUpdown = r.PrevUpdown
 	a.Anim = animPath(r.Anim)
 	a.AnimFrame = r.AnimFrame
