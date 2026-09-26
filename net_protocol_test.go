@@ -362,3 +362,18 @@ func TestRecCarriesJumped(t *testing.T) {
 		}
 	}
 }
+
+// A fighter mid-jump rides the jumped bit in its guard byte; a snapshot carrying
+// one must still decode, and a guard height past block-all must not.
+func TestSnapshotCarriesJumped(t *testing.T) {
+	r := sampleRec(1)
+	r.Updown = 2 | updownJumped
+	s := Snapshot{Tick: 1, Actors: []ActorRec{r}}
+	if got, err := decodeSnapshot(encodeSnapshot(s)); err != nil || got.Actors[0].Updown != r.Updown {
+		t.Errorf("a snapshot with a jumping fighter: %+v %v", got, err)
+	}
+	r.Updown = 4 | updownJumped
+	if _, err := decodeSnapshot(encodeSnapshot(Snapshot{Tick: 1, Actors: []ActorRec{r}})); err == nil {
+		t.Error("a snapshot with guard height 4 was accepted")
+	}
+}
