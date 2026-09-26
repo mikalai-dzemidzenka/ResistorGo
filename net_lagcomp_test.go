@@ -139,3 +139,43 @@ func TestLagCompDisabledMisses(t *testing.T) {
 		t.Errorf("without lag compensation the defender is in state %d, want idle", def.State)
 	}
 }
+
+// A shooter fires level at where it saw the target; on the server the target
+// has since gone up out of the line.
+func lagCompShot(t *testing.T, lagComp bool) *Actor {
+	t.Helper()
+	floor()
+	w := NewWorld(true)
+	w.History = NewLagHistory()
+	att := w.Spawn(rl.Vector2{}, true)
+	def := w.Spawn(rl.Vector2{X: 60}, true)
+	att.Orientation = 1
+	att.OnGround = true
+	att.Weapon, att.Aim = WeaponPistol, 128
+	att.SetAnimFrame(gunLegs, 0)
+	for tick := uint32(1); tick <= 20; tick++ {
+		w.Tick = tick
+		w.History.Record(w)
+	}
+	w.Tick = 21
+	def.Pos.Y = -80 // out of the line
+
+	s := &Server{Cfg: ServerConfig{LagComp: lagComp, MaxUnlag: DefaultMaxUnlag}, W: w}
+	s.runCmd(&netPlayer{ID: 1, Actor: att}, Input{Attack: true, Aim: 128, ViewTick: 10})
+	if att.Shots != 1 {
+		t.Fatalf("the shooter fired %d shots, want 1", att.Shots)
+	}
+	if def.Pos.Y != -80 {
+		t.Errorf("target not restored: y=%v", def.Pos.Y)
+	}
+	return def
+}
+
+func TestLagCompShotHitsWhatShooterSaw(t *testing.T) {
+	if def := lagCompShot(t, true); def.Structure != MaxStructure-HitStructure {
+		t.Errorf("with lag compensation the target is at %v structure, want a hit", def.Structure)
+	}
+	if def := lagCompShot(t, false); def.Structure != MaxStructure {
+		t.Errorf("without lag compensation the target is at %v structure, want a miss", def.Structure)
+	}
+}

@@ -19,6 +19,7 @@ func sampleRec(id uint16) ActorRec {
 		Updown: 2, PrevUpdown: 1, Anim: 17, AnimFrame: 3, AnimTotal: 8, AnimYOffset: -48,
 		AnimDurMs: 300, Ticks: 123456, AnimStart: 123400, AttackCount: 2, FreezeTicks: 5, Structure: 73,
 		Energy: 45, EnergyCalm: 30, EnergyUntouched: 77, AttackerID: 7, Team: 4,
+		Weapon: WeaponPistol, Aim: 190, Shots: 250, ShotCooldown: 9,
 	}
 }
 
@@ -41,6 +42,7 @@ func TestProtocolRoundTrip(t *testing.T) {
 		{Seq: 10, Left: true, Attack: true, Down: true, Updown: 3, ViewTick: 99, ViewFrac: 128},
 		{Seq: 9, Right: true, Jump: true, FaceLeft: true, Updown: 1, RollAim: 200, ViewTick: 98},
 		{Seq: 8, Roll: true, ViewTick: 97},
+		{Seq: 7, Gun: true, Aim: 201, ViewTick: 96},
 	}
 	if got, err := decodeCmds(encodeCmds(cmds)); err != nil || !slices.Equal(got, cmds) {
 		t.Errorf("cmds: %+v %v", got, err)
@@ -282,6 +284,7 @@ func TestRecApplyRoundTrip(t *testing.T) {
 	a.Structure = 7.3
 	a.Orientation = -1
 	a.Attacker = b
+	a.Weapon, a.Aim, a.Shots, a.ShotCooldown = WeaponPistol, 40, 7, 11
 	a.Ticks = 50
 	a.SetAnim("resources/threefour/attack-high-2.png", AnimOptions{animDuration: SecondAttackSpeed, totalFrames: 6, once: true, startFrame: 3})
 	a.Ticks = 55
@@ -360,5 +363,16 @@ func TestRecCarriesJumped(t *testing.T) {
 		if b.Updown != 3 || b.Jumped != jumped {
 			t.Errorf("jumped %t: came back as updown %d, jumped %t", jumped, b.Updown, b.Jumped)
 		}
+	}
+}
+
+// A gun this build does not know is dropped, not drawn from a sheet it lacks.
+func TestRecUnknownWeapon(t *testing.T) {
+	r := recOf(NewActor(rl.Vector2{}, true))
+	r.Weapon = weaponCount
+	a := NewActor(rl.Vector2{}, true)
+	r.apply(a, nil)
+	if a.Weapon != WeaponNone {
+		t.Errorf("weapon %d applied as %d, want none", r.Weapon, a.Weapon)
 	}
 }

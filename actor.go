@@ -302,6 +302,13 @@ type Actor struct {
 	// Engaged, since only the authority hands out places.
 	ClosedSide  int8
 	ClosedTicks uint16
+	// The gun this fighter holds, WeaponNone for its fists. It stays through
+	// every state; it only shows while the fighter stands or walks (gun.go).
+	Weapon       uint8
+	Aim          uint8 // the gun's aim, as Input.Aim; taken from the command while standing armed
+	Shots        uint8 // shots fired, counted round; every machine sees a shot as this changing
+	ShotCooldown uint8 // ticks before the gun can fire again
+	SeenShots    uint8 // Shots as last shown; presentation only, never replicated
 	// What the bot has in mind. Never replicated: it is worked out afresh by
 	// whichever world is actually simulating the match, and a client is told
 	// what the bot did, not what it was thinking. Time manipulation records and
@@ -323,6 +330,8 @@ type Input struct {
 	FaceLeft bool
 	Updown   uint8
 	RollAim  uint8 // the roll's launch angle, flattest 0 to steepest 255; see rollAim
+	Gun      bool  // draw or holster the gun; pressed, not held
+	Aim      uint8 // the gun's aim, highest 0 to lowest 255; see gunAim
 	ViewTick uint32
 	ViewFrac uint8
 }
@@ -469,6 +478,9 @@ func (a *Actor) Update(dt float32) {
 	if a.ClosedTicks > 0 {
 		a.ClosedTicks--
 	}
+	if a.ShotCooldown > 0 {
+		a.ShotCooldown--
+	}
 	if a.FlinchTicks > 0 {
 		a.FlinchTicks--
 		if a.FlinchTicks == 0 {
@@ -512,6 +524,15 @@ func (a *Actor) Update(dt float32) {
 			a.land()
 		}
 	case StateIdle:
+		if a.Input.Gun && a.OnGround {
+			a.toggleGun()
+		}
+		if a.Weapon != WeaponNone {
+			if a.updateArmed() {
+				return
+			}
+			break
+		}
 		prevUpdown := a.Updown
 		a.updateUpdown()
 		if prevUpdown == 3 && a.Updown != 3 {
@@ -551,6 +572,15 @@ func (a *Actor) Update(dt float32) {
 			return
 		}
 	case StateRun:
+		if a.Input.Gun && a.OnGround {
+			a.toggleGun()
+		}
+		// an armed fighter walks: whatever handed it a run - a landing, a
+		// turnover - it stands instead, and walks from there
+		if a.Weapon != WeaponNone {
+			a.enterIdleState()
+			return
+		}
 		if prevOrientation != a.Orientation {
 			a.enterTurnoverState()
 		}
@@ -834,6 +864,9 @@ func (a *Actor) topAnim() (string, bool) {
 	if a.AnimTop != nil {
 		return *a.AnimTop, true
 	}
+	if a.Weapon == WeaponPistol && a.Anim == gunLegs {
+		return pistolTop, true
+	}
 	if !strings.HasSuffix(a.Anim, "walk.png") {
 		return "", false
 	}
@@ -863,6 +896,14 @@ func (a *Actor) topDraw() (tex rl.Texture2D, src rl.Rectangle, pos rl.Vector2, o
 		return tex, src, pos, false
 	}
 	_, src, pos = a.spriteDraw()
+	if anim == pistolTop {
+		// the torso shows the aim, not the legs' frame, kicked up after a shot
+		frame, back := a.torsoFrame()
+		src.X = float32(frame) * 48
+		if back {
+			pos.X -= float32(a.Orientation)
+		}
+	}
 	return tex, src, pos, true
 }
 
@@ -958,6 +999,10 @@ func (a *Actor) updateHorSpeed(dt float32) {
 		}
 	}
 	a.Speed.X = clamp(a.Speed.X, -MaxSpeed, MaxSpeed)
+	if a.Weapon != WeaponNone {
+		// armed, it walks: held under the speed the idle hands on to the run
+		a.Speed.X = clamp(a.Speed.X, -RunReach, RunReach)
+	}
 }
 
 func (a *Actor) updateVertSpeed(dt float32) {
@@ -1155,7 +1200,7 @@ func (a *Actor) blockSides(fromX float32) {
 }
 
 // edge-triggered buttons are latched per rendered frame and consumed by the next tick
-var pressedAttack, pressedJump, pressedDown bool
+var pressedAttack, pressedJump, pressedDown, pressedGun bool
 
 func latchInput() {
 	if rl.IsMouseButtonPressed(rl.MouseButtonLeft) {
@@ -1166,6 +1211,9 @@ func latchInput() {
 	}
 	if rl.IsKeyPressed(rl.KeyS) {
 		pressedDown = true
+	}
+	if rl.IsKeyPressed(rl.KeyQ) {
+		pressedGun = true
 	}
 }
 
@@ -1181,7 +1229,7 @@ func matchHeld() bool {
 // run. Both paused modes call it as they end, so a click made while the match
 // was held cannot fire the moment it resumes.
 func clearLatchedInput() {
-	pressedAttack, pressedJump, pressedDown = false, false, false
+	pressedAttack, pressedJump, pressedDown, pressedGun = false, false, false, false
 }
 
 // sampleInput reads the local player's devices into a command for actor a.
@@ -1192,9 +1240,10 @@ func sampleInput(a *Actor) Input {
 		Attack: pressedAttack,
 		Jump:   pressedJump,
 		Down:   pressedDown,
+		Gun:    pressedGun,
 		Roll:   rl.IsMouseButtonDown(rl.MouseButtonRight),
 	}
-	pressedAttack, pressedJump, pressedDown = false, false, false
+	pressedAttack, pressedJump, pressedDown, pressedGun = false, false, false, false
 
 	curPos := rl.GetScreenToWorld2D(Cur.AtkPos, Cam.View())
 	switch {
@@ -1209,6 +1258,11 @@ func sampleInput(a *Actor) Input {
 	}
 	in.FaceLeft = float32(MouseWorldPos.X) < a.Pos.X+24
 	in.RollAim = rollAim(a.eye(), rl.Vector2{X: float32(MouseWorldPos.X), Y: float32(MouseWorldPos.Y)})
+	o := int8(1)
+	if in.FaceLeft {
+		o = -1
+	}
+	in.Aim = gunAim(framePoint(a.Pos, o, gunShoulder), rl.Vector2{X: float32(MouseWorldPos.X), Y: float32(MouseWorldPos.Y)})
 	return in
 }
 
@@ -1224,6 +1278,9 @@ func (a *Actor) updateUpdown() {
 // cannot be paid for does not happen: nothing is spent, nothing is entered, and
 // the refusal is raised for the renderer to show.
 func (a *Actor) enterAttackState() bool {
+	if a.Weapon != WeaponNone {
+		return false // an armed fighter fires instead (see updateArmed)
+	}
 	if !a.canSwing() {
 		a.Events |= EvNoEnergy
 		return false
@@ -1702,7 +1759,9 @@ func (a *Actor) enterIdleState() {
 	a.State = StateIdle
 	a.Speed.X = 0
 	a.Speed.Y = 0
-	if !strings.Contains(a.Anim, "updown") {
+	if a.Weapon != WeaponNone {
+		a.SetAnimFrame(gunLegs, 0)
+	} else if !strings.Contains(a.Anim, "updown") {
 		a.SetAnimFrame("resources/threefour/updown.png", a.Updown)
 	}
 }
@@ -1807,7 +1866,7 @@ func (a *Actor) updateAttack() {
 			if !aabb(r1, r2) {
 				continue
 			}
-			guarding := (a.Updown == actor.Updown || actor.Updown == 3) && !actor.rolling()
+			guarding := (a.Updown == actor.Updown || actor.Updown == 3) && !actor.rolling() && actor.Weapon == WeaponNone
 			hitFrame := a.AnimCurrentFrame > attackFrames[a.Anim]
 			switch {
 			case actor.State == StateBlock:
