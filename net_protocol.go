@@ -597,7 +597,8 @@ func decodeSnapshot(b []byte) (Snapshot, error) {
 		a.Aim = r.u8()
 		a.Shots = r.u8()
 		a.ShotCooldown = r.u8()
-		if a.State >= uint8(stateCount) || a.Updown > 3 {
+		// the guard height is the low bits; the top one is the jumped flag
+		if a.State >= uint8(stateCount) || a.Updown&^updownJumped > 3 {
 			r.bad = true
 		}
 		s.Actors = append(s.Actors, a)
