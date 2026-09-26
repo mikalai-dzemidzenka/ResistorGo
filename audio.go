@@ -23,6 +23,9 @@ var punchPaths = []string{"resources/sounds/punch1.mp3", "resources/sounds/punch
 // blockPaths are the sounds a blow stopped by a guard makes.
 var blockPaths = []string{"resources/sounds/block1.mp3"}
 
+// shotPaths are the sounds a pistol shot makes, one picked at random each time.
+var shotPaths = []string{"resources/sounds/pistol1.mp3", "resources/sounds/pistol2.mp3"}
+
 // SoundVoices is how many of each sound can play at once. Playing a sound that
 // is still playing restarts it, so each sound gets this many aliases sharing
 // its samples, and a flurry of blows is heard blow by blow instead of cut short.
@@ -35,13 +38,13 @@ type voicedSound struct {
 }
 
 var (
-	punches, blocks []*voicedSound
+	punches, blocks, shots []*voicedSound
 	// its own random source, so hearing a blow can never change what the bots,
 	// which draw from the global one, decide
 	soundRng = rand.New(rand.NewSource(2))
-	// onPunch and onBlock, when set, are told of every punch and every block
-	// heard; tests count with them
-	onPunch, onBlock func()
+	// onPunch, onBlock and onShot, when set, are told of every punch, block
+	// and shot heard; tests count with them
+	onPunch, onBlock, onShot func()
 )
 
 // loadSounds decodes the sounds at paths and gives each its voices.
@@ -109,6 +112,14 @@ func blockHeard() {
 	playOne(blocks)
 }
 
+// shotHeard plays a gunshot.
+func shotHeard() {
+	if onShot != nil {
+		onShot()
+	}
+	playOne(shots)
+}
+
 // A musicTrack is one looping track, faded in and out by the stage.
 type musicTrack struct {
 	path  string
@@ -169,6 +180,7 @@ func initAudio() {
 	levelTrack.load()
 	punches = loadSounds(punchPaths)
 	blocks = loadSounds(blockPaths)
+	shots = loadSounds(shotPaths)
 	menuTrack.fade = 1
 	applyMusicVolume()
 	if menuTrack.ready {
@@ -182,7 +194,8 @@ func closeAudio() {
 	levelTrack.unload()
 	unloadSounds(punches)
 	unloadSounds(blocks)
-	punches, blocks = nil, nil
+	unloadSounds(shots)
+	punches, blocks, shots = nil, nil, nil
 	if rl.IsAudioDeviceReady() {
 		rl.CloseAudioDevice()
 	}

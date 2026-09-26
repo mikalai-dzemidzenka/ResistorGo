@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	ProtocolVersion  uint16 = 12
+	ProtocolVersion  uint16 = 13
 	DefaultPort             = 27015
 	ChanUnreliable   uint8  = 0 // commands, snapshots
 	ChanReliable     uint8  = 1 // hello, welcome, reject, bye
@@ -133,9 +133,16 @@ type ActorRec struct {
 	// and a server's scripts can change it; it cannot be worked out from
 	// whether the fighter is a bot.
 	Team uint8
+	// The gun: which one it holds, its aim, the shots it has fired (counted
+	// round, so every machine sees a shot as the count moving on) and the
+	// ticks before it can fire again, which prediction needs.
+	Weapon       uint8
+	Aim          uint8
+	Shots        uint8
+	ShotCooldown uint8
 }
 
-const actorRecSize = 47
+const actorRecSize = 51
 
 const (
 	fOrientLeft uint16 = 1 << iota
@@ -199,6 +206,7 @@ const (
 	bFaceLeft
 	bDown
 	bRoll
+	bGun
 )
 
 func recOf(a *Actor) ActorRec {
@@ -225,6 +233,10 @@ func recOf(a *Actor) ActorRec {
 		EnergyCalm:      uint8(min(a.EnergyCalm, EnergyCalmTicks)),
 		EnergyUntouched: uint8(min(a.EnergyUntouched, EnergyUntouchedTicks)),
 		Team:            a.Team,
+		Weapon:          a.Weapon,
+		Aim:             a.Aim,
+		Shots:           a.Shots,
+		ShotCooldown:    a.ShotCooldown,
 	}
 	flag := func(f uint16, on bool) {
 		if on {
@@ -291,6 +303,13 @@ func (r ActorRec) apply(a *Actor, w *World) {
 	a.EnergyCalm = uint16(min(r.EnergyCalm, EnergyCalmTicks))
 	a.EnergyUntouched = uint16(min(r.EnergyUntouched, EnergyUntouchedTicks))
 	a.Team = r.Team
+	a.Weapon = r.Weapon
+	if a.Weapon >= weaponCount {
+		a.Weapon = WeaponNone // a gun this build does not have
+	}
+	a.Aim = r.Aim
+	a.Shots = r.Shots
+	a.ShotCooldown = min(r.ShotCooldown, ShotCooldownTicks)
 	a.Attacker = nil
 	if r.AttackerID != 0 && w != nil {
 		a.Attacker = w.ByID(r.AttackerID)
@@ -466,8 +485,11 @@ func encodeCmds(cmds []Input) []byte {
 		if c.Roll {
 			buttons |= bRoll
 		}
+		if c.Gun {
+			buttons |= bGun
+		}
 		b = putU32(b, c.Seq)
-		b = append(b, buttons, c.Updown, c.RollAim)
+		b = append(b, buttons, c.Updown, c.RollAim, c.Aim)
 		b = putU32(b, c.ViewTick)
 		b = append(b, c.ViewFrac)
 	}
@@ -487,6 +509,7 @@ func decodeCmds(b []byte) ([]Input, error) {
 		buttons := r.u8()
 		c.Updown = r.u8()
 		c.RollAim = r.u8()
+		c.Aim = r.u8()
 		c.ViewTick = r.u32()
 		c.ViewFrac = r.u8()
 		c.Left = buttons&bLeft != 0
@@ -496,6 +519,7 @@ func decodeCmds(b []byte) ([]Input, error) {
 		c.FaceLeft = buttons&bFaceLeft != 0
 		c.Down = buttons&bDown != 0
 		c.Roll = buttons&bRoll != 0
+		c.Gun = buttons&bGun != 0
 		if c.Updown > 3 {
 			r.bad = true
 		}
@@ -530,7 +554,7 @@ func encodeSnapshot(s Snapshot) []byte {
 		b = putU16(b, a.Energy)
 		b = append(b, a.EnergyCalm, a.EnergyUntouched)
 		b = putU16(b, a.AttackerID)
-		b = append(b, a.Team)
+		b = append(b, a.Team, a.Weapon, a.Aim, a.Shots, a.ShotCooldown)
 	}
 	return b
 }
@@ -569,6 +593,10 @@ func decodeSnapshot(b []byte) (Snapshot, error) {
 		a.EnergyUntouched = r.u8()
 		a.AttackerID = r.u16()
 		a.Team = r.u8()
+		a.Weapon = r.u8()
+		a.Aim = r.u8()
+		a.Shots = r.u8()
+		a.ShotCooldown = r.u8()
 		// the guard height is the low bits; the top one is the jumped flag
 		if a.State >= uint8(stateCount) || a.Updown&^updownJumped > 3 {
 			r.bad = true

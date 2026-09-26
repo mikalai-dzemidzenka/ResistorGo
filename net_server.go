@@ -362,7 +362,7 @@ func (s *Server) Step() {
 	}
 }
 
-// runCmd advances p's fighter by one command, with lag-compensated hit tests while attacking.
+// runCmd advances p's fighter by one command, with lag-compensated hit tests while attacking or firing.
 func (s *Server) runCmd(p *netPlayer, in Input) {
 	a := p.Actor
 	a.Input = in
@@ -370,7 +370,10 @@ func (s *Server) runCmd(p *netPlayer, in Input) {
 		p.lastLog = time.Now()
 		s.logf("player %d view tick %d, server tick %d (%d behind)", p.ID, in.ViewTick, s.W.Tick, int64(s.W.Tick)-int64(in.ViewTick))
 	}
-	if !s.Cfg.LagComp || a.State != StateAttack {
+	// a swing, or a shot about to be fired: either is tested against what the
+	// player saw
+	firing := a.Weapon != WeaponNone && in.Attack
+	if !s.Cfg.LagComp || a.State != StateAttack && !firing {
 		a.Update(float32(FixedTimeStep))
 		return
 	}

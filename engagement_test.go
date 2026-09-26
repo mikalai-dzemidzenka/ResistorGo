@@ -564,8 +564,8 @@ func TestAHolderAloneKeepsItsPlace(t *testing.T) {
 // Nothing about the line goes over the wire. The record was 46 bytes before
 // the line; the one byte since is the fighter's team, which scripts change.
 func TestPlacesAreNotReplicated(t *testing.T) {
-	if actorRecSize != 46+1 {
-		t.Errorf("the replicated actor record is %d bytes, want the 46 it was before the line and the team", actorRecSize)
+	if actorRecSize != 46+1+4 {
+		t.Errorf("the replicated actor record is %d bytes, want the 46 it was before the line, the team and the gun's four", actorRecSize)
 	}
 }
 

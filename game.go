@@ -211,6 +211,7 @@ const OfflineBots = 3
 // and OfflineBots bots on the free spawn columns beside it.
 func startOffline() {
 	clearBlood()
+	clearShots()
 	NetMode = NetOffline
 	CL = newOfflineWorld()
 	enterLevel()
@@ -233,6 +234,7 @@ func newOfflineWorld() *World {
 func restartOffline() {
 	ResetTime()
 	clearBlood()
+	clearShots()
 	clearLatchedInput()
 	startOffline()
 }
@@ -278,6 +280,7 @@ func leaveMatch(reason string, screen int) {
 	NetMode = NetOffline
 	ResetTime()
 	clearBlood()
+	clearShots()
 	Editing = false
 	Stage = StageMainMenu
 	menuScreen = screen
@@ -331,6 +334,7 @@ func stepOffline(dt float32) {
 
 // presentEffects turns simulation events and states into local-only camera effects.
 func presentEffects(w *World) {
+	showShots(w)
 	local := w.Local
 	shake := false
 	for _, a := range w.Actors {
@@ -346,6 +350,8 @@ func presentEffects(w *World) {
 		}
 	}
 	Cam.Offset = CamOffset
+	Cam.Offset.X += camKick.X
+	Cam.Offset.Y += camKick.Y
 	if shake {
 		const offset = 2
 		Cam.Offset.Y += []float32{-offset, offset, -offset, offset, -offset, offset, -offset, offset}[int(GameTimeSec*1000)%8]
@@ -407,6 +413,7 @@ func runLevel(dt float32) {
 		}
 	}
 	updateBlood(CL, LE.solids, LE.objectsIndexed, dt)
+	ageShots(dt)
 	w := CL
 	local := w.Local
 
@@ -446,7 +453,7 @@ func runLevel(dt float32) {
 	Cam.Update(dt)
 
 	occluders := LE.LightOccluders()
-	computeLights(LE.lights, LE.areas, LE.ambient, occluders, Cam.View())
+	computeLights(withFlashes(LE.lights), LE.areas, LE.ambient, occluders, Cam.View())
 
 	// sort a copy: the simulation order of w.Actors must stay stable
 	drawList = append(drawList[:0], w.Actors...)
@@ -462,6 +469,7 @@ func runLevel(dt float32) {
 		LE.Draw() // TODO sort objects with actors
 		view := viewRect(Cam.View(), float32(ScreenFullTexture.Texture.Width), float32(ScreenFullTexture.Texture.Height))
 		drawStains(w, view) // on the level, under the fighters, lit like both
+		drawHoles(view)
 
 		locTime := rl.GetShaderLocation(WhiteShader, "time")
 		for _, a := range drawList {
@@ -475,6 +483,8 @@ func runLevel(dt float32) {
 			}
 		}
 		drawDroplets(view) // over the fighters, still in the lit scene
+		drawCasings(view)
+		drawPuffs(view) // smoke and dust, lit by the flash and darkened by the dark
 		if DevTools && Debug && Srv != nil {
 			for _, r := range Srv.LastRewound {
 				rl.DrawRectangleLinesEx(r, 1, rl.Orange)
@@ -492,6 +502,7 @@ func runLevel(dt float32) {
 			drawRim(a, i, LE.lights, occluders)
 		}
 		rl.EndBlendMode()
+		drawShotGlow() // over the lit scene, so the dark cannot dim a shot
 
 		// A bot's sight is drawn here rather than with the other debug boxes,
 		// which are inside the lit scene: the cone is a faint wash, and

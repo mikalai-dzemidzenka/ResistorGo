@@ -286,6 +286,7 @@ func (c *Client) reconcile(r ActorRec, ack uint32) {
 		c.W.Local = local
 		c.Played = true
 		r.apply(local, c.W)
+		local.SeenShots = local.Shots // shots fired before we joined are not shown
 		local.PrevPos = local.Pos
 		if Stage != StageLevel {
 			enterLevel()
@@ -369,7 +370,8 @@ func (c *Client) applyInterp() {
 			continue
 		}
 		a := c.W.ByID(id)
-		if a == nil {
+		fresh := a == nil
+		if fresh {
 			if !sent(id) {
 				continue // already gone on the server, e.g. our own corpse after a handover
 			}
@@ -378,6 +380,9 @@ func (c *Client) applyInterp() {
 			c.W.Add(a)
 		}
 		st.Rec.apply(a, c.W)
+		if fresh {
+			a.SeenShots = a.Shots // shots fired before it came into view are not shown
+		}
 		a.Pos = st.Pos
 		a.PrevPos = st.Pos
 		a.InterpolatedPos = st.Pos
