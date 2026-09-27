@@ -355,24 +355,28 @@ const (
 
 // puffKind is what smoke and dust differ in. A feel table, to be tuned by eye.
 type puffKind struct {
-	life       float32 // seconds
-	speed      float32 // px/s it leaves at, along its direction
-	spread     float32 // px/s of random scatter on top
-	drag       float32 // per second: how fast it loses its speed
-	lift       float32 // px/s² it rises with
-	grow, size float32 // radius it starts at, and ends at
-	color      rl.Color
+	life       float32    // seconds
+	speed      float32    // px/s it leaves at, along its direction
+	spread     float32    // px/s of random scatter on top
+	drag       float32    // per second: how fast it loses its speed
+	lift       float32    // px/s² it rises with
+	grow, size float32    // radius it starts at, and ends at
+	colors     []rl.Color // lightest first
 }
 
 var (
-	smoke = &puffKind{life: 0.9, speed: 90, spread: 24, drag: 4, lift: 80, grow: 0.5, size: 3.5, color: rl.Color{R: 170, G: 170, B: 175, A: 255}}
-	dust  = &puffKind{life: 0.5, speed: 25, spread: 10, drag: 5, lift: 20, grow: 0.5, size: 2, color: rl.Color{R: 150, G: 130, B: 105, A: 255}}
+	smoke = &puffKind{life: 0.9, speed: 90, spread: 24, drag: 4, lift: 80, grow: 0.5, size: 3.5, colors: []rl.Color{
+		{R: 199, G: 207, B: 221, A: 255}, {R: 180, G: 180, B: 180, A: 255}, {R: 156, G: 156, B: 156, A: 255},
+		{R: 133, G: 133, B: 133, A: 255}, {R: 113, G: 113, B: 113, A: 255}, {R: 93, G: 93, B: 93, A: 255},
+	}}
+	dust = &puffKind{life: 0.5, speed: 25, spread: 10, drag: 5, lift: 20, grow: 0.5, size: 2, colors: []rl.Color{{R: 150, G: 130, B: 105, A: 255}}}
 )
 
 // A puff of smoke or dust: local presentation, like the tracer.
 type puff struct {
 	pos, vel rl.Vector2
 	age      float32
+	shade    float32 // where on its kind's ramp it starts, 0 to 0.5
 	kind     *puffKind
 }
 
@@ -386,7 +390,8 @@ func newPuff(at, dir rl.Vector2, k *puffKind) puff {
 			X: dir.X*s + (rand.Float32()*2-1)*k.spread,
 			Y: dir.Y*s + (rand.Float32()*2-1)*k.spread,
 		},
-		kind: k,
+		shade: rand.Float32() * 0.5,
+		kind:  k,
 	}
 }
 
@@ -417,10 +422,17 @@ func drawPuffs(view rl.Rectangle) {
 				if float32(dx*dx+dy*dy) > r*r || !puffPixel(f, cx+dx, cy+dy) {
 					continue
 				}
-				rl.DrawPixel(cx+dx, cy+dy, p.kind.color)
+				rl.DrawPixel(cx+dx, cy+dy, puffShade(p.kind.colors, p.shade, f))
 			}
 		}
 	}
+}
+
+// puffShade is a puff's one flat colour from a lightest-first ramp: each puff
+// starts at its own shade, so a shot's puffs differ, and steps darker over the
+// half of the ramp below it as it ages (f from 0 to 1).
+func puffShade(ramp []rl.Color, shade, f float32) rl.Color {
+	return ramp[min(int((shade+0.5*f)*float32(len(ramp))), len(ramp)-1)]
 }
 
 // puffPixel is whether a puff this far through its life keeps the world pixel

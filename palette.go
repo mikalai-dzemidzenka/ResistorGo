@@ -1,48 +1,94 @@
 package resistor
 
-import rl "github.com/gen2brain/raylib-go/raylib"
+import (
+	"bytes"
+	"image/color"
+	"image/png"
+	"math"
+	"slices"
 
-var Palette = []rl.Color{
-	rl.NewColor(57, 31, 33, 255),
-	rl.NewColor(39, 35, 36, 255),
-	rl.NewColor(60, 51, 53, 255),
-	rl.NewColor(87, 28, 39, 255),
-	rl.NewColor(85, 70, 78, 255),
-	rl.NewColor(91, 74, 100, 255),
-	rl.NewColor(117, 102, 108, 255),
-	rl.NewColor(137, 30, 43, 255),
-	rl.NewColor(196, 36, 48, 255),
-	rl.NewColor(234, 50, 60, 255),
-	rl.NewColor(138, 72, 54, 255),
-	rl.NewColor(191, 111, 74, 255),
-	rl.NewColor(230, 156, 105, 255),
-	rl.NewColor(156, 123, 132, 255),
-	rl.NewColor(173, 153, 140, 255),
-	rl.NewColor(186, 177, 155, 255),
-	rl.NewColor(212, 207, 107, 255),
-	rl.NewColor(234, 240, 147, 255),
-	rl.NewColor(242, 221, 161, 255),
-	rl.NewColor(246, 245, 192, 255),
-	rl.NewColor(91, 74, 100, 255),
-	rl.NewColor(91, 96, 107, 255),
-	rl.NewColor(69, 59, 61, 255),
-	rl.NewColor(113, 124, 128, 255),
-	rl.NewColor(202, 213, 217, 255),
-	rl.NewColor(221, 235, 237, 255),
-	rl.NewColor(125, 153, 173, 255),
-	rl.NewColor(164, 184, 199, 255),
-	rl.SkyBlue,
-	rl.White,
-	rl.Red,
-	rl.Green,
-	rl.NewColor(0, 200, 48, 255),
-	rl.NewColor(10, 250, 50, 255),
-	rl.NewColor(10, 255, 60, 255),
+	rl "github.com/gen2brain/raylib-go/raylib"
+)
+
+// Palette is what the level quantizes to: every Endesga 64 colour a block
+// texture's or character sprite's pixels come nearest to, read once at load
+// time, plus the colours the HUD and effects must keep exactly.
+var Palette = levelPalette(append(blockTextures(), spriteSheets()...))
+
+// spriteSheets is every character animation sheet, in every skin.
+func spriteSheets() []string {
+	var names []string
+	for _, p := range animTable {
+		for _, s := range skins {
+			names = append(names, skinSheet(p, s))
+		}
+	}
+	return names
+}
+
+// levelPalette builds the level palette from the textures at paths. A
+// texture that cannot be read or decoded adds nothing.
+func levelPalette(paths []string) []rl.Color {
+	var pal []rl.Color
+	for _, c := range slices.Concat(bloodReds[:], []rl.Color{attackOutlineColor, redTeamColor, blueTeamColor,
+		structureBarTrack, structureBarFill, stunPipColor, energyBarFill,
+		// the ends of the grey ramp, so lighting can fall to near black and
+		// flare to white
+		EndesgaPalette[1], EndesgaPalette[2], EndesgaPalette[8],
+		// warm light: ambers and yellows, up to a cream highlight
+		EndesgaPalette[24], EndesgaPalette[30], EndesgaPalette[31], EndesgaPalette[32], EndesgaPalette[23],
+		// neutral greys halfway along Endesga's grey ramp, so dimly lit walls
+		// find a grey before a blue. Not Endesga: it has no more neutral greys.
+		{76, 76, 76, 255}, {113, 113, 113, 255}, {156, 156, 156, 255}, {200, 200, 200, 255}}) {
+		if !slices.Contains(pal, c) {
+			pal = append(pal, c)
+		}
+	}
+	used := make([]bool, len(EndesgaPalette))
+	for _, p := range paths {
+		data, err := textureBytes(p)
+		if err != nil {
+			continue
+		}
+		img, err := png.Decode(bytes.NewReader(data))
+		if err != nil {
+			continue
+		}
+		b := img.Bounds()
+		for y := b.Min.Y; y < b.Max.Y; y++ {
+			for x := b.Min.X; x < b.Max.X; x++ {
+				c := color.NRGBAModel.Convert(img.At(x, y)).(color.NRGBA)
+				if c.A == 0 {
+					continue
+				}
+				used[nearestEndesga(c.R, c.G, c.B)] = true
+			}
+		}
+	}
+	for i, c := range EndesgaPalette {
+		if used[i] && !slices.Contains(pal, c) {
+			pal = append(pal, c)
+		}
+	}
+	return pal
+}
+
+// nearestEndesga is the index of the Endesga 64 colour closest to r,g,b, by the
+// same RGB distance the palette shader uses.
+func nearestEndesga(r, g, b uint8) int {
+	best, bestD := 0, math.MaxInt
+	for i, p := range EndesgaPalette {
+		dr, dg, db := int(r)-int(p.R), int(g)-int(p.G), int(b)-int(p.B)
+		if d := dr*dr + dg*dg + db*db; d < bestD {
+			best, bestD = i, d
+		}
+	}
+	return best
 }
 
 // EndesgaPalette is the Endesga 64 palette (https://lospec.com/palette-list/endesga-64),
-// in its published order. The main menu is quantized to these 64 colours; the
-// level keeps its own Palette above.
+// in its published order. The main menu is quantized to all 64 colours; the
+// level to the ones its blocks use (Palette above).
 var EndesgaPalette = []rl.Color{
 	{255, 0, 64, 255}, {19, 19, 19, 255}, {27, 27, 27, 255}, {39, 39, 39, 255},
 	{61, 61, 61, 255}, {93, 93, 93, 255}, {133, 133, 133, 255}, {180, 180, 180, 255},

@@ -376,6 +376,7 @@ func runLevel(dt float32) {
 		// 512 is the resolution every light has always been drawn at; radius,
 		// color and intensity are set per light as it takes its turn
 		sharedLight = newZimaLight(512, 128, rl.White, 1)
+		flashlightMask = rl.LoadRenderTexture(sharedLight.Size, sharedLight.Size)
 
 		ScreenFullTexture = rl.LoadRenderTexture(SW*WindowScale, SH*WindowScale)
 		LightAccum = rl.LoadRenderTexture(SW*WindowScale, SH*WindowScale)
@@ -388,6 +389,9 @@ func runLevel(dt float32) {
 	}
 	if rl.IsKeyPressed(HUDKey) {
 		toggleHUD()
+	}
+	if rl.IsKeyPressed(FlashlightKey) {
+		toggleFlashlight()
 	}
 
 	spectating := Cli != nil && Cli.Spectator
@@ -457,6 +461,7 @@ func runLevel(dt float32) {
 
 	occluders := LE.LightOccluders()
 	computeLights(withFlashes(LE.lights), LE.areas, LE.ambient, occluders, Cam.View())
+	addFlashlights(w.Actors, occluders, Cam.View())
 
 	// sort a copy: the simulation order of w.Actors must stay stable
 	drawList = append(drawList[:0], w.Actors...)
