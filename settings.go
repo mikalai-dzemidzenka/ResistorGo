@@ -26,6 +26,8 @@ type Settings struct {
 	// HideHUD turns off the in-scene HUD over the fighters - the structure bar,
 	// its stun pips and the energy bar - for an unobstructed view of the fight.
 	HideHUD bool `json:"hideHud"`
+	// Flashlight lights a beam along the aim of every fighter holding the pistol.
+	Flashlight bool `json:"flashlight"`
 }
 
 func DefaultSettings() Settings {

@@ -545,3 +545,36 @@ func TestShotDebris(t *testing.T) {
 		t.Errorf("%d holes kept, oldest at %v; want %d with the first 5 dropped", len(holes), holes[0].at.X, MaxHoles)
 	}
 }
+
+// A beam comes from every living fighter holding the pistol, and only while
+// the setting is on.
+func TestFlashlightBeams(t *testing.T) {
+	defer func(on bool) { Cfg.Flashlight = on }(Cfg.Flashlight)
+	armed, bare, dead := NewActor(ZeroVec2, true), NewActor(ZeroVec2, true), NewActor(ZeroVec2, true)
+	armed.Weapon, dead.Weapon = WeaponPistol, WeaponPistol
+	dead.State = StateDeath
+	actors := []*Actor{armed, bare, dead}
+	Cfg.Flashlight = false
+	if bs := flashlightBeams(actors); len(bs) != 0 {
+		t.Errorf("%d beams with the setting off", len(bs))
+	}
+	Cfg.Flashlight = true
+	bs := flashlightBeams(actors)
+	if len(bs) != 1 || bs[0].dir != armed.shotDir() {
+		t.Errorf("beams %v, want one along the armed fighter's aim", bs)
+	}
+}
+
+// A puff's colour starts at its own shade and darkens with age, never off its ramp.
+func TestPuffShade(t *testing.T) {
+	r := smoke.colors
+	if puffShade(r, 0, 0) != r[0] || puffShade(r, 0.5, 1) != r[len(r)-1] {
+		t.Error("the ramp's ends are not reached")
+	}
+	if puffShade(r, 0, 1) == puffShade(r, 0, 0) {
+		t.Error("a puff does not darken as it ages")
+	}
+	if puffShade(r, 0.4, 0) == puffShade(r, 0, 0) {
+		t.Error("puffs of different shades look alike")
+	}
+}

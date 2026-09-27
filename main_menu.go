@@ -484,14 +484,21 @@ func drawMenuUI() {
 		if rlg.Slider(row(3), "", strconv.Itoa(Cfg.SoundVolume), &sfx, 0, 100); int(sfx) != Cfg.SoundVolume {
 			Cfg.SoundVolume = int(sfx)
 		}
-		label(4, "HUD (F1)")
-		hud := !Cfg.HideHUD
-		hudText := "Off"
-		if hud {
-			hudText = "On"
+		// two toggles share the row: the options screen has no room for a seventh
+		label(4, "HUD / Light")
+		onOff := func(on bool) string {
+			if on {
+				return "On"
+			}
+			return "Off"
 		}
-		rlg.Toggle(row(4), hudText, &hud)
+		left, right := row(4), row(4)
+		left.Width = (left.Width - menuRowGap) / 2
+		right.Width, right.X = left.Width, left.X+left.Width+menuRowGap
+		hud := !Cfg.HideHUD
+		rlg.Toggle(left, "F1 HUD: "+onOff(hud), &hud)
 		Cfg.HideHUD = !hud
+		rlg.Toggle(right, "F3 Light: "+onOff(Cfg.Flashlight), &Cfg.Flashlight)
 		if menuButton(5, "Back") {
 			menuBack()
 		}
