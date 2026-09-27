@@ -20,6 +20,9 @@ func TestEveryLoadedAssetIsEmbedded(t *testing.T) {
 		"level_1.json",
 	}
 	names = append(names, animTable...)
+	for _, p := range animTable {
+		names = append(names, goonSkin(p))
+	}
 	for _, n := range names {
 		if _, err := assetFS.ReadFile(n); err != nil {
 			t.Errorf("not embedded: %s", n)

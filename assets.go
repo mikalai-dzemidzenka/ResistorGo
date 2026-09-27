@@ -8,6 +8,7 @@ import "embed"
 //
 //go:embed resources/blocks/*.png
 //go:embed resources/threefour/*.png
+//go:embed resources/goon/*.png
 //go:embed resources/style_dark.rgs
 //go:embed resources/main_menu/resistor.png
 //go:embed resources/main_menu/head.obj

@@ -816,8 +816,19 @@ func (a *Actor) SetAnim(anim string, o AnimOptions) {
 	a.AnimYOffset = o.animYOffset
 }
 
+// skinned is the sheet this fighter draws anim with. Bots are bald goons and
+// players keep the hero's hair. Anim itself stays the hero's path: it is the
+// animation's id for the state machine and the wire, not only a texture. Owner
+// is what tells a client's copy of another player from a bot.
+func (a *Actor) skinned(anim string) string {
+	if a.IsPlayer || a.Owner != 0 {
+		return anim
+	}
+	return goonSkin(anim)
+}
+
 func (a *Actor) DrawFrame() {
-	tex, ok := resources[a.Anim]
+	tex, ok := resources[a.skinned(a.Anim)]
 	if !ok {
 		panic(a.Anim)
 	}
@@ -838,7 +849,7 @@ func (a *Actor) DrawFrame() {
 // sprite a second time, so they must read it from one place or they would drift
 // and trace a pose the fighter is not in.
 func (a *Actor) spriteDraw() (rl.Texture2D, rl.Rectangle, rl.Vector2) {
-	tex := resources[a.Anim]
+	tex := resources[a.skinned(a.Anim)]
 	pos := a.drawPos()
 	height := float32(48)
 	if a.AnimOnce {
@@ -891,7 +902,7 @@ func (a *Actor) topDraw() (tex rl.Texture2D, src rl.Rectangle, pos rl.Vector2, o
 	if !has {
 		return tex, src, pos, false
 	}
-	tex, ok = resources[anim]
+	tex, ok = resources[a.skinned(anim)]
 	if !ok {
 		return tex, src, pos, false
 	}
@@ -908,7 +919,7 @@ func (a *Actor) topDraw() (tex rl.Texture2D, src rl.Rectangle, pos rl.Vector2, o
 }
 
 func (a *Actor) DrawAnimOnce() {
-	tex, ok := resources[a.Anim]
+	tex, ok := resources[a.skinned(a.Anim)]
 	if !ok {
 		panic(a.Anim)
 	}
@@ -925,7 +936,7 @@ func (a *Actor) DrawAnimOnce() {
 }
 
 func (a *Actor) DrawAnim() {
-	tex, ok := resources[a.Anim]
+	tex, ok := resources[a.skinned(a.Anim)]
 	if !ok {
 		panic(a.Anim)
 	}

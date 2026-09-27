@@ -104,6 +104,12 @@ func animPath(id uint8) string {
 	return animTable[animID("resources/threefour/updown.png")]
 }
 
+// goonSkin is an animation's sheet in the goon skin: the same sheet with the
+// hair painted over, so it keeps the frames and timing of the original.
+func goonSkin(anim string) string {
+	return strings.Replace(anim, "/threefour/", "/goon/", 1)
+}
+
 // embeddedBlocks is every block texture this binary carries. It is what tells
 // the editor whether a texture would still be there in a build made now: one
 // that is only on disk can be placed, but would not ship.
@@ -170,6 +176,7 @@ func LoadTextures() {
 	}
 	for _, p := range animTable {
 		loadTex(p)
+		loadTex(goonSkin(p))
 	}
 
 	loadTex("resources/main_menu/resistor.png")
