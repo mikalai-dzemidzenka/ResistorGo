@@ -816,15 +816,19 @@ func (a *Actor) SetAnim(anim string, o AnimOptions) {
 	a.AnimYOffset = o.animYOffset
 }
 
+// PlayerSkin is the skin players are drawn in. The debug key flips it on this
+// machine only; it is not replicated.
+var PlayerSkin = skinHero
+
 // skinned is the sheet this fighter draws anim with. Bots are bald goons and
-// players keep the hero's hair. Anim itself stays the hero's path: it is the
+// players wear PlayerSkin. Anim itself stays the hero's path: it is the
 // animation's id for the state machine and the wire, not only a texture. Owner
 // is what tells a client's copy of another player from a bot.
 func (a *Actor) skinned(anim string) string {
 	if a.IsPlayer || a.Owner != 0 {
-		return anim
+		return skinSheet(anim, PlayerSkin)
 	}
-	return goonSkin(anim)
+	return skinSheet(anim, skinGoon)
 }
 
 func (a *Actor) DrawFrame() {

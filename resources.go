@@ -104,10 +104,19 @@ func animPath(id uint8) string {
 	return animTable[animID("resources/threefour/updown.png")]
 }
 
-// goonSkin is an animation's sheet in the goon skin: the same sheet with the
-// hair painted over, so it keeps the frames and timing of the original.
-func goonSkin(anim string) string {
-	return strings.Replace(anim, "/threefour/", "/goon/", 1)
+// Skins are directories of sheets drawn over threefour's: the same file names,
+// frames and timing, so a skin changes the look and nothing else.
+const (
+	skinHero     = "threefour"
+	skinGoon     = "goon"
+	skinMissfire = "missfire"
+)
+
+var skins = []string{skinHero, skinGoon, skinMissfire}
+
+// skinSheet is an animation's sheet in skin.
+func skinSheet(anim, skin string) string {
+	return strings.Replace(anim, "/"+skinHero+"/", "/"+skin+"/", 1)
 }
 
 // embeddedBlocks is every block texture this binary carries. It is what tells
@@ -175,8 +184,9 @@ func LoadTextures() {
 		loadBlockTex(p)
 	}
 	for _, p := range animTable {
-		loadTex(p)
-		loadTex(goonSkin(p))
+		for _, s := range skins {
+			loadTex(skinSheet(p, s))
+		}
 	}
 
 	loadTex("resources/main_menu/resistor.png")

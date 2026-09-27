@@ -21,7 +21,9 @@ func TestEveryLoadedAssetIsEmbedded(t *testing.T) {
 	}
 	names = append(names, animTable...)
 	for _, p := range animTable {
-		names = append(names, goonSkin(p))
+		for _, s := range skins {
+			names = append(names, skinSheet(p, s))
+		}
 	}
 	for _, n := range names {
 		if _, err := assetFS.ReadFile(n); err != nil {
