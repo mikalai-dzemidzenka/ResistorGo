@@ -1,8 +1,18 @@
 package resistor
 
-import "fmt"
+import (
+	"bytes"
+	"fmt"
+	"image"
+	"image/color"
+	"image/png"
+	"os"
+	"path/filepath"
+	"slices"
+	"testing"
 
-import "testing"
+	rl "github.com/gen2brain/raylib-go/raylib"
+)
 
 // The Endesga 64 table has to match the published palette exactly: a truncated
 // paste or an edited entry would silently change every menu colour.
@@ -30,5 +40,29 @@ func TestEndesgaPalette(t *testing.T) {
 		if got != c.want {
 			t.Errorf("colour %d is %s, want %s", c.i, got, c.want)
 		}
+	}
+}
+
+// A texture's opaque pixels bring in their nearest Endesga colours; transparent
+// ones bring in nothing, and the fixed HUD colours are always there.
+func TestLevelPaletteFromTextures(t *testing.T) {
+	img := image.NewNRGBA(image.Rect(0, 0, 2, 1))
+	img.Set(0, 0, color.NRGBA{60, 60, 60, 255}) // nearest is 3d3d3d
+	img.Set(1, 0, color.NRGBA{0, 255, 0, 0})    // transparent
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, img); err != nil {
+		t.Fatal(err)
+	}
+	p := filepath.Join(t.TempDir(), "block.png")
+	if err := os.WriteFile(p, buf.Bytes(), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	base := levelPalette(nil)
+	got := levelPalette([]string{p})
+	if len(got) != len(base)+1 || got[len(got)-1] != (rl.Color{61, 61, 61, 255}) {
+		t.Errorf("palette %v, want %v plus 3d3d3d", got, base)
+	}
+	if !slices.Contains(base, energyBarFill) {
+		t.Error("the fixed colours are missing")
 	}
 }

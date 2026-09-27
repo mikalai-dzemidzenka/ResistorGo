@@ -288,6 +288,15 @@ func loadTexDisk(name, diskPath string) bool {
 
 // loadBlockTex loads a block texture from wherever it is: the binary, or - for
 // one found beside the game - the disk.
+// textureBytes reads a texture from the build, or from disk if the build does
+// not carry it.
+func textureBytes(name string) ([]byte, error) {
+	if data, err := assetFS.ReadFile(name); err == nil {
+		return data, nil
+	}
+	return os.ReadFile(name)
+}
+
 func loadBlockTex(name string) {
 	if inBuild(name) {
 		loadTex(name)
