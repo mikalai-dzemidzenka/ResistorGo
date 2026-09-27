@@ -145,6 +145,9 @@ func Game() {
 		if DevTools && rl.IsKeyPressed(rl.KeyGrave) {
 			Debug = !Debug
 		}
+		if DevTools && Debug && rl.IsKeyPressed(rl.KeyF9) {
+			PlayerSkin = map[string]string{skinHero: skinMissfire, skinMissfire: skinHero}[PlayerSkin]
+		}
 		dt := rl.GetFrameTime()
 		if dt > 0.25 {
 			dt = 0.25
@@ -568,6 +571,7 @@ func runLevel(dt float32) {
 		rl.DrawText(fmt.Sprintf("gameTime:%f", GameTimeSec), 20, 30, 2, rl.White)
 		rl.DrawText(fmt.Sprintf("physTime:%f", PhysicsTime), 20, 40, 2, rl.White)
 		rl.DrawText(fmt.Sprintf("camera zoom speed %f", Cam.ZoomSpeed), 20, 50, 2, rl.White)
+		rl.DrawText(fmt.Sprintf("player skin: %s [F9]", PlayerSkin), 120, 20, 2, rl.White)
 		drawNetDebug()
 	}
 	rl.EndTextureMode()

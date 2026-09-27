@@ -104,6 +104,21 @@ func animPath(id uint8) string {
 	return animTable[animID("resources/threefour/updown.png")]
 }
 
+// Skins are directories of sheets drawn over threefour's: the same file names,
+// frames and timing, so a skin changes the look and nothing else.
+const (
+	skinHero     = "threefour"
+	skinGoon     = "goon"
+	skinMissfire = "missfire"
+)
+
+var skins = []string{skinHero, skinGoon, skinMissfire}
+
+// skinSheet is an animation's sheet in skin.
+func skinSheet(anim, skin string) string {
+	return strings.Replace(anim, "/"+skinHero+"/", "/"+skin+"/", 1)
+}
+
 // embeddedBlocks is every block texture this binary carries. It is what tells
 // the editor whether a texture would still be there in a build made now: one
 // that is only on disk can be placed, but would not ship.
@@ -169,7 +184,9 @@ func LoadTextures() {
 		loadBlockTex(p)
 	}
 	for _, p := range animTable {
-		loadTex(p)
+		for _, s := range skins {
+			loadTex(skinSheet(p, s))
+		}
 	}
 
 	loadTex("resources/main_menu/resistor.png")
