@@ -131,3 +131,28 @@ func TestStunAdaptsLikeAFlinch(t *testing.T) {
 		t.Errorf("a stun moved the guard on %.0f%% of hits, want the same about-a-third as a flinch", rate*100)
 	}
 }
+
+// A body is not hit, so it cannot adapt its guard: a swing through a bot lying
+// dead in reach lands nothing and leaves its guard and structure where they
+// were. The odds are one in three, so thirty swings would move a guard that
+// could be moved. The live case first, so a miss cannot pass for a pass.
+func TestABodyDoesNotAdaptItsGuard(t *testing.T) {
+	w, att, def := swing(t, 0)
+	def.IsPlayer = false
+	run(w, 1)
+	if !att.SwingHit {
+		t.Fatal("the swing did not land on a live bot in reach")
+	}
+
+	for range 30 {
+		w, att, def := swing(t, 0)
+		def.IsPlayer = false
+		def.State = StateDeath
+		structure := def.Structure
+		run(w, 1)
+		if att.SwingHit || def.Updown != 0 || def.Structure != structure {
+			t.Fatalf("a swing through a body: hit %t, guard %d, structure %v; want no hit, guard 0, structure %v",
+				att.SwingHit, def.Updown, def.Structure, structure)
+		}
+	}
+}

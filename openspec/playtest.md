@@ -11,10 +11,10 @@ means that change's design.md there. Tick here, not in the archived tasks.md.
       networked test: a floor with a wall, the client's own fighter held running
       into it. It stops at the same X on client and server, and `c.Corrections`
       is zero (the *Online against a wall* scenario).
-- [ ] `bot-sight-and-pathing 6f.2` Hold the bot's swing back in
+- [x] `bot-sight-and-pathing 6f.2` Hold the bot's swing back in
       `TestABotFollowsAFighterTheLengthOfTheCourse` so it measures pathing, not a
       kill; leave the jumps as they are.
-- [ ] `bot-sight-and-pathing 6f.3` Check the attack-target outline, the bot's
+- [x] `bot-sight-and-pathing 6f.3` Check the attack-target outline, the bot's
       guard adaptation and the spectator's follow target against a dead actor.
 
 ## Builds
