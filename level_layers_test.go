@@ -1,6 +1,10 @@
 package resistor
 
-import "testing"
+import (
+	"testing"
+
+	rl "github.com/gen2brain/raylib-go/raylib"
+)
 
 // A level saved before layer 0 was the fighters' loads its tiles behind them,
 // and every load of it fingerprints the same, so client and server agree.
@@ -75,5 +79,26 @@ func TestSplitAtFighters(t *testing.T) {
 	}
 	if got := layers(front); len(got) != 2 || got[0] != 1 || got[1] != 2 {
 		t.Errorf("drawn in front of the fighters: layers %v, want [1 2]", got)
+	}
+}
+
+// With the place tool out, only the current layer's tiles are drawn at full
+// strength; playing, or with another tool, every tile is.
+func TestOtherLayersFadeWhilePlacing(t *testing.T) {
+	le := newLevelEditor(39, 83, nil, nil)
+	le.tool = toolPlace
+	mine, other := LevelObject{Layer: -1}, LevelObject{Layer: 1}
+	if le.tileTint(mine, true) != rl.White {
+		t.Errorf("a tile on the current layer is faded")
+	}
+	if le.tileTint(other, true).A == 255 {
+		t.Errorf("a tile on another layer is not faded while placing")
+	}
+	if le.tileTint(other, false) != rl.White {
+		t.Errorf("a tile is faded outside the editor")
+	}
+	le.tool = toolRect
+	if le.tileTint(other, true) != rl.White {
+		t.Errorf("a tile is faded with the rect tool out")
 	}
 }

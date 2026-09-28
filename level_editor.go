@@ -854,10 +854,20 @@ func splitAtFighters(objects []LevelObject) (back, front []LevelObject) {
 	return objects[:i], objects[i:]
 }
 
+// tileTint is what a tile is drawn with: faded while the place tool is out and
+// the tile is on another layer than the one being placed on, so the layer a
+// click will change is the one that stands out.
+func (le *LevelEditor) tileTint(obj LevelObject, editing bool) rl.Color {
+	if editing && le.tool == toolPlace && obj.Layer != le.layer {
+		return rl.Fade(rl.White, 0.35)
+	}
+	return rl.White
+}
+
 func (le *LevelEditor) drawTiles(objects []LevelObject) {
 	for _, obj := range objects {
 		if tex, ok := resources[obj.Resource]; ok {
-			rl.DrawTexture(tex, obj.X, obj.Y, rl.White)
+			rl.DrawTexture(tex, obj.X, obj.Y, le.tileTint(obj, Editing))
 		} else {
 			le.drawMissing(obj)
 		}

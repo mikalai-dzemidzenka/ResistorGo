@@ -11,7 +11,7 @@ See proposal.md for the reasons behind this change. Most of the data model alrea
 
 **Non-Goals:**
 - Choosing a layer per texture (a default layer stored for each palette entry).
-- Dimming or hiding the other layers while editing.
+- Hiding the other layers while editing. (They are faded while the place tool is out, so the current layer stands out; see the editor tasks.)
 - Depth-sorting tiles against fighters within one layer.
 - Parallax.
 - Collision that depends on layer.

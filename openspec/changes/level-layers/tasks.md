@@ -9,6 +9,7 @@
 - [x] 2.2 Add a layer step that skips 0, bound to PageUp/PageDown in edit mode. Verify with a test that stepping up from -1 gives 1, stepping down from 1 gives -1, and that no sequence of steps lands on 0
 - [ ] 2.3 Show `layer: N` in the editor panel. Verify by running the editor and checking the panel shows the layer
 - [x] 2.4 Verify with a test that a tile on -1 and a tile on 1 can share a cell, and that `erase` on layer 1 leaves the -1 tile
+- [x] 2.5 Fade tiles on other layers while the place tool is out. Verified by `TestOtherLayersFadeWhilePlacing`; check by eye in the editor
 
 ## 3. Draw order
 
