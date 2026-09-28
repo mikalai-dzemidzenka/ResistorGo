@@ -56,7 +56,7 @@ The server SHALL advance each human player's fighter by exactly one simulation t
 - **THEN** its fighter holds position and state (unless hit), and resumes when commands arrive again
 
 ### Requirement: Snapshots
-The server SHALL send every client a snapshot 20 times per second on an unreliable channel. A snapshot SHALL contain the server tick and, for every fighter, the full state needed to predict or display it: id, position, velocity, state, facing, guard height, structure, energy and the wait since its last swing, landed hits toward the next stun, animation and its progress, combat flags, the gun it holds (if any), its aim, the ticks left before it can fire again, and a count of the shots it has fired. Each snapshot SHALL also carry the sequence number of the last command the server executed for the receiving player. A snapshot for up to 16 fighters SHALL fit in one packet of at most 1200 bytes.
+The server SHALL send every client a snapshot 20 times per second on an unreliable channel. A snapshot SHALL contain the server tick and, for every fighter, the full state needed to predict or display it: id, position, velocity, state, facing, guard height, structure, energy and the wait since its last swing, team, landed hits toward the next stun, animation and its progress, combat flags, the gun it holds (if any), its aim, the ticks left before it can fire again, and a count of the shots it has fired. Each snapshot SHALL also carry the sequence number of the last command the server executed for the receiving player. A snapshot for up to 16 fighters SHALL fit in one packet of at most 1200 bytes.
 
 #### Scenario: Snapshot rate
 - **WHEN** a client is connected for 1 second without packet loss
@@ -93,6 +93,10 @@ The server SHALL send every client a snapshot 20 times per second on an unreliab
 #### Scenario: Still fits the packet
 - **WHEN** a snapshot carries 16 fighters, each with structure, energy and gun state
 - **THEN** the packet is at most 1200 bytes
+
+#### Scenario: Team is replicated
+- **WHEN** a fighter's team changes on the server
+- **THEN** the next snapshot carries the new team, and every client treats that fighter as an ally or not as the server does
 
 ### Requirement: A snapshot names the receiving player's fighter
 Every snapshot SHALL tell the client which fighter is its own: the id of the receiving player's current fighter, or none when that player has no fighter. It SHALL be carried in the snapshot itself rather than announced once, so a client that loses the packet carrying a change is told again by the next one, and a client that connects while its player has no fighter is told the truth at once.
