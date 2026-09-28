@@ -7,7 +7,7 @@ means that change's design.md there. Tick here, not in the archived tasks.md.
 
 ## Code debt
 
-- [ ] `horizontal-collision 3.1` Following `net_collision_rects_test.go`, add a
+- [x] `horizontal-collision 3.1` Following `net_collision_rects_test.go`, add a
       networked test: a floor with a wall, the client's own fighter held running
       into it. It stops at the same X on client and server, and `c.Corrections`
       is zero (the *Online against a wall* scenario).
