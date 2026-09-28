@@ -405,27 +405,30 @@ func addAreas(areas []LitArea, cam rl.Camera2D, view rl.Rectangle) {
 
 // lightGlow is how much of the light map is added back over the modulated
 // scene. Multiplying alone leaves a light invisible over anything black - the
-// sky, an unlit tile - because nothing is there to be lit; this much of it
-// added on top keeps a light readable in the air, without washing the dark the
-// way the flat black overlay it replaced did.
+// sky - because nothing is there to be lit; this much of it added where the
+// scene drew nothing keeps a light readable in the air. Only there: a lit
+// block keeps exactly its texture's colours.
 const lightGlow = 0.2
 
 // compositeLights lights the scene with the light map, in screen space -
 // computeLights already put every light where the camera shows it. The scene is
 // modulated by the map, so an unlit pixel is what the scene drew there times
 // the ambient and a shadow keeps the colour of whatever stands in it, and then
-// the map is added back at lightGlow for the glow. Whatever is drawn after this
-// - the outlines, the bars, the editor's overlay - is untouched by either.
+// the map is added back at lightGlow where the scene is empty (its alpha, as
+// ScreenFullTexture is cleared transparent). Whatever is drawn after this - the
+// outlines, the bars, the editor's overlay - is untouched by either.
 func compositeLights() {
 	w, h := float32(LightAccum.Texture.Width), float32(LightAccum.Texture.Height)
 	src := rl.NewRectangle(0, 0, w, -h) // флип render-текстуры
 	dst := rl.NewRectangle(0, 0, w, h)
+	g := uint8(lightGlow * 255)
+	rl.SetBlendFactors(rl.OneMinusDstAlpha, rl.One, rl.FuncAdd) // + map * lightGlow * (1 - scene alpha)
 	for _, pass := range []struct {
 		blend rl.BlendMode
 		tint  rl.Color
 	}{
-		{rl.BlendMultiplied, rl.White},                   // scene * map
-		{rl.BlendAdditive, rl.Fade(rl.White, lightGlow)}, // + map * lightGlow
+		{rl.BlendMultiplied, rl.White}, // scene * map
+		{rl.BlendCustom, rl.Color{R: g, G: g, B: g, A: 255}},
 	} {
 		rl.BeginBlendMode(pass.blend)
 		rl.DrawTexturePro(LightAccum.Texture, src, dst, rl.Vector2{}, 0, pass.tint)

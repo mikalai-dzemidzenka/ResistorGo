@@ -43,8 +43,9 @@ func TestEndesgaPalette(t *testing.T) {
 	}
 }
 
-// A texture's opaque pixels bring in their nearest Endesga colours; transparent
-// ones bring in nothing, and the fixed HUD colours are always there.
+// A texture's opaque pixels bring in their nearest Endesga colours and, apart,
+// their own; transparent ones bring in nothing, and the fixed HUD colours are
+// always there.
 func TestLevelPaletteFromTextures(t *testing.T) {
 	img := image.NewNRGBA(image.Rect(0, 0, 2, 1))
 	img.Set(0, 0, color.NRGBA{60, 60, 60, 255}) // nearest is 3d3d3d
@@ -57,13 +58,20 @@ func TestLevelPaletteFromTextures(t *testing.T) {
 	if err := os.WriteFile(p, buf.Bytes(), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	base := levelPalette(nil)
-	got := levelPalette([]string{p})
-	if len(got) != len(base)+1 || got[len(got)-1] != (rl.Color{61, 61, 61, 255}) {
-		t.Errorf("palette %v, want %v plus 3d3d3d", got, base)
+	base, _ := levelPalette(nil)
+	got, exact := levelPalette([]string{p})
+	if want := append(slices.Clone(base), rl.Color{61, 61, 61, 255}); !slices.Equal(got, want) {
+		t.Errorf("palette %v, want %v", got, want)
+	}
+	if want := []rl.Color{{60, 60, 60, 255}}; !slices.Equal(exact, want) {
+		t.Errorf("texture colours %v, want %v", exact, want)
 	}
 	if !slices.Contains(base, energyBarFill) {
 		t.Error("the fixed colours are missing")
+	}
+	// the palette shader looks at no more than 256 entries
+	if len(Palette) > 256 {
+		t.Errorf("Palette has %d colours, the shader reads 256", len(Palette))
 	}
 }
 

@@ -17,6 +17,8 @@ const (
 	ShotCooldownTicks = 15  // a quarter of a second between shots
 	FlashSec          = 0.05
 	FlashRadius       = 80
+	FlashGlowRadius   = 32  // px of the warm glow added over the lit scene
+	FlashGlow         = 0.6 // how much of flashColor the glow adds at its center
 	TracerSec         = 0.06
 )
 
@@ -316,6 +318,15 @@ func drawShotGlow() {
 	for _, t := range tracers {
 		rl.DrawLineV(t.from, t.to, tracerColor)
 	}
+	// the flash's light saturates the light map wherever a level light already
+	// has, so near one it would add nothing; a glow added on top brightens past
+	// what the textures are, lit or not
+	glow := rl.Color{R: flashColor[0], G: flashColor[1], B: flashColor[2], A: uint8(FlashGlow * 255)}
+	rl.BeginBlendMode(rl.BlendAdditive)
+	for _, f := range flashes {
+		rl.DrawCircleGradient(f.at, FlashGlowRadius, glow, rl.Blank)
+	}
+	rl.EndBlendMode()
 	for _, f := range flashes {
 		drawMuzzleFire(f.at, f.dir)
 	}

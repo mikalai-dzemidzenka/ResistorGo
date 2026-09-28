@@ -471,7 +471,7 @@ func runLevel(dt float32) {
 	drawBodyMask(drawList, Cam.View())
 	rl.BeginTextureMode(ScreenFullTexture)
 	{
-		rl.ClearBackground(rl.Black)
+		rl.ClearBackground(rl.Blank) // transparent: compositeLights glows only where nothing was drawn
 		rl.BeginMode2D(Cam.View())
 
 		LE.Draw() // TODO sort objects with actors
