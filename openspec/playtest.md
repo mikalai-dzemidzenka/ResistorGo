@@ -25,7 +25,7 @@ means that change's design.md there. Tick here, not in the archived tasks.md.
       the development build.
 - [x] `roll-breaks-the-surround 3.2` Run the full suite and the course-following
       bot test several times; nothing regresses.
-- [ ] `level-layers 4.2` `.\build.ps1`, run it, and the level looks the same
+- [x] `level-layers 4.2` `.\build.ps1`, run it, and the level looks the same
       as before layers.
 
 ## Session 1: offline (`go run ./cmd`)
