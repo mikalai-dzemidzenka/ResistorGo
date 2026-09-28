@@ -56,8 +56,8 @@ func TestLevelFileAreasRoundTrip(t *testing.T) {
 	if !slices.Equal(areas, le.areas) {
 		t.Errorf("areas = %+v, want %+v", areas, le.areas)
 	}
-	if !slices.Equal(lights, le.lights) || len(objects[0]) != 2 {
-		t.Errorf("the areas cost the level %d lights and %d tiles", len(lights), len(objects[0]))
+	if !slices.Equal(lights, le.lights) || len(objects[-1]) != 2 {
+		t.Errorf("the areas cost the level %d lights and %d tiles", len(lights), len(objects[-1]))
 	}
 }
 
@@ -87,7 +87,7 @@ func TestLevelFileAreasBesideAnUnknownKey(t *testing.T) {
 		t.Fatalf("an unknown key failed the level: %v", err)
 	}
 	want := []LitArea{{X: 8, Y: 16, Width: 32, Height: 64, Feather: 4}}
-	if !slices.Equal(areas, want) || len(objects[0]) != 1 {
+	if !slices.Equal(areas, want) || len(objects[-1]) != 1 {
 		t.Errorf("loaded %+v and %v", areas, objects)
 	}
 }
@@ -146,8 +146,8 @@ func TestLoadLevelKeepsTheAreas(t *testing.T) {
 	if back.areaSel != -1 {
 		t.Errorf("a freshly loaded level has area %d selected", back.areaSel)
 	}
-	if back.ambient != le.ambient || len(back.lights) != len(threeLights) || len(back.objects[0]) != 2 {
-		t.Errorf("loaded %+v, %d lights and %d tiles with them", back.ambient, len(back.lights), len(back.objects[0]))
+	if back.ambient != le.ambient || len(back.lights) != len(threeLights) || len(back.objects[-1]) != 2 {
+		t.Errorf("loaded %+v, %d lights and %d tiles with them", back.ambient, len(back.lights), len(back.objects[-1]))
 	}
 }
 

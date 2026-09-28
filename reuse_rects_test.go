@@ -52,20 +52,20 @@ func TestOwnIsNeverSaved(t *testing.T) {
 func TestMarkOwnRects(t *testing.T) {
 	le := newLevelEditor(39, 83, []LevelObject{{Resource: "x", CollisionRects: coll(10, 10)}}, nil)
 	match, differ, unknown := Vector2i{X: 39}, Vector2i{X: 78}, Vector2i{X: 117}
-	le.objects[0] = LevelLayer{
+	le.objects[-1] = LevelLayer{
 		match:   {Resource: "x", X: 39, CollisionRects: coll(10, 10)},
 		differ:  {Resource: "x", X: 78, CollisionRects: coll(11, 10)},
 		unknown: {Resource: "y", X: 117, CollisionRects: coll(10, 10)},
 	}
 	before, _ := le.marshal()
 	le.markOwnRects()
-	if le.objects[0][match].own {
+	if le.objects[-1][match].own {
 		t.Errorf("a tile matching its texture does not follow it")
 	}
-	if !le.objects[0][differ].own {
+	if !le.objects[-1][differ].own {
 		t.Errorf("a tile differing from its texture follows it")
 	}
-	if !le.objects[0][unknown].own {
+	if !le.objects[-1][unknown].own {
 		t.Errorf("a tile of a texture with no palette entry follows it")
 	}
 	if after, _ := le.marshal(); string(after) != string(before) {
@@ -124,12 +124,12 @@ func TestPlacedTileFollowsUntilEdited(t *testing.T) {
 		pos := Vector2i{X: x}
 		le.selectEntry(0)
 		le.place(pos)
-		if le.objects[0][pos].own {
+		if le.objects[-1][pos].own {
 			t.Fatalf("a newly placed tile does not follow its texture")
 		}
 		le.selectAt(pos)
 		edit()
-		if !le.objects[0][pos].own {
+		if !le.objects[-1][pos].own {
 			t.Errorf("%s: a tile edited by hand still follows its texture", name)
 		}
 	}
@@ -154,17 +154,17 @@ func TestTextureChangeReachesFollowingTiles(t *testing.T) {
 	le.selectEntry(0)
 	le.setActive(rectp(20, 20))
 	for _, p := range []Vector2i{follow, follow2} {
-		if got := le.objects[0][p].CollisionRects[0]; got != *rectp(20, 20) {
+		if got := le.objects[-1][p].CollisionRects[0]; got != *rectp(20, 20) {
 			t.Errorf("a following tile has %+v after its texture changed", got)
 		}
 	}
-	if got := le.objects[0][own].CollisionRects[0]; got != *rectp(5, 5) {
+	if got := le.objects[-1][own].CollisionRects[0]; got != *rectp(5, 5) {
 		t.Errorf("a hand-edited tile took its texture's change: %+v", got)
 	}
-	if got := le.objects[0][other].CollisionRects[0]; got != *rectp(10, 10) {
+	if got := le.objects[-1][other].CollisionRects[0]; got != *rectp(10, 10) {
 		t.Errorf("a tile of another texture changed: %+v", got)
 	}
-	a, b := &le.objects[0][follow].CollisionRects[0], &le.objects[0][follow2].CollisionRects[0]
+	a, b := &le.objects[-1][follow].CollisionRects[0], &le.objects[-1][follow2].CollisionRects[0]
 	if a == b || a == &le.levelObjects[0].CollisionRects[0] {
 		t.Errorf("following tiles share a rectangle with each other or with the entry")
 	}
@@ -182,7 +182,7 @@ func TestFollowTexture(t *testing.T) {
 	le.dirty = false
 
 	le.followTexture()
-	obj := le.objects[0][pos]
+	obj := le.objects[-1][pos]
 	if obj.own || obj.CollisionRects[0] != *rectp(10, 10) {
 		t.Fatalf("after F the tile has %+v, own %t; want its texture's rectangle, following", obj.CollisionRects, obj.own)
 	}
@@ -191,7 +191,7 @@ func TestFollowTexture(t *testing.T) {
 	}
 	le.selectEntry(0)
 	le.setActive(rectp(30, 30))
-	if got := le.objects[0][pos].CollisionRects[0]; got != *rectp(30, 30) {
+	if got := le.objects[-1][pos].CollisionRects[0]; got != *rectp(30, 30) {
 		t.Errorf("after F the tile did not take its texture's next change: %+v", got)
 	}
 
@@ -202,10 +202,10 @@ func TestFollowTexture(t *testing.T) {
 	le.selectEntry(0)
 	le.followTexture()
 	stray := Vector2i{X: 390}
-	le.objects[0][stray] = LevelObject{Resource: "gone", X: 390, CollisionRects: coll(1, 1), own: true}
+	le.objects[-1][stray] = LevelObject{Resource: "gone", X: 390, CollisionRects: coll(1, 1), own: true}
 	le.selectAt(stray)
 	le.followTexture()
-	if le.dirty || !le.objects[0][stray].own {
+	if le.dirty || !le.objects[-1][stray].own {
 		t.Errorf("F acted where there was nothing for it to do")
 	}
 }
@@ -235,7 +235,7 @@ func TestCopyPaste(t *testing.T) {
 	if len(b.LightRects) != 0 {
 		t.Errorf("the source had no light rectangle, but the target kept one")
 	}
-	if got := le.objects[0][tile]; got.own || got.CollisionRects[0] != *rectp(10, 10) || len(got.LightRects) != 0 {
+	if got := le.objects[-1][tile]; got.own || got.CollisionRects[0] != *rectp(10, 10) || len(got.LightRects) != 0 {
 		t.Errorf("a following tile of the pasted-onto texture did not take the paste: %+v", got)
 	}
 
@@ -255,12 +255,12 @@ func TestCopyPaste(t *testing.T) {
 	le.selectAt(tile)
 	le.clip = ObjectRects{Collision: coll(7, 7)}
 	le.pasteSelection()
-	if got := le.objects[0][tile]; !got.own || got.CollisionRects[0] != *rectp(7, 7) {
+	if got := le.objects[-1][tile]; !got.own || got.CollisionRects[0] != *rectp(7, 7) {
 		t.Errorf("pasting onto a tile did not give it the rectangles and detach it: %+v", got)
 	}
 	le.selectEntry(1)
 	le.setActive(rectp(50, 50))
-	if got := le.objects[0][tile].CollisionRects[0]; got != *rectp(7, 7) {
+	if got := le.objects[-1][tile].CollisionRects[0]; got != *rectp(7, 7) {
 		t.Errorf("a tile pasted onto took its texture's next change: %+v", got)
 	}
 }
@@ -287,7 +287,7 @@ func TestPresets(t *testing.T) {
 	le.place(tile)
 	le.selectAt(tile)
 	le.usePreset(0, false)
-	if got := le.objects[0][tile]; !got.own || !sameRects(got.rects(), *le.presets[0]) {
+	if got := le.objects[-1][tile]; !got.own || !sameRects(got.rects(), *le.presets[0]) {
 		t.Errorf("a tile given slot 1 = %+v, want its own copy of the slot", got)
 	}
 	if len(le.levelObjects[1].LightRects) != 0 {
@@ -299,7 +299,7 @@ func TestPresets(t *testing.T) {
 	frame(&le)
 	le.usePreset(0, false)
 	frame(&le)
-	if !sameRects(le.levelObjects[1].rects(), le.objects[0][tile].rects()) {
+	if !sameRects(le.levelObjects[1].rects(), le.objects[-1][tile].rects()) {
 		t.Errorf("palette b = %+v, want the rectangles Shift kept", le.levelObjects[1].rects())
 	}
 	le.undo()

@@ -18,11 +18,11 @@ var threeLights = []LevelLight{
 
 func levelWithLights(lights []LevelLight) *LevelEditor {
 	le := newLevelEditor(39, 83, nil, nil)
-	le.objects[0] = LevelLayer{
-		{X: 39}:         {Resource: "a", X: 39, CollisionRects: []rl.Rectangle{{Width: 5, Height: 5}}},
-		{X: -78, Y: 83}: {Resource: "b", X: -78, Y: 83},
+	le.objects[-1] = LevelLayer{
+		{X: 39}:         {Resource: "a", Layer: -1, X: 39, CollisionRects: []rl.Rectangle{{Width: 5, Height: 5}}},
+		{X: -78, Y: 83}: {Resource: "b", Layer: -1, X: -78, Y: 83},
 	}
-	le.objects[-1] = nil
+	le.objects[1] = nil
 	le.lights = slices.Clone(lights) // tests move lights; threeLights must stay as it is
 	return &le
 }
@@ -62,7 +62,7 @@ func TestLevelFileWithoutLights(t *testing.T) {
 		t.Errorf("a level without lights saved other tiles: %d, want %d", got, le.Hash())
 	}
 	objects, lights, _, _, err := parseLevel(b)
-	if err != nil || len(lights) != 0 || len(objects[0]) != 2 {
+	if err != nil || len(lights) != 0 || len(objects[-1]) != 2 {
 		t.Errorf("loaded %d layers, %d lights, err %v", len(objects), len(lights), err)
 	}
 }
@@ -72,7 +72,7 @@ func TestLevelFileSkipsUnknownKeys(t *testing.T) {
 	if err != nil {
 		t.Fatalf("an unknown key failed the level: %v", err)
 	}
-	if len(objects[0]) != 1 || len(lights) != 0 {
+	if len(objects[-1]) != 1 || len(lights) != 0 {
 		t.Errorf("loaded %v and %v", objects, lights)
 	}
 }

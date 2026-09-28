@@ -94,7 +94,7 @@ type LevelEditor struct {
 	levelObjects           []LevelObject
 	obj                    LevelObject // current object
 	objIdx                 int         // which palette entry obj came from, -1 for none
-	layer                  int         // current layer
+	layer                  int         // where place puts tiles and erase takes them from; never 0, the fighters'
 	gridW                  int32
 	gridH                  int32
 	objects                map[int]LevelLayer // layer - pos - object
@@ -163,6 +163,7 @@ func newLevelEditor(gridW, gridH int32, palette []LevelObject, defaults map[stri
 	le := LevelEditor{
 		levelObjects: palette,
 		objIdx:       -1,
+		layer:        -1,
 		gridW:        gridW,
 		gridH:        gridH,
 		objects:      make(map[int]LevelLayer),
@@ -175,6 +176,16 @@ func newLevelEditor(gridW, gridH int32, palette []LevelObject, defaults map[stri
 	}
 	le.selectEntry(0) // an empty palette leaves nothing selected, and nothing to place
 	return le
+}
+
+// stepLayer is the layer one step up or down from l. Layer 0 is the
+// fighters', so a step over it lands on the other side.
+func stepLayer(l, dir int) int {
+	l += dir
+	if l == 0 {
+		l += dir
+	}
+	return l
 }
 
 // snapCell is the grid cell the place tool puts an object in for a world point.
@@ -258,6 +269,12 @@ func (le *LevelEditor) Update(dt float32) {
 		}
 		if rl.IsKeyPressed(rl.KeyF) {
 			le.followTexture()
+		}
+		if rl.IsKeyPressed(rl.KeyPageUp) {
+			le.layer = stepLayer(le.layer, 1)
+		}
+		if rl.IsKeyPressed(rl.KeyPageDown) {
+			le.layer = stepLayer(le.layer, -1)
 		}
 		if le.tool == toolPlace || le.tool == toolRect {
 			for i := range presetSlots {
@@ -827,14 +844,37 @@ func (le *LevelEditor) objBounds(obj LevelObject) rl.Rectangle {
 	return rl.Rectangle{X: float32(obj.X), Y: float32(obj.Y), Width: w, Height: h}
 }
 
-func (le *LevelEditor) Draw() {
-	for _, obj := range le.objectsIndexed {
+// splitAtFighters splits objects, sorted by layer as objectsIndexed is, into
+// the tiles drawn behind the fighters - layer 0 and below - and those in front.
+func splitAtFighters(objects []LevelObject) (back, front []LevelObject) {
+	i := slices.IndexFunc(objects, func(o LevelObject) bool { return o.Layer > 0 })
+	if i < 0 {
+		i = len(objects)
+	}
+	return objects[:i], objects[i:]
+}
+
+func (le *LevelEditor) drawTiles(objects []LevelObject) {
+	for _, obj := range objects {
 		if tex, ok := resources[obj.Resource]; ok {
 			rl.DrawTexture(tex, obj.X, obj.Y, rl.White)
 		} else {
 			le.drawMissing(obj)
 		}
 	}
+}
+
+// DrawBackground draws the tiles behind the fighters.
+func (le *LevelEditor) DrawBackground() {
+	back, _ := splitAtFighters(le.objectsIndexed)
+	le.drawTiles(back)
+}
+
+// DrawForeground draws the tiles in front of the fighters, and over them the
+// editor's and the debug view's marks for every tile.
+func (le *LevelEditor) DrawForeground() {
+	_, front := splitAtFighters(le.objectsIndexed)
+	le.drawTiles(front)
 	if (DevTools && Debug) || Editing {
 		for _, obj := range le.objectsIndexed {
 			for _, c := range obj.CollisionRects {
@@ -1377,6 +1417,7 @@ func (le *LevelEditor) drawPanel() {
 	switch le.tool {
 	case toolPlace:
 		rlg.Label(row(), "LMB place, RMB delete (Q: next tool)")
+		rlg.Label(row(), fmt.Sprintf("Layer %d (PgUp/PgDn)", le.layer))
 		if button(row(), "Pick texture (Tab)", true) {
 			le.OpenObjects()
 		}
