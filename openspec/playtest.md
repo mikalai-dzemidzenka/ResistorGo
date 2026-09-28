@@ -19,11 +19,11 @@ means that change's design.md there. Tick here, not in the archived tasks.md.
 
 ## Builds
 
-- [ ] `horizontal-collision 4.2` `./build.ps1 -Out <scratch>` and
+- [x] `horizontal-collision 4.2` `./build.ps1 -Out <scratch>` and
       `./build.ps1 -Linux` both pack.
-- [ ] `main-menu-is-a-terminal 6.5` `.\build.ps1`, run it, and the menu matches
+- [x] `main-menu-is-a-terminal 6.5` `.\build.ps1`, run it, and the menu matches
       the development build.
-- [ ] `roll-breaks-the-surround 3.2` Run the full suite and the course-following
+- [x] `roll-breaks-the-surround 3.2` Run the full suite and the course-following
       bot test several times; nothing regresses.
 
 ## Session 1: offline (`go run ./cmd`)
