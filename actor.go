@@ -1247,11 +1247,15 @@ func clearLatchedInput() {
 	pressedAttack, pressedJump, pressedDown, pressedGun = false, false, false, false
 }
 
+// keyDown is how sampleInput reads a held key; tests swap it to hold one
+// without a window.
+var keyDown = rl.IsKeyDown
+
 // sampleInput reads the local player's devices into a command for actor a.
 func sampleInput(a *Actor) Input {
 	in := Input{
-		Right:  rl.IsKeyDown(rl.KeyA),
-		Left:   rl.IsKeyDown(rl.KeyD),
+		Right:  keyDown(rl.KeyA),
+		Left:   keyDown(rl.KeyD),
 		Attack: pressedAttack,
 		Jump:   pressedJump,
 		Down:   pressedDown,
