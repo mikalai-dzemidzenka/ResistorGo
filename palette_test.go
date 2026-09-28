@@ -66,3 +66,14 @@ func TestLevelPaletteFromTextures(t *testing.T) {
 		t.Error("the fixed colours are missing")
 	}
 }
+
+// Close entries gain the colour between them; far ones do not, and the
+// original entries keep their order at the front.
+func TestWithMidpoints(t *testing.T) {
+	a, b, far := rl.Color{60, 60, 60, 255}, rl.Color{66, 76, 110, 255}, rl.Color{255, 255, 255, 255}
+	got := withMidpoints([]rl.Color{a, b, far}, 64)
+	want := []rl.Color{a, b, far, {63, 68, 85, 255}}
+	if !slices.Equal(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}

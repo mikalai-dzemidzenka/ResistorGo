@@ -13,7 +13,28 @@ import (
 // Palette is what the level quantizes to: every Endesga 64 colour a block
 // texture's or character sprite's pixels come nearest to, read once at load
 // time, plus the colours the HUD and effects must keep exactly.
-var Palette = levelPalette(append(blockTextures(), spriteSheets()...))
+var Palette = withMidpoints(levelPalette(append(blockTextures(), spriteSheets()...)), 64)
+
+// withMidpoints adds the colour halfway between every two entries of pal
+// closer than maxDist, so a tone between two ramps (a warm dark grey between
+// Endesga's blue-greys and browns) finds its own entry instead of the nearest
+// blue. The entries of pal come first and are unchanged.
+func withMidpoints(pal []rl.Color, maxDist int) []rl.Color {
+	out := slices.Clone(pal)
+	for i, a := range pal {
+		for _, b := range pal[i+1:] {
+			dr, dg, db := int(a.R)-int(b.R), int(a.G)-int(b.G), int(a.B)-int(b.B)
+			if dr*dr+dg*dg+db*db >= maxDist*maxDist {
+				continue
+			}
+			m := rl.Color{uint8((int(a.R) + int(b.R)) / 2), uint8((int(a.G) + int(b.G)) / 2), uint8((int(a.B) + int(b.B)) / 2), 255}
+			if !slices.Contains(out, m) {
+				out = append(out, m)
+			}
+		}
+	}
+	return out
+}
 
 // spriteSheets is every character animation sheet, in every skin.
 func spriteSheets() []string {
@@ -32,9 +53,14 @@ func levelPalette(paths []string) []rl.Color {
 	var pal []rl.Color
 	for _, c := range slices.Concat(bloodReds[:], []rl.Color{attackOutlineColor, redTeamColor, blueTeamColor,
 		structureBarTrack, structureBarFill, stunPipColor, energyBarFill,
+		// black, or an unlit pixel finds Endesga's dark blue-purples before its
+		// darkest grey (19,19,19), which is farther from black than they are
+		rl.Black,
 		// the ends of the grey ramp, so lighting can fall to near black and
 		// flare to white
 		EndesgaPalette[1], EndesgaPalette[2], EndesgaPalette[8],
+		// dark purples, for shadows with some colour in them
+		EndesgaPalette[16], EndesgaPalette[53], EndesgaPalette[54],
 		// warm light: ambers and yellows, up to a cream highlight
 		EndesgaPalette[24], EndesgaPalette[30], EndesgaPalette[31], EndesgaPalette[32], EndesgaPalette[23],
 		// neutral greys halfway along Endesga's grey ramp, so dimly lit walls
