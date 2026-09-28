@@ -10,10 +10,13 @@ import (
 	rl "github.com/gen2brain/raylib-go/raylib"
 )
 
-// Palette is what the level quantizes to: every Endesga 64 colour a block
-// texture's or character sprite's pixels come nearest to, read once at load
-// time, plus the colours the HUD and effects must keep exactly.
-var Palette = withMidpoints(levelPalette(append(blockTextures(), spriteSheets()...)), 64)
+// Palette is what the level quantizes to: every colour of the block textures
+// and character sprites and the Endesga 64 colours they come nearest to, read
+// once at load time, plus the colours the HUD and effects must keep exactly.
+var Palette = func() []rl.Color {
+	pal, exact := levelPalette(append(blockTextures(), spriteSheets()...))
+	return withExact(withMidpoints(pal, 64), exact)
+}()
 
 // withMidpoints adds the colour halfway between every two entries of pal
 // closer than maxDist, so a tone between two ramps (a warm dark grey between
@@ -47,10 +50,11 @@ func spriteSheets() []string {
 	return names
 }
 
-// levelPalette builds the level palette from the textures at paths. A
-// texture that cannot be read or decoded adds nothing.
-func levelPalette(paths []string) []rl.Color {
-	var pal []rl.Color
+// levelPalette builds the level palette from the textures at paths: the fixed
+// colours and the Endesga ones the textures come nearest to, and apart from
+// them, the textures' own colours. A texture that cannot be read or decoded
+// adds nothing.
+func levelPalette(paths []string) (pal, exact []rl.Color) {
 	for _, c := range slices.Concat(bloodReds[:], []rl.Color{attackOutlineColor, redTeamColor, blueTeamColor,
 		structureBarTrack, structureBarFill, stunPipColor, energyBarFill,
 		// black, or an unlit pixel finds Endesga's dark blue-purples before its
@@ -88,11 +92,27 @@ func levelPalette(paths []string) []rl.Color {
 					continue
 				}
 				used[nearestEndesga(c.R, c.G, c.B)] = true
+				if e := (rl.Color{R: c.R, G: c.G, B: c.B, A: 255}); !slices.Contains(exact, e) {
+					exact = append(exact, e)
+				}
 			}
 		}
 	}
 	for i, c := range EndesgaPalette {
 		if used[i] && !slices.Contains(pal, c) {
+			pal = append(pal, c)
+		}
+	}
+	return pal, exact
+}
+
+// withExact adds the textures' own colours after pal's, so a fully lit texture
+// is drawn exactly as painted. After the midpoints, which are for the ramp as
+// it dims: taken between every close pair of these as well, they would carry
+// the palette past the 256 colours the shader reads.
+func withExact(pal, exact []rl.Color) []rl.Color {
+	for _, c := range exact {
+		if !slices.Contains(pal, c) {
 			pal = append(pal, c)
 		}
 	}
