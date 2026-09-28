@@ -14,7 +14,7 @@ The server SHALL simulate the world at a fixed 60 ticks per second with a monoto
 - **THEN** the server ignores it, and the fighter's state is determined only by server simulation
 
 ### Requirement: Input commands
-Each client simulation tick, the client SHALL produce one input command. The command SHALL contain a sequence number, the movement buttons (left, right), the edge-triggered actions (attack, jump, climb down, draw or holster the gun), whether the roll button is held, the guard height (low, mid, high or block-all), the gun's aim, the desired facing, and the server tick the client was displaying for other fighters (the view tick). Every packet sent SHALL also repeat the most recent previously sent commands (at least the last 2), so a single lost packet does not lose input.
+Each client simulation tick, a client that controls a fighter SHALL produce one input command. The command SHALL contain a sequence number, the movement buttons (left, right), the edge-triggered actions (attack, jump, climb down, draw or holster the gun), whether the roll button is held, the guard height (low, mid, high or block-all), the gun's aim, the desired facing, and the server tick the client was displaying for other fighters (the view tick). Every packet sent SHALL also repeat the most recent previously sent commands (at least the last 2), so a single lost packet does not lose input. A spectator client SHALL NOT send input commands.
 
 #### Scenario: Lost input packet
 - **WHEN** one input packet from a client is lost
@@ -40,6 +40,10 @@ Each client simulation tick, the client SHALL produce one input command. The com
 - **WHEN** a client holding the pistol clicks LMB with the mouse above its fighter
 - **THEN** the server's fighter fires on the tick that command is executed, along the same aim the client predicted
 
+#### Scenario: Spectator sends no commands
+- **WHEN** a spectator watches a match
+- **THEN** it sends no input commands to the server
+
 ### Requirement: Per-player command execution
 The server SHALL advance each human player's fighter by exactly one simulation tick per executed command of that player, in sequence order. Per server tick it SHALL execute the commands received for that player, limited so a player cannot average more than one command per server tick (a short burst allowance for jitter is permitted). If no commands arrive, the fighter SHALL not advance on its own, except for reactions forced on it by others (being hit or blocking).
 
@@ -56,7 +60,7 @@ The server SHALL advance each human player's fighter by exactly one simulation t
 - **THEN** its fighter holds position and state (unless hit), and resumes when commands arrive again
 
 ### Requirement: Snapshots
-The server SHALL send every client a snapshot 20 times per second on an unreliable channel. A snapshot SHALL contain the server tick and, for every fighter, the full state needed to predict or display it: id, position, velocity, state, facing, guard height, structure, energy and the wait since its last swing, team, landed hits toward the next stun, animation and its progress, combat flags, the gun it holds (if any), its aim, the ticks left before it can fire again, and a count of the shots it has fired. Each snapshot SHALL also carry the sequence number of the last command the server executed for the receiving player. A snapshot for up to 16 fighters SHALL fit in one packet of at most 1200 bytes.
+The server SHALL send every client a snapshot 20 times per second on an unreliable channel. A snapshot SHALL contain the server tick and, for every fighter, the full state needed to predict or display it: id, position, velocity, state, facing, guard height, structure, energy and the wait since its last swing, team, landed hits toward the next stun, the length of the run of hits against it, animation and its progress, combat flags, the gun it holds (if any), its aim, the ticks left before it can fire again, and a count of the shots it has fired. Each snapshot SHALL also carry the sequence number of the last command the server executed for the receiving player. A snapshot for up to 16 fighters SHALL fit in one packet of at most 1200 bytes.
 
 #### Scenario: Snapshot rate
 - **WHEN** a client is connected for 1 second without packet loss
@@ -89,6 +93,14 @@ The server SHALL send every client a snapshot 20 times per second on an unreliab
 #### Scenario: Shots are heard from the count
 - **WHEN** another player fires between two snapshots
 - **THEN** the next snapshot's shot count has gone up by one, and every client shows that shot once
+
+#### Scenario: The run of hits is replicated
+- **WHEN** a fighter has taken three hits in a row on the server
+- **THEN** the next snapshot carries a run of three, so every client agrees on what the next hit costs
+
+#### Scenario: A broken run is replicated
+- **WHEN** a fighter under a run of hits blocks an attack
+- **THEN** the next snapshot carries a run of zero
 
 #### Scenario: Still fits the packet
 - **WHEN** a snapshot carries 16 fighters, each with structure, energy and gun state
@@ -142,8 +154,38 @@ Connection control messages SHALL be delivered on a reliable ordered channel sep
 - **THEN** it still receives its welcome message and joins the match
 
 ### Requirement: Robust packet handling
-Malformed, truncated or unknown packets SHALL be ignored without crashing the server or client, and without affecting other players.
+Malformed, truncated or unknown packets SHALL be ignored without crashing the server or client, and without affecting other players. A packet SHALL be judged malformed only on what the protocol actually disallows: a validity check SHALL NOT reject a value the simulation can legitimately produce.
 
 #### Scenario: Garbage packet
 - **WHEN** a peer sends a packet with an unknown message type or an invalid length
 - **THEN** the packet is dropped and the match continues
+
+#### Scenario: A valid snapshot is not dropped
+- **WHEN** a snapshot carries only values the simulation can produce
+- **THEN** the snapshot SHALL be accepted, and SHALL NOT be discarded on account of any fighter in it
+
+### Requirement: Every actor state survives the wire
+
+A snapshot SHALL carry a fighter in any state the simulation can put it in.
+The check that rejects an out-of-range state SHALL be expressed against the
+number of states, not against any one named state, so that appending a state
+cannot leave the check behind.
+
+#### Scenario: Every state round-trips
+
+- **WHEN** a snapshot carrying a fighter in any state the simulation defines is
+  encoded and decoded
+- **THEN** the snapshot SHALL be accepted and the fighter SHALL come back in the
+  state it went in
+
+#### Scenario: A state that does not exist is refused
+
+- **WHEN** a snapshot carries a state value beyond the last state the simulation
+  defines
+- **THEN** the snapshot SHALL be rejected as malformed
+
+#### Scenario: Appending a state does not break the check
+
+- **WHEN** a new state is appended to the end of the state enumeration
+- **THEN** a snapshot carrying a fighter in that state SHALL be accepted without
+  any further change to the decoder

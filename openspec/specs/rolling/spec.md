@@ -76,7 +76,7 @@ When the button is released, a ducking fighter SHALL leave the ground on that ti
 - **THEN** it keeps playing the roll animation and does not start falling
 
 ### Requirement: Landing recovers from the roll
-A rolling fighter that reaches the ground SHALL play the roll-recover animation once. During the recovery it SHALL NOT act. Any speed it lands with SHALL run out under friction. When the recovery finishes, the fighter SHALL go back to running if it is still moving fast enough to run, and to standing otherwise, following the same rule a landing from a fall uses.
+A rolling fighter that reaches the ground SHALL play the roll-recover animation once. During the recovery it SHALL NOT act. Any speed it lands with SHALL run out under friction. When the recovery finishes, the fighter SHALL go back to running if it is still moving fast enough to run, and to standing otherwise, following the same rule a landing from a fall uses. Reaching the ground SHALL also close the place ahead of the roll for 2 seconds (see the engagement capability, "A landed roll closes the place ahead of it").
 
 #### Scenario: Recovering on landing
 - **WHEN** a rolling fighter touches the ground
@@ -85,6 +85,10 @@ A rolling fighter that reaches the ground SHALL play the roll-recover animation 
 #### Scenario: Nothing during recovery
 - **WHEN** a recovering fighter presses attack or jump
 - **THEN** neither happens
+
+#### Scenario: Landing closes the place ahead
+- **WHEN** a rolling fighter touches the ground
+- **THEN** the place on the side it was rolling toward closes for 2 seconds
 
 ### Requirement: A roll costs as much as a run-jump
 A roll SHALL cost the same energy as a run-jump, spent on the tick the fighter leaves the ground. Spending it SHALL restart the wait before energy refills, as spending on a swing does. A fighter without that much energy SHALL NOT duck. The press SHALL be refused: the fighter SHALL stay in the state it was in, nothing SHALL be spent, and the same refusal a swing raises SHALL be raised, so the empty bar flashes. A duck that ends without a roll, for example because a hit interrupts it, SHALL cost nothing.

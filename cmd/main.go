@@ -31,5 +31,6 @@ func main() {
 		resistor.Dedicated(cfg)
 		return
 	}
+	hideConsole()
 	resistor.Game()
 }

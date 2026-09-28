@@ -22,11 +22,11 @@ The game SHALL boot into the main menu. The menu SHALL offer Single Player, Host
 - **THEN** the game closes
 
 ### Requirement: Listen server hosting
-Host Game SHALL start an authoritative server inside the game process. The server SHALL listen on a UDP port (default 27015). The host SHALL join it as a regular player. The host screen SHALL let the user set the port, the maximum player count and the number of bots before starting. The server SHALL run the gamemode and filterscripts named on the game's command line, if any.
+Host Game SHALL start an authoritative server inside the game process. The server SHALL listen on a UDP port (default 27015). The host SHALL join it as a regular player. The host screen SHALL let the user set the port, the maximum player count, the number of bots and the maximum number of spectators (default 4) before starting. The server SHALL run the gamemode and filterscripts named on the game's command line, if any.
 
 #### Scenario: Host starts a match
 - **WHEN** the user confirms Host Game with default settings
-- **THEN** the server listens on UDP port 27015, the host's fighter spawns in the level, and other clients can connect
+- **THEN** the server listens on UDP port 27015, the host's fighter spawns in the level, and other clients can connect as fighters or as up to 4 spectators
 
 #### Scenario: Port unavailable
 - **WHEN** the user confirms Host Game and the chosen port cannot be bound
@@ -34,7 +34,7 @@ Host Game SHALL start an authoritative server inside the game process. The serve
 
 #### Scenario: Host leaves
 - **WHEN** the hosting player quits the match
-- **THEN** every connected client is disconnected with the reason "server closed" and returns to the main menu
+- **THEN** every connected client, spectators included, is disconnected with the reason "server closed" and returns to the main menu
 
 #### Scenario: Hosting a gamemode
 - **WHEN** the game was started with gamemode `tdm` and the user confirms Host Game
@@ -45,7 +45,7 @@ Host Game SHALL start an authoritative server inside the game process. The serve
 - **THEN** the game stays in the menu and shows an error naming the script
 
 ### Requirement: Dedicated server
-When started with the dedicated-server command-line flag, the game SHALL run the same authoritative server without creating a window or loading textures. It SHALL accept optional flags for port, maximum players, bot count, gamemode and filterscripts. It SHALL log connects, disconnects and rejections to standard output, and run until the process is terminated. A gamemode or filterscript that fails to load SHALL make it print the reason and exit without listening.
+When started with the dedicated-server command-line flag, the game SHALL run the same authoritative server without creating a window or loading textures. It SHALL accept optional flags for port, maximum players, bot count, maximum spectators, gamemode and filterscripts. It SHALL log connects, disconnects and rejections to standard output, distinguishing spectators from players, and run until the process is terminated. A gamemode or filterscript that fails to load SHALL make it print the reason and exit without listening.
 
 #### Scenario: Headless start
 - **WHEN** the game is started with the dedicated-server flag
@@ -59,12 +59,20 @@ When started with the dedicated-server command-line flag, the game SHALL run the
 - **WHEN** the dedicated server is started with `-gamemode tdm -filterscripts admin`
 - **THEN** it loads `admin` and `tdm` before listening, and the startup line names the gamemode
 
+#### Scenario: Spectator cap flag
+- **WHEN** the dedicated server is started with a maximum of 1 spectator and a second spectator connects
+- **THEN** the second spectator is rejected, and the rejection is logged
+
 ### Requirement: Joining a server
-Join Game SHALL let the user enter an address as `host` or `host:port` (default port 27015) and connect. While connecting, the game SHALL show a connecting state that can be cancelled. The attempt SHALL time out after 5 seconds without an answer, returning to the menu with an error.
+Join Game SHALL let the user enter an address as `host` or `host:port` (default port 27015) and connect, either as a fighter (Connect) or as a spectator (Join as spectator). While connecting, the game SHALL show a connecting state that can be cancelled. The attempt SHALL time out after 5 seconds without an answer, returning to the menu with an error.
 
 #### Scenario: Successful join
-- **WHEN** the user enters the address of a running server and confirms
+- **WHEN** the user enters the address of a running server and confirms with Connect
 - **THEN** the client connects, is assigned a player, loads the level and spawns its fighter
+
+#### Scenario: Successful spectator join
+- **WHEN** the user enters the address of a running server and chooses Join as spectator
+- **THEN** the client connects, loads the level and shows the match without spawning a fighter
 
 #### Scenario: No server
 - **WHEN** the user joins an address where no server answers within 5 seconds
@@ -75,7 +83,7 @@ Join Game SHALL let the user enter an address as `host` or `host:port` (default 
 - **THEN** no connection is attempted and an error is shown
 
 ### Requirement: Handshake validation
-On connect, the client SHALL send its protocol version and a fingerprint of its level data. The server SHALL reject the client, with a reason shown in the client's menu, if the protocol version differs, the level fingerprint differs, or the server is full of human players.
+On connect, the client SHALL send its protocol version, a fingerprint of its level data and whether it joins as a fighter or a spectator. The server SHALL reject the client, with a reason shown in the client's menu, if the protocol version differs, or the level fingerprint differs. It SHALL also reject a fighter when the server is full of human players, and a spectator when the maximum number of spectators is connected. Spectators SHALL NOT count toward the player maximum, and fighters SHALL NOT count toward the spectator maximum. A client from a build with an older protocol version SHALL be told "version mismatch", not left to time out.
 
 #### Scenario: Version mismatch
 - **WHEN** a client with a different protocol version connects
@@ -86,8 +94,16 @@ On connect, the client SHALL send its protocol version and a fingerprint of its 
 - **THEN** it is rejected and the client displays "level mismatch"
 
 #### Scenario: Server full
-- **WHEN** a client connects while the number of human players equals the maximum
+- **WHEN** a client joining as a fighter connects while the number of human players equals the maximum
 - **THEN** it is rejected and the client displays "server full"
+
+#### Scenario: Full server can be watched
+- **WHEN** a client joins as a spectator while the number of human players equals the maximum and fewer spectators than the maximum are connected
+- **THEN** it is accepted as a spectator
+
+#### Scenario: Spectators full
+- **WHEN** a client joins as a spectator while the maximum number of spectators is connected
+- **THEN** it is rejected and the client displays "spectators full"
 
 ### Requirement: Player slots and spawning
 Every accepted player SHALL receive a unique player id and a fighter. The fighter SHALL spawn at a spawn position not occupied by another fighter's collision box. All other clients SHALL see the new fighter no later than the second snapshot after it spawns. A player whose fighter dies SHALL keep its slot and player id while it has no fighter, and SHALL be given a new one when it respawns; its slot SHALL NOT be offered to a joining player in the meantime.
