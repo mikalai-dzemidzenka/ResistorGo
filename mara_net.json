@@ -1,0 +1,16 @@
+{
+"blocks":[
+{"resource":"resources/blocks/mn_wall1.png","collisionRect":{"X":9,"Y":83,"Width":59,"Height":21},"lightRect":{"X":9,"Y":82,"Width":59,"Height":22}}
+],
+"0":[
+[0,-39,0],
+[0,0,0],
+[0,39,0],
+[0,78,0],
+[0,117,0],
+[0,156,0],
+[0,195,0],
+[0,234,0]
+],
+"ambient":{"color":[120,140,255],"strength":0.4}
+}
