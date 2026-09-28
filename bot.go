@@ -1154,6 +1154,13 @@ func botInput(a *Actor) Input {
 		return a.walk(in, t.Pos)
 	}
 
+	// The fighter it was fighting is dead: there is nothing to look for, and
+	// where it was last seen is where the body lies.
+	if t := a.Bot.target; t != nil && t.State == StateDeath {
+		a.forget()
+		return in
+	}
+
 	// Nothing in view at all. The fight is over as far as this bot is
 	// concerned, so the place goes back: one held at a fighter nobody can see
 	// is a place no other bot can ever take.
