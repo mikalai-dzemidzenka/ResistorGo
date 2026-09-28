@@ -187,6 +187,39 @@ func TestSeenIsNilWithNothingInView(t *testing.T) {
 	}
 }
 
+// A fighter the bot was fighting dies in the open, in range: the bot neither
+// swings at the body nor walks up to it. Spec, "A body is not a target".
+func TestABodyIsNotATarget(t *testing.T) {
+	bot, target := botScene(t, nil, rl.Vector2{}, rl.Vector2{X: 30})
+	bot.Input = botInput(bot) // it has seen the fighter alive
+	target.State = StateDeath
+	if got := bot.seen(); got != nil {
+		t.Fatalf("saw the body at x=%v", got.Pos.X)
+	}
+	startX := bot.Pos.X
+	for range 120 {
+		bot.Input = botInput(bot)
+		if bot.Input.Attack {
+			t.Fatal("swung at the body")
+		}
+		bot.Update(float32(FixedTimeStep))
+	}
+	if bot.Pos.X > startX+1 {
+		t.Errorf("walked from x=%v to x=%v, toward the body at x=%v", startX, bot.Pos.X, target.Pos.X)
+	}
+}
+
+// A body nearer than a living fighter does not hide the living one. Spec, "The
+// living are found past the dead".
+func TestTheLivingAreFoundPastTheDead(t *testing.T) {
+	bot, body := botScene(t, nil, rl.Vector2{}, rl.Vector2{X: 60})
+	body.State = StateDeath
+	living := bot.W.Spawn(rl.Vector2{X: 150}, true)
+	if got := bot.seen(); got != living {
+		t.Errorf("saw %v, want the living fighter at x=%v past the body", got, living.Pos.X)
+	}
+}
+
 // A bot with no one in view stands still, swings at nothing and keeps facing
 // the way it was: spec, "A bot that sees no one does not fight".
 func TestBotWithNobodyInSightDoesNothing(t *testing.T) {
