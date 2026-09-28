@@ -25,6 +25,8 @@ means that change's design.md there. Tick here, not in the archived tasks.md.
       the development build.
 - [x] `roll-breaks-the-surround 3.2` Run the full suite and the course-following
       bot test several times; nothing regresses.
+- [ ] `level-layers 4.2` `.\build.ps1`, run it, and the level looks the same
+      as before layers.
 
 ## Session 1: offline (`go run ./cmd`)
 
@@ -139,6 +141,11 @@ means that change's design.md there. Tick here, not in the archived tasks.md.
 - [ ] `reuse-object-rects 5.4` Reshape a tile, change its texture: it keeps its
       shape. F takes the texture's. Save, restart: a hand-edited tile is still
       own.
+- [ ] `level-layers 2.3` The editor panel shows "Layer N (PgUp/PgDn)" and
+      PgUp/PgDn change it, skipping 0.
+- [ ] `level-layers 3.2` A tile on layer 1 covers a fighter walking behind it,
+      lit and shaded like the rest of the level.
+- [ ] `level-layers 3.3` A collision tile on layer 1 can be stood on.
 
 ## Session 2: networked
 
