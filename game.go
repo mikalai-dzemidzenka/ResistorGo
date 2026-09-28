@@ -474,7 +474,7 @@ func runLevel(dt float32) {
 		rl.ClearBackground(rl.Blank) // transparent: compositeLights glows only where nothing was drawn
 		rl.BeginMode2D(Cam.View())
 
-		LE.Draw() // TODO sort objects with actors
+		LE.DrawBackground()
 		view := viewRect(Cam.View(), float32(ScreenFullTexture.Texture.Width), float32(ScreenFullTexture.Texture.Height))
 		drawStains(w, view) // on the level, under the fighters, lit like both
 		drawHoles(view)
@@ -493,6 +493,8 @@ func runLevel(dt float32) {
 		drawDroplets(view) // over the fighters, still in the lit scene
 		drawCasings(view)
 		drawPuffs(view) // smoke and dust, lit by the flash and darkened by the dark
+		// tiles above layer 0 stand in front of the fighters, lit like the rest
+		LE.DrawForeground()
 		if DevTools && Debug && Srv != nil {
 			for _, r := range Srv.LastRewound {
 				rl.DrawRectangleLinesEx(r, 1, rl.Orange)

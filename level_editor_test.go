@@ -75,7 +75,7 @@ func TestPlaceCopiesRectsIncludingNone(t *testing.T) {
 	entry := LevelObject{Resource: "x", CollisionRects: []rl.Rectangle{{Width: 5, Height: 5}}}
 	le := newLevelEditor(39, 83, []LevelObject{entry}, nil)
 	le.place(Vector2i{X: 39})
-	obj := le.objects[0][Vector2i{X: 39}]
+	obj := le.objects[-1][Vector2i{X: 39}]
 	if len(obj.LightRects) != 0 {
 		t.Errorf("an entry with no light rectangle placed an object with one")
 	}
@@ -185,7 +185,7 @@ func TestDefaultsAndTilesAreEditedSeparately(t *testing.T) {
 	le.setActive(&changed) // the palette entry is selected
 	le.place(c)
 	for _, p := range []Vector2i{a, b, c} {
-		if got := le.objects[0][p].CollisionRects[0]; got != changed {
+		if got := le.objects[-1][p].CollisionRects[0]; got != changed {
 			t.Errorf("the tile at %v has %+v after its texture changed, want %+v", p, got, changed)
 		}
 	}
@@ -196,7 +196,7 @@ func TestDefaultsAndTilesAreEditedSeparately(t *testing.T) {
 	le.selectAt(a)
 	one := rl.Rectangle{Width: 5, Height: 5}
 	le.setActive(&one)
-	if got := le.objects[0][b].CollisionRects[0]; got != changed {
+	if got := le.objects[-1][b].CollisionRects[0]; got != changed {
 		t.Errorf("editing one tile changed another of the same texture: %+v", got)
 	}
 	if got := le.levelObjects[0].CollisionRects[0]; got != changed {
@@ -279,7 +279,7 @@ func TestNoCollisionRectIsNotStoodOn(t *testing.T) {
 	saved := LE
 	defer func() { LE = saved }()
 	LE = newLevelEditor(39, 83, nil, nil)
-	LE.objects[0] = LevelLayer{{}: {Resource: "x"}}
+	LE.objects[-1] = LevelLayer{{}: {Resource: "x"}}
 	LE.buildIndex()
 	a := &Actor{}
 	a.checkCollision() // used to dereference the nil rectangle

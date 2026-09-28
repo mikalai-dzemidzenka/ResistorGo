@@ -275,7 +275,27 @@ func parseLevel(b []byte) (map[int]LevelLayer, []LevelLight, []LitArea, Ambient,
 		}
 		objects[n] = layer
 	}
+	migrateFightersLayer(objects)
 	return objects, lights, areas, ambient, nil
+}
+
+// migrateFightersLayer moves the tiles of a level saved before layer 0 was the
+// fighters' onto layer -1, where they are drawn behind the fighters as they
+// always were. Where a cell already has a tile on -1 the layer-0 one wins: it
+// was the one drawn on top.
+func migrateFightersLayer(objects map[int]LevelLayer) {
+	old, ok := objects[0]
+	if !ok {
+		return
+	}
+	delete(objects, 0)
+	if objects[-1] == nil {
+		objects[-1] = make(LevelLayer, len(old))
+	}
+	for pos, o := range old {
+		o.Layer = -1
+		objects[-1][pos] = o
+	}
 }
 
 // marshalFile is the level file as saved: the tiles, as marshal gives them to

@@ -27,11 +27,11 @@ func TestUndoAndRedoPlacing(t *testing.T) {
 	le.place(b)
 	frame(le)
 
-	count := func() int { return len(le.objects[0]) }
+	count := func() int { return len(le.objects[-1]) }
 	if !le.undo() || count() != 1 {
 		t.Fatalf("one undo left %d objects, want 1", count())
 	}
-	if _, ok := le.objects[0][a]; !ok {
+	if _, ok := le.objects[-1][a]; !ok {
 		t.Errorf("the first placement was undone instead of the second")
 	}
 	if len(le.solids) != 1 {
@@ -85,13 +85,13 @@ func TestUndoAPaletteEdit(t *testing.T) {
 	frame(le)
 	le.setActive(&rl.Rectangle{Width: 10, Height: 10})
 	frame(le)
-	if got := le.objects[0][a].CollisionRects[0]; got != rect(0, 0, 10, 10) {
+	if got := le.objects[-1][a].CollisionRects[0]; got != rect(0, 0, 10, 10) {
 		t.Fatalf("the following tile did not take the edit: %+v", got)
 	}
 
 	le.undo()
 	want := rect(0, 0, 39, 83)
-	if got := le.objects[0][a].CollisionRects[0]; got != want {
+	if got := le.objects[-1][a].CollisionRects[0]; got != want {
 		t.Errorf("the following tile kept %+v after the undo", got)
 	}
 	if got := le.obj.CollisionRects[0]; got != want {
@@ -181,10 +181,10 @@ func TestHistoryIsNotSharedWithTheLevel(t *testing.T) {
 	frame(le)
 	le.undo()
 	le.redo()
-	le.objects[0][a] = LevelObject{Resource: "changed"}
+	le.objects[-1][a] = LevelObject{Resource: "changed"}
 	le.undo()
 	le.redo()
-	if got := le.objects[0][a].Resource; got != "x" {
+	if got := le.objects[-1][a].Resource; got != "x" {
 		t.Errorf("an edit made outside the history leaked into it: %q", got)
 	}
 }
@@ -200,7 +200,7 @@ func TestUndoForgetsTheOldest(t *testing.T) {
 	}
 	for le.undo() {
 	}
-	if n := len(le.objects[0]); n != 5 {
+	if n := len(le.objects[-1]); n != 5 {
 		t.Errorf("undoing all the way back left %d objects, want the 5 older than the history", n)
 	}
 }

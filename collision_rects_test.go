@@ -209,7 +209,7 @@ func TestLevel1KeepsItsBytes(t *testing.T) {
 func TestSolidsFollowTheCollisionOrder(t *testing.T) {
 	le := newLevelEditor(39, 83, nil, nil)
 	one := []rl.Rectangle{rect(15, 86, 40, 20)}
-	le.objects[0] = LevelLayer{
+	le.objects[-1] = LevelLayer{
 		{X: 0}:         {X: 0, CollisionRects: one},
 		{X: 39}:        {X: 39, CollisionRects: one},
 		{X: 78, Y: 83}: {X: 78, Y: 83, CollisionRects: []rl.Rectangle{rect(0, 0, 5, 5), rect(10, 0, 5, 5), rect(20, 0, 5, 5)}},
@@ -239,7 +239,7 @@ func TestSolidsFollowTheCollisionOrder(t *testing.T) {
 func gapLevel() func() {
 	saved := LE
 	LE = newLevelEditor(39, 83, nil, nil)
-	LE.objects[0] = LevelLayer{{}: {CollisionRects: []rl.Rectangle{rect(0, 100, 40, 20), rect(80, 100, 40, 20)}}}
+	LE.objects[-1] = LevelLayer{{}: {CollisionRects: []rl.Rectangle{rect(0, 100, 40, 20), rect(80, 100, 40, 20)}}}
 	LE.buildIndex()
 	return func() { LE = saved }
 }
@@ -281,7 +281,7 @@ func TestLedgeOnTheSecondCollisionRect(t *testing.T) {
 func threeRects() (*LevelEditor, Vector2i) {
 	le := newLevelEditor(39, 83, []LevelObject{{Resource: "x"}}, nil)
 	pos := Vector2i{X: 39}
-	le.objects[0] = LevelLayer{pos: {Resource: "x", X: 39, CollisionRects: []rl.Rectangle{
+	le.objects[-1] = LevelLayer{pos: {Resource: "x", X: 39, CollisionRects: []rl.Rectangle{
 		rect(0, 0, 10, 10), rect(20, 0, 10, 10), rect(40, 0, 10, 10),
 	}}}
 	le.buildIndex()
@@ -293,12 +293,12 @@ func TestActiveCollisionRectIndex(t *testing.T) {
 	le, pos := threeRects()
 	le.activeIdx = 1
 	le.setActive(nil)
-	if got := le.objects[0][pos].CollisionRects; !slices.Equal(got, []rl.Rectangle{rect(0, 0, 10, 10), rect(40, 0, 10, 10)}) {
+	if got := le.objects[-1][pos].CollisionRects; !slices.Equal(got, []rl.Rectangle{rect(0, 0, 10, 10), rect(40, 0, 10, 10)}) {
 		t.Errorf("removing the second left %+v", got)
 	}
 
 	le.activeIdx = 2
-	le.objects[0][Vector2i{X: 78}] = LevelObject{Resource: "x", X: 78, CollisionRects: []rl.Rectangle{rect(0, 0, 5, 5)}}
+	le.objects[-1][Vector2i{X: 78}] = LevelObject{Resource: "x", X: 78, CollisionRects: []rl.Rectangle{rect(0, 0, 5, 5)}}
 	le.selectAt(Vector2i{X: 78})
 	if le.activeIdx != 0 {
 		t.Errorf("a selection with one rectangle left the index at %d", le.activeIdx)
@@ -318,13 +318,13 @@ func TestClickPicksACollisionRect(t *testing.T) {
 		t.Errorf("active = %d/%d, want collision 2", le.activeRect, le.activeIdx)
 	}
 	le.dragTo(rl.Vector2{X: 86, Y: 5})
-	got := le.objects[0][pos].CollisionRects
+	got := le.objects[-1][pos].CollisionRects
 	if got[2] != rect(42, 0, 10, 10) || got[0] != rect(0, 0, 10, 10) || got[1] != rect(20, 0, 10, 10) {
 		t.Errorf("after dragging the third: %+v", got)
 	}
 
 	// two rectangles on the same spot: the one already active wins the click
-	le.objects[0][pos] = LevelObject{Resource: "x", X: 39, CollisionRects: []rl.Rectangle{rect(0, 0, 10, 10), rect(0, 0, 10, 10)}}
+	le.objects[-1][pos] = LevelObject{Resource: "x", X: 39, CollisionRects: []rl.Rectangle{rect(0, 0, 10, 10), rect(0, 0, 10, 10)}}
 	le.drag, le.activeIdx = rectDrag{}, 1
 	if !le.beginDrag(rl.Vector2{X: 44, Y: 5}, 1) || le.activeIdx != 1 {
 		t.Errorf("on an overlap the click went to %d, want the active 1", le.activeIdx)
@@ -349,17 +349,17 @@ func TestStepAddRemoveCollisionRects(t *testing.T) {
 
 	le.activeIdx = 1
 	le.clearActiveRect()
-	got := le.objects[0][pos].CollisionRects
+	got := le.objects[-1][pos].CollisionRects
 	if !slices.Equal(got, []rl.Rectangle{rect(0, 0, 10, 10), rect(40, 0, 10, 10)}) || le.activeIdx != 0 {
 		t.Errorf("removing the second of three left %+v, active %d", got, le.activeIdx)
 	}
 
 	le.addActiveRect()
-	got = le.objects[0][pos].CollisionRects
+	got = le.objects[-1][pos].CollisionRects
 	if len(got) != 3 || got[2] != rect(0, 0, 39, 83) || got[0] != rect(0, 0, 10, 10) || le.activeIdx != 2 {
 		t.Errorf("adding one gave %+v, active %d; want a grid cell at the origin, active", got, le.activeIdx)
 	}
-	if !le.objects[0][pos].own || !le.dirty {
+	if !le.objects[-1][pos].own || !le.dirty {
 		t.Errorf("adding a rectangle to a tile is not a hand edit")
 	}
 }
@@ -375,11 +375,11 @@ func TestEveryCollisionRectTravels(t *testing.T) {
 
 	// following: a second rectangle on the texture reaches its tile
 	le.addActiveRect()
-	if got := le.objects[0][a].CollisionRects; len(got) != 2 || le.objects[0][a].own {
-		t.Errorf("a following tile has %+v (own %t) after its texture gained a rectangle", got, le.objects[0][a].own)
+	if got := le.objects[-1][a].CollisionRects; len(got) != 2 || le.objects[-1][a].own {
+		t.Errorf("a following tile has %+v (own %t) after its texture gained a rectangle", got, le.objects[-1][a].own)
 	}
 	le.markOwnRects()
-	if le.objects[0][a].own {
+	if le.objects[-1][a].own {
 		t.Errorf("a tile with exactly its texture's two rectangles does not follow it")
 	}
 
@@ -387,7 +387,7 @@ func TestEveryCollisionRectTravels(t *testing.T) {
 	le.selectEntry(1)
 	b := Vector2i{X: 78}
 	le.place(b)
-	if got := le.objects[0][b].CollisionRects; !slices.Equal(got, three) {
+	if got := le.objects[-1][b].CollisionRects; !slices.Equal(got, three) {
 		t.Errorf("placed with %+v, want %+v", got, three)
 	}
 
@@ -404,11 +404,11 @@ func TestEveryCollisionRectTravels(t *testing.T) {
 	}
 
 	// the level file carries all three
-	le.objects[0][b] = LevelObject{Resource: "y", X: 78, CollisionRects: three}
+	le.objects[-1][b] = LevelObject{Resource: "y", X: 78, CollisionRects: three}
 	f, _ := le.marshalFile()
 	objects, _, _, _, err := parseLevel(f)
-	if err != nil || !slices.Equal(objects[0][b].CollisionRects, three) {
-		t.Errorf("saved and loaded %+v (%v)", objects[0][b].CollisionRects, err)
+	if err != nil || !slices.Equal(objects[-1][b].CollisionRects, three) {
+		t.Errorf("saved and loaded %+v (%v)", objects[-1][b].CollisionRects, err)
 	}
 }
 
@@ -438,8 +438,8 @@ func TestOldLevelFormatLoads(t *testing.T) {
 	if n := strings.Count(string(b), `"resource"`); n != 2 {
 		t.Errorf("saved %d blocks for 2 distinct ones:\n%s", n, b)
 	}
-	back[0][Vector2i{X: 39}].CollisionRects[0].Width = 99 // tiles do not share their block's lists
-	if back[0][Vector2i{}].CollisionRects[0].Width != 3 {
+	back[-1][Vector2i{X: 39}].CollisionRects[0].Width = 99 // tiles do not share their block's lists
+	if back[-1][Vector2i{}].CollisionRects[0].Width != 3 {
 		t.Errorf("two tiles of one block share their rectangles")
 	}
 

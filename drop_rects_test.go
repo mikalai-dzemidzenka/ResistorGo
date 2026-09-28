@@ -62,9 +62,9 @@ func TestDropRectsOnDisk(t *testing.T) {
 // disagree about one have different fingerprints.
 func TestDropRectChangesTheFingerprint(t *testing.T) {
 	plain := newLevelEditor(39, 83, nil, nil)
-	plain.objects[0] = LevelLayer{{}: {Resource: "a", CollisionRects: []rl.Rectangle{rect(0, 0, 39, 83)}}}
+	plain.objects[-1] = LevelLayer{{}: {Resource: "a", CollisionRects: []rl.Rectangle{rect(0, 0, 39, 83)}}}
 	with := newLevelEditor(39, 83, nil, nil)
-	with.objects[0] = LevelLayer{{}: {Resource: "a", CollisionRects: []rl.Rectangle{rect(0, 0, 39, 83)}, DropRects: []rl.Rectangle{rect(0, 0, 39, 16)}}}
+	with.objects[-1] = LevelLayer{{}: {Resource: "a", CollisionRects: []rl.Rectangle{rect(0, 0, 39, 83)}, DropRects: []rl.Rectangle{rect(0, 0, 39, 16)}}}
 	if plain.Hash() == with.Hash() {
 		t.Error("a drop-through rectangle left the fingerprint unchanged")
 	}
@@ -75,7 +75,7 @@ func TestDropRectChangesTheFingerprint(t *testing.T) {
 func TestStepAddRemoveDropRects(t *testing.T) {
 	le := newLevelEditor(39, 83, []LevelObject{{Resource: "x"}}, nil)
 	pos := Vector2i{X: 39}
-	le.objects[0] = LevelLayer{pos: {Resource: "x", X: 39,
+	le.objects[-1] = LevelLayer{pos: {Resource: "x", X: 39,
 		CollisionRects: []rl.Rectangle{rect(0, 40, 10, 10)},
 		DropRects:      []rl.Rectangle{rect(0, 0, 10, 10), rect(20, 0, 10, 10)},
 	}}
@@ -96,7 +96,7 @@ func TestStepAddRemoveDropRects(t *testing.T) {
 	}
 
 	le.addActiveRect()
-	obj := le.objects[0][pos]
+	obj := le.objects[-1][pos]
 	if len(obj.DropRects) != 3 || obj.DropRects[2] != rect(0, 0, 39, 83) || le.activeIdx != 2 {
 		t.Errorf("adding one gave %+v, active %d", obj.DropRects, le.activeIdx)
 	}
@@ -109,13 +109,13 @@ func TestStepAddRemoveDropRects(t *testing.T) {
 
 	le.activeIdx = 0
 	le.clearActiveRect()
-	if got := le.objects[0][pos].DropRects; !slices.Equal(got, []rl.Rectangle{rect(20, 0, 10, 10), rect(0, 0, 39, 83)}) {
+	if got := le.objects[-1][pos].DropRects; !slices.Equal(got, []rl.Rectangle{rect(20, 0, 10, 10), rect(0, 0, 39, 83)}) {
 		t.Errorf("removing the first left %+v", got)
 	}
 	for range 2 {
 		le.clearActiveRect()
 	}
-	if got := le.objects[0][pos].DropRects; len(got) != 0 || slices.Contains(le.drop, true) {
+	if got := le.objects[-1][pos].DropRects; len(got) != 0 || slices.Contains(le.drop, true) {
 		t.Errorf("clearing every drop rectangle left %+v, drop %v", got, le.drop)
 	}
 }
@@ -125,7 +125,7 @@ func TestStepAddRemoveDropRects(t *testing.T) {
 func TestClickPicksADropRect(t *testing.T) {
 	le := newLevelEditor(39, 83, []LevelObject{{Resource: "x"}}, nil)
 	pos := Vector2i{X: 39}
-	le.objects[0] = LevelLayer{pos: {Resource: "x", X: 39,
+	le.objects[-1] = LevelLayer{pos: {Resource: "x", X: 39,
 		CollisionRects: []rl.Rectangle{rect(0, 0, 10, 10)},
 		DropRects:      []rl.Rectangle{rect(20, 0, 10, 10)},
 	}}
@@ -138,7 +138,7 @@ func TestClickPicksADropRect(t *testing.T) {
 		t.Errorf("active = %d/%d, want drop 0", le.activeRect, le.activeIdx)
 	}
 	le.dragTo(rl.Vector2{X: 66, Y: 5})
-	obj := le.objects[0][pos]
+	obj := le.objects[-1][pos]
 	if obj.DropRects[0] != rect(22, 0, 10, 10) || obj.CollisionRects[0] != rect(0, 0, 10, 10) {
 		t.Errorf("after dragging the drop rectangle: %+v %+v", obj.DropRects, obj.CollisionRects)
 	}
@@ -154,7 +154,7 @@ func TestEveryDropRectTravels(t *testing.T) {
 	le.selectEntry(1)
 	b := Vector2i{X: 78}
 	le.place(b)
-	if got := le.objects[0][b].DropRects; !slices.Equal(got, d) {
+	if got := le.objects[-1][b].DropRects; !slices.Equal(got, d) {
 		t.Errorf("placed with %+v, want %+v", got, d)
 	}
 
@@ -164,15 +164,15 @@ func TestEveryDropRectTravels(t *testing.T) {
 	le.place(a)
 	le.setActiveRect(rectDrop)
 	le.addActiveRect()
-	if got := le.objects[0][a].DropRects; len(got) != 1 || le.objects[0][a].own {
-		t.Errorf("a following tile has %+v (own %t) after its texture gained a drop rectangle", got, le.objects[0][a].own)
+	if got := le.objects[-1][a].DropRects; len(got) != 1 || le.objects[-1][a].own {
+		t.Errorf("a following tile has %+v (own %t) after its texture gained a drop rectangle", got, le.objects[-1][a].own)
 	}
 
 	// a drop rectangle of its own detaches a tile
 	le.selectAt(b)
 	le.setActiveRect(rectDrop)
 	le.addActiveRect()
-	if !le.objects[0][b].own {
+	if !le.objects[-1][b].own {
 		t.Errorf("a tile given a drop rectangle of its own still follows its texture")
 	}
 
@@ -190,10 +190,10 @@ func TestEveryDropRectTravels(t *testing.T) {
 	}
 
 	// the level file carries it
-	le.objects[0][b] = LevelObject{Resource: "y", X: 78, CollisionRects: []rl.Rectangle{rect(0, 20, 39, 63)}, DropRects: d}
+	le.objects[-1][b] = LevelObject{Resource: "y", X: 78, CollisionRects: []rl.Rectangle{rect(0, 20, 39, 63)}, DropRects: d}
 	f, _ := le.marshalFile()
 	objects, _, _, _, err := parseLevel(f)
-	if err != nil || !slices.Equal(objects[0][b].DropRects, d) || len(objects[0][b].CollisionRects) != 1 {
-		t.Errorf("saved and loaded %+v (%v)", objects[0][b], err)
+	if err != nil || !slices.Equal(objects[-1][b].DropRects, d) || len(objects[-1][b].CollisionRects) != 1 {
+		t.Errorf("saved and loaded %+v (%v)", objects[-1][b], err)
 	}
 }

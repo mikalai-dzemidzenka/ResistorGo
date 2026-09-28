@@ -120,8 +120,8 @@ func TestLoadLevelKeepsTheAmbient(t *testing.T) {
 	if back.ambient != le.ambient {
 		t.Errorf("loaded ambient %+v, want %+v", back.ambient, le.ambient)
 	}
-	if len(back.lights) != len(threeLights) || len(back.objects[0]) != 2 {
-		t.Errorf("loaded %d lights and %d tiles with it", len(back.lights), len(back.objects[0]))
+	if len(back.lights) != len(threeLights) || len(back.objects[-1]) != 2 {
+		t.Errorf("loaded %d lights and %d tiles with it", len(back.lights), len(back.objects[-1]))
 	}
 }
 
