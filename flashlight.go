@@ -34,15 +34,17 @@ type beam struct {
 }
 
 // flashlightBeams is a beam from the muzzle along the aim of every living
-// fighter holding the pistol, while the setting is on. Presentation only: each
-// machine lights what it shows, and nothing of it is replicated.
+// fighter with the pistol drawn, while the setting is on. Presentation only:
+// each machine lights what it shows, and nothing of it is replicated.
 func flashlightBeams(actors []*Actor) []beam {
 	if !Cfg.Flashlight {
 		return nil
 	}
 	var bs []beam
 	for _, a := range actors {
-		if a.Weapon != WeaponPistol || a.State == StateDeath {
+		// drawn only on its pistol legs (topAnim): climbing, jumping, rolling
+		// or hit, there is no gun on screen to shine from
+		if a.Weapon != WeaponPistol || a.Anim != gunLegs || a.State == StateDeath {
 			continue
 		}
 		// the middle of the muzzle pixel, not its corner
