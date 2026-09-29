@@ -99,6 +99,9 @@ means that change's design.md there. Tick here, not in the archived tasks.md.
       at several zooms, edges on the pixel grid.
 - [ ] `outline-attack-target 5.5` The band does not react when the target
       changes guard height.
+- [ ] `flashlight-follows-the-gun 2.1` Flashlight on (F3), pistol drawn: climb
+      a ledge, jump, roll and take a hit. No beam shows without the gun, and it
+      comes back each time the fighter stands armed.
 
 ### Bots
 - [ ] `bot-adapts-guard-after-hit 4.1` Hitting the bot at one height makes it
