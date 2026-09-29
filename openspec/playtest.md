@@ -146,6 +146,10 @@ means that change's design.md there. Tick here, not in the archived tasks.md.
 - [ ] `level-layers 3.2` A tile on layer 1 covers a fighter walking behind it,
       lit and shaded like the rest of the level.
 - [ ] `level-layers 3.3` A collision tile on layer 1 can be stood on.
+- [ ] `climb-needs-room 3.1` Build a T (a ceiling bar on a wall, reaching over
+      the fighter): jump beside the stem from both sides, and the fighter stays
+      under the bar. A two-tile wall and the ledges in `level_1.json` still
+      climb as before.
 
 ## Session 2: networked
 
