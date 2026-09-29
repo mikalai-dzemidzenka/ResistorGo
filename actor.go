@@ -1140,17 +1140,42 @@ func (a *Actor) catchLedge(c rl.Rectangle, centerX float32, hitTop bool) bool {
 	if !reaching || hitTop || head < c.Y || head > c.Y+c.Height {
 		return false
 	}
+	var x float32
 	switch {
 	case a.Orientation == 1 && centerX+climbOffset >= c.X && c.X >= centerX:
-		a.CanClimbRight = true
-		a.Pos.X = float32(int32(c.X) - 20)
+		x = float32(int32(c.X) - 20)
 	case a.Orientation == -1 && centerX >= c.X+c.Width && c.X+c.Width >= centerX-climbOffset:
-		a.CanClimbLeft = true
-		a.Pos.X = c.X + c.Width - 24
+		x = c.X + c.Width - 24
 	default:
 		return false
 	}
+	if !a.roomOn(c, x) {
+		return false
+	}
+	a.CanClimbRight = a.Orientation == 1
+	a.CanClimbLeft = a.Orientation == -1
+	a.Pos.X = x
 	a.Pos.Y = float32(int32(math.Ceil(float64(c.Y)) - 48 + 1))
+	return true
+}
+
+// roomOn reports whether the fighter fits standing on top of solid c at Pos.X
+// x: nothing solid but drop-through in the collision box with its feet on c.Y.
+// Without it a ledge under a ceiling was caught, and the climb stood the
+// fighter inside the ceiling - or, the next solid up now level with the head,
+// on top of it.
+func (a *Actor) roomOn(c rl.Rectangle, x float32) bool {
+	box := rl.Rectangle{
+		X:      x + a.CollisionBox.X,
+		Y:      c.Y - a.CollisionBox.Height,
+		Width:  a.CollisionBox.Width,
+		Height: a.CollisionBox.Height,
+	}
+	for i, s := range LE.solids {
+		if !dropThrough(i) && rl.CheckCollisionRecs(box, s) {
+			return false
+		}
+	}
 	return true
 }
 

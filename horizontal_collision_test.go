@@ -349,6 +349,88 @@ func TestLedgeAgainstAWall(t *testing.T) {
 	})
 }
 
+// jumpAt jumps a fighter standing on wallFloor toward dir (+1 right, -1 left)
+// and holds the way for n ticks, calling each after every tick.
+func jumpAt(a *Actor, dir, n int, each func()) {
+	a.Orientation = int8(dir)
+	a.Input = Input{Left: dir > 0, Right: dir < 0, Jump: true}
+	a.Update(float32(FixedTimeStep))
+	hold(a, dir, n, each)
+}
+
+// Spec: "A ledge needs room to stand on". The stem of a T, a ceiling bar
+// resting on it and reaching over the fighter: the stem's ledge has the bar in
+// its standing spot, and grabbing it used to snap the fighter into the bar.
+func TestNoLedgeUnderACeiling(t *testing.T) {
+	stem := rect(100, 40, 20, 60)
+	bar := rect(40, 20, 140, 20) // bottom at 40, over both sides of the stem
+	for _, dir := range []int{1, -1} {
+		defer solidsLevel(wallFloor, stem, bar)()
+		a := stander(100)
+		if dir < 0 {
+			a = stander(120 + a.CollisionBox.Width)
+		}
+		jumpAt(a, dir, 120, func() {
+			if a.State == StateClimb || a.CanClimbRight || a.CanClimbLeft {
+				t.Fatalf("dir %d: caught the stem's ledge under the bar", dir)
+			}
+			// a head bumping the bar may sink into it for the tick it takes
+			// to be pushed back; the old climb put it out through the top
+			if head := a.Pos.Y + a.CollisionBox.Y; head < 30 {
+				t.Fatalf("dir %d: head at %v, up through the bar", dir, head)
+			}
+		})
+		if !a.OnGround || feet(a) != 100 {
+			t.Errorf("dir %d: ended with feet at %v, on ground %t; want back on the floor", dir, feet(a), a.OnGround)
+		}
+	}
+}
+
+// A wall of two stacked rectangles, nothing above: the lower one has the upper
+// in its standing spot, so the climb is onto the top of the wall.
+func TestLedgeOfAStackedWall(t *testing.T) {
+	defer solidsLevel(wallFloor, rect(100, 50, 40, 50), rect(100, 0, 40, 50))()
+	a := stander(100)
+	climbed := false
+	jumpAt(a, 1, 60, func() {
+		if a.State == StateClimb && !climbed {
+			climbed = true
+			if feet(a) > 10 {
+				t.Fatalf("climbing with feet at %v, want at the top at 0", feet(a))
+			}
+		}
+	})
+	hold(a, 0, 120, nil) // let go, or it runs off the far side
+	if !climbed || !a.OnGround || feet(a) != 0 {
+		t.Errorf("climbed %t, ended with feet at %v, on ground %t; want standing on the top at 0", climbed, feet(a), a.OnGround)
+	}
+}
+
+// A drop-through platform in a ledge's standing spot takes none of the room.
+func TestLedgeUnderADropThrough(t *testing.T) {
+	saved := LE
+	defer func() { LE = saved }()
+	LE = newLevelEditor(39, 83, nil, nil)
+	LE.objects[0] = LevelLayer{{}: {
+		CollisionRects: []rl.Rectangle{wallFloor, rect(100, 50, 40, 50)},
+		DropRects:      []rl.Rectangle{rect(80, 20, 80, 4)}, // across the spot atop the wall
+	}}
+	LE.buildIndex()
+	a := stander(100)
+	climbed := false
+	jumpAt(a, 1, 60, func() {
+		if a.State == StateClimb && !climbed {
+			climbed = true
+			if feet(a) < 45 || feet(a) > 55 {
+				t.Fatalf("climbing with feet at %v, want on the wall's top at 50", feet(a))
+			}
+		}
+	})
+	if !climbed {
+		t.Errorf("did not catch the ledge under the drop-through platform")
+	}
+}
+
 func TestOverlappingAWall(t *testing.T) {
 	defer solidsLevel(wallFloor, rect(100, 40, 20, 60))()
 	a := stander(104)
