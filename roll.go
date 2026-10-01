@@ -58,7 +58,7 @@ func (a *Actor) enterDuckState() bool {
 	}
 	a.State = StateDuck
 	a.Speed.X = 0
-	a.SetAnim("resources/threefour/duck.png", AnimOptions{animDuration: 0.2, totalFrames: 4, once: true, reset: true})
+	a.SetAnim("resources/threefour/duck.png", AnimOptions{animDuration: 0.2, totalFrames: 3, once: true, reset: true})
 	return true
 }
 
