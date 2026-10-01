@@ -492,6 +492,10 @@ func (a *Actor) Update(dt float32) {
 	a.updateHorSpeed(dt)
 	a.updateVertSpeed(dt)
 	a.updateFalling()
+	if a.fellOut() {
+		a.dieOfFall()
+		return
+	}
 
 	// Two fighters who are not allies cannot stand in one another: whichever is
 	// on its feet and free - standing, walking or running - turns on the other
@@ -1768,6 +1772,30 @@ func (a *Actor) updateDeath() {
 	}
 	a.DeathTicks++
 	if a.DeathTicks >= DeathFlickerTicks && a.W != nil && a.W.Authority {
+		a.W.Kill(a)
+	}
+}
+
+// fellOut reports whether the fighter has dropped wholly below the lowest
+// collision in the level, from where nothing can catch it.
+func (a *Actor) fellOut() bool {
+	if len(LE.solids) == 0 {
+		return false
+	}
+	bottom := float32(math.Inf(-1))
+	for _, r := range LE.solids {
+		bottom = max(bottom, r.Y+r.Height)
+	}
+	return a.Pos.Y+a.CollisionBox.Y > bottom
+}
+
+// dieOfFall kills a fighter that fell off the level on the spot: no fall to
+// play out and no flicker, it is gone from the fight and booked for removal.
+func (a *Actor) dieOfFall() {
+	a.enterDeathState(nil)
+	a.Events &^= EvHit // nothing struck it
+	a.DeathTicks = DeathFlickerTicks
+	if a.W != nil && a.W.Authority && !(a.W.BotsStayDead && !a.IsPlayer) {
 		a.W.Kill(a)
 	}
 }
