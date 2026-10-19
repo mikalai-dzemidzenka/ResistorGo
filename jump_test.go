@@ -553,3 +553,41 @@ func TestRunJumpDelaysTheRefill(t *testing.T) {
 		t.Errorf("a fighter that run-jumped once from full cannot swing at %v energy", a.Energy)
 	}
 }
+
+// A jump that catches a ledge climbs that ledge, not the next one up. Still
+// rising after the catch, the fighter hung over the ledge through the climb,
+// and the drop onto it afterwards caught the ledge above, through the solid it
+// had just climbed.
+func TestClimbDoesNotChainToTheLedgeAbove(t *testing.T) {
+	saved := LE
+	defer func() { LE = saved }()
+	le := newLevelEditor(39, 83, nil, nil)
+	le.objects[0] = LevelLayer{
+		{}:     {CollisionRects: []rl.Rectangle{rect(0, 300, 800, 40)}},
+		{X: 1}: {X: 0, Y: 234, CollisionRects: []rl.Rectangle{rect(150, 0, 400, 16)}}, // the ledge caught
+		{X: 2}: {X: 0, Y: 174, CollisionRects: []rl.Rectangle{rect(170, 0, 400, 16)}}, // the one above
+	}
+	le.buildIndex()
+	LE = le
+
+	step := float32(FixedTimeStep)
+	for start := float32(20); start < 150; start += 3 {
+		for _, run := range []bool{true, false} {
+			w := NewWorld(true)
+			a := standOn(w, start, 300)
+			if run {
+				a.State = StateRun
+				a.Speed.X = MaxSpeed
+				a.Input.Right = true
+			}
+			a.Input.Jump = true
+			for i := 0; i < 180; i++ {
+				a.Update(step)
+				a.Input.Jump = false
+			}
+			if feet := a.Pos.Y + 48; feet < 234 {
+				t.Errorf("run=%v from x %v: ended with feet at %v, above the caught ledge's top 234", run, start, feet)
+			}
+		}
+	}
+}
