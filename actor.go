@@ -1160,6 +1160,11 @@ func (a *Actor) catchLedge(c rl.Rectangle, centerX float32, hitTop bool) bool {
 	a.CanClimbLeft = a.Orientation == -1
 	a.Pos.X = x
 	a.Pos.Y = float32(int32(math.Ceil(float64(c.Y)) - 48 + 1))
+	// The catch ends the jump. Left rising, the fighter went on up that tick
+	// and hung over the ledge through the climb; still Jumped, the drop onto
+	// it afterwards caught the next ledge up, through the solid it had climbed.
+	a.Speed.Y = 0
+	a.Jumped = false
 	return true
 }
 
@@ -1595,7 +1600,8 @@ func (a *Actor) Flickering() bool {
 // Only one on its feet: a shove is a thing done on the ground, to someone on
 // it. A fighter passing through in the air - jumping up past a ledge another
 // stands on, most often - is left to land first. Shoving it out of the air
-// knocked a climber off the same ledge every time it tried it.
+// knocked a climber off the same ledge every time it tried it. Nor one still
+// climbing: it stands on the ledge from the catch on, but is not on its feet.
 //
 // The fighter the last shove landed on is left alone until the two are apart -
 // while it glides clear, and for good if a wall stops it flush. Nothing else
@@ -1609,7 +1615,7 @@ func (a *Actor) crowding() *Actor {
 		a.PushStuck = nil
 	}
 	for _, other := range a.W.Actors {
-		if other == a || other == a.PushStuck || other.State == StateDeath || other.State == StateClash || !other.OnGround || a.allyOf(other) {
+		if other == a || other == a.PushStuck || other.State == StateDeath || other.State == StateClash || other.State == StateClimb || !other.OnGround || a.allyOf(other) {
 			continue
 		}
 		if a.crossing(other) || other.crossing(a) {
