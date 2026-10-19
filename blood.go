@@ -411,7 +411,7 @@ func clashImpactsPassed(was seenFighter, a *Actor) int {
 		from = int(was.frame)
 	}
 	n := 0
-	for _, f := range clashImpacts {
+	for _, f := range clashImpacts(a.Anim) {
 		if int(f) > from && f <= a.AnimCurrentFrame {
 			n++
 		}

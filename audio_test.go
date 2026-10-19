@@ -138,7 +138,7 @@ func TestAPunchIsHeardWhenAHitLands(t *testing.T) {
 	}{
 		"a guarded block": {func(w *World, def, att *Actor) { def.Updown = att.Updown; def.confirmBlock(att) }, []func(*Actor){hurt}},
 		"block-all":       {func(w *World, def, att *Actor) { def.confirmBlock(att) }, []func(*Actor){guardAll}},
-		"a clash":         {func(w *World, def, att *Actor) { startClash(att, def) }, nil},
+		"a clash":         {func(w *World, def, att *Actor) { startClash(att, def, clashKinds[0]) }, nil},
 		"a shove":         {func(w *World, def, att *Actor) { def.enterShovedState(att) }, nil},
 	} {
 		if n := listen(c.blow, c.prep...); n != 0 {
@@ -165,7 +165,7 @@ func TestABlockIsHeardWhenABlowIsStopped(t *testing.T) {
 		"a full guard":    {func(w *World, def, att *Actor) { def.Updown = att.Updown; def.confirmBlock(att) }, nil, 1},
 		"block-all":       {func(w *World, def, att *Actor) { def.confirmBlock(att) }, []func(*Actor){guardAll}, 1},
 		"a hit":           {func(w *World, def, att *Actor) { def.takeHit(att) }, nil, 0},
-		"a clash":         {func(w *World, def, att *Actor) { startClash(att, def) }, nil, 0},
+		"a clash":         {func(w *World, def, att *Actor) { startClash(att, def, clashKinds[0]) }, nil, 0},
 		"a shove":         {func(w *World, def, att *Actor) { def.enterShovedState(att) }, nil, 0},
 	} {
 		blocked, punched = 0, 0
@@ -202,6 +202,12 @@ func TestABlockIsNotHeardAfterAReseed(t *testing.T) {
 // A clash is heard as a punch at each of its impacts, once each, as it plays
 // out - not twice for the two fighters in it, and not at its start.
 func TestAClashIsHeardAtItsImpacts(t *testing.T) {
+	for _, k := range clashKinds {
+		t.Run(k.left, func(t *testing.T) { clashHeard(t, k) })
+	}
+}
+
+func clashHeard(t *testing.T, k clashKind) {
 	heard := 0
 	onPunch = func() { heard++ }
 	t.Cleanup(func() { onPunch = nil })
@@ -212,7 +218,7 @@ func TestAClashIsHeardAtItsImpacts(t *testing.T) {
 	a := w.Spawn(rl.Vector2{X: 0}, false)
 	b := w.Spawn(rl.Vector2{X: 30}, false)
 	blood.watch(w)
-	startClash(a, b)
+	startClash(a, b, k)
 	blood.watch(w)
 	if heard != 0 {
 		t.Fatalf("the clash was heard %d times as it started, want silence", heard)
@@ -230,7 +236,7 @@ func TestAClashIsHeardAtItsImpacts(t *testing.T) {
 	if a.State == StateClash || b.State == StateClash {
 		t.Fatalf("the clash never ended")
 	}
-	if heard != len(clashImpacts) {
-		t.Errorf("the clash was heard %d times, want %d", heard, len(clashImpacts))
+	if heard != len(k.impacts) {
+		t.Errorf("the clash was heard %d times, want %d", heard, len(k.impacts))
 	}
 }
