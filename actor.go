@@ -123,15 +123,12 @@ const (
 	// inside the 35px a swing reaches.
 	PushDistance = 16
 
-	// A clash is two fighters opening low swings at each other in the same
-	// instant: instead of one guarding the other, the two trade blows in a
-	// short exchange both play together. The window is in world ticks, and
+	// A clash is two fighters opening low or mid swings at each other, at
+	// the same height, in the same instant: instead of one guarding the
+	// other, the two trade blows in a short exchange both play together. The window is in world ticks, and
 	// well inside the ~13 ticks a low swing takes to reach its hit frame.
 	ClashWindowTicks = 6 // 100 ms
 	ClashStructure   = 0.5
-	ClashSeconds     = 0.91 // 70 ms a frame; to be tuned by eye in play
-	ClashLeftFrames  = 13
-	ClashRightFrames = 13
 	// ClashGap is how far apart the two stand while clashing, the distance the
 	// two sheets' blows are drawn to meet at. A feel number, tuned in play.
 	ClashGap = 24
@@ -1922,10 +1919,11 @@ func (a *Actor) updateAttack() {
 	}
 	r1, _ := a.attackBoxAt(a.Updown, a.Pos)
 
-	// An opening low swing answered by another in time is a clash, not a hit
-	// and a block. It is looked for before the hits, or the answering fighter
-	// would already be thrown into a block by the time it is asked.
-	if a.W.Authority && a.openingLowSwing() {
+	// An opening low or mid swing answered by another at its height in time
+	// is a clash, not a hit and a block. It is looked for before the hits,
+	// or the answering fighter would already be thrown into a block by the
+	// time it is asked.
+	if _, opening := a.openingSwing(); a.W.Authority && opening {
 		for _, actor := range a.W.Actors {
 			if tryClash(a, actor) {
 				return

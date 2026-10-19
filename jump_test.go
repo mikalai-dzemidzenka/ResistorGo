@@ -36,7 +36,7 @@ func TestAnimTableIsAppendOnly(t *testing.T) {
 	}
 
 	// the newest one is on the end, and survives the round trip
-	const newest = "resources/threefour/pistol-top.png"
+	const newest = "resources/threefour/battle-mid-1-right.png"
 	id := animID(newest)
 	if want := uint8(len(animTable) - 1); id != want {
 		t.Errorf("%s has id %d, want %d - it is not at the end of the table", newest, id, want)

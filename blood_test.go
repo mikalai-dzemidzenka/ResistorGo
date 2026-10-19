@@ -216,7 +216,7 @@ func TestOnlyALandedBlowSpillsBlood(t *testing.T) {
 			def.confirmBlock(att)
 		}, []func(*Actor){guardAll, func(def *Actor) { def.Structure = BlockAllStructure / 2 }}},
 		"a clash": {func(w *World, def, att *Actor) {
-			startClash(att, def)
+			startClash(att, def, clashKinds[0])
 		}, nil},
 		"a shove": {func(w *World, def, att *Actor) {
 			def.enterShovedState(att)

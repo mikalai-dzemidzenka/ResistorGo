@@ -53,6 +53,12 @@ func clashed(w *World, l, r *Actor) bool {
 	return false
 }
 
+// openMid turns the low swing openLow opened into a mid one.
+func openMid(f *Actor) {
+	f.Updown = 1
+	f.SetAnim("resources/threefour/attack-mid.png", AnimOptions{animDuration: 0.3, totalFrames: 8, once: true, reset: true})
+}
+
 // openLow puts f straight into the first blow of a low swing opened now.
 func openLow(w *World, f *Actor) {
 	f.Updown = 0
@@ -101,7 +107,7 @@ func TestAClashIsNotSteered(t *testing.T) {
 			break
 		}
 		in := busy
-		if tick >= 30 { // ClashSeconds is 55 ticks
+		if tick >= 30 { // the low clash is 55 ticks
 			in = Input{}
 		}
 		duelStep(w, l, in, r, in)
@@ -178,7 +184,7 @@ func TestSidesFollowPosition(t *testing.T) {
 		if !tryClash(a, b) {
 			t.Fatal("no clash")
 		}
-		if l.Anim != clashLeftAnim || l.Orientation != 1 || r.Anim != clashRightAnim || r.Orientation != -1 {
+		if l.Anim != clashKinds[0].left || l.Orientation != 1 || r.Anim != clashKinds[0].right || r.Orientation != -1 {
 			t.Errorf("left plays %q facing %d, right plays %q facing %d", l.Anim, l.Orientation, r.Anim, r.Orientation)
 		}
 		if gap := r.Pos.X - l.Pos.X; gap != ClashGap {
@@ -225,6 +231,10 @@ func TestTryClashConditions(t *testing.T) {
 		{"the other swings mid", func(w *World, a, b *Actor) {
 			b.SetAnim("resources/threefour/attack-mid.png", AnimOptions{animDuration: 0.3, totalFrames: 8, once: true})
 		}, false},
+		{"both open mid", func(w *World, a, b *Actor) { openMid(a); openMid(b) }, true},
+		{"the other swings high", func(w *World, a, b *Actor) {
+			b.SetAnim("resources/threefour/attack-high.png", AnimOptions{animDuration: 0.3, totalFrames: 8, once: true})
+		}, false},
 		{"the other is a chained blow", func(w *World, a, b *Actor) {
 			b.SetAnim("resources/threefour/attack-low-2.png", AnimOptions{animDuration: 0.2, totalFrames: 6, once: true})
 		}, false},
@@ -245,6 +255,11 @@ func TestTryClashConditions(t *testing.T) {
 			blockAgainst(b, a, true)
 			b.Updown = 1
 		}, false},
+		{"a mid swing answered from the mid block", func(w *World, a, b *Actor) {
+			openMid(a)
+			blockAgainst(b, a, true)
+			b.Updown = 1
+		}, true},
 		{"cannot pay from the block", func(w *World, a, b *Actor) {
 			blockAgainst(b, a, true)
 			b.Energy = EnergySwing - 1
@@ -353,14 +368,26 @@ func TestOutsideTheWindowTheBlockPlaysOut(t *testing.T) {
 	}
 }
 
-// Mid against mid, low against high, a chained blow, back to back: no clash.
-func TestOnlyOpeningLowSwingsFacingClash(t *testing.T) {
+// Mid against mid clashes, with the mid sheets. Low against mid, low against
+// high, a chained blow, back to back: no clash.
+func TestOnlyOpeningSwingsAtOneHeightFacingClash(t *testing.T) {
 	t.Run("mid", func(t *testing.T) {
 		w, l, r := duel(t, 0)
 		l.Updown, r.Updown = 1, 1
 		duelStep(w, l, Input{Attack: true, Updown: 1}, r, Input{Attack: true, Updown: 1})
+		if !clashed(w, l, r) {
+			t.Fatalf("mid swings did not clash: states %d %d", l.State, r.State)
+		}
+		if l.Anim != clashKinds[1].left || r.Anim != clashKinds[1].right {
+			t.Errorf("the mid clash plays %q and %q, want the mid sheets", l.Anim, r.Anim)
+		}
+	})
+	t.Run("low and mid", func(t *testing.T) {
+		w, l, r := duel(t, 0)
+		r.Updown = 1
+		duelStep(w, l, swingLow, r, Input{Attack: true, Updown: 1})
 		if clashed(w, l, r) {
-			t.Error("mid swings clashed")
+			t.Error("a low and a mid swing clashed")
 		}
 	})
 	t.Run("low and high", func(t *testing.T) {

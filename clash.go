@@ -1,21 +1,52 @@
 package resistor
 
-const (
-	clashLeftAnim  = "resources/threefour/battle-low-1-left.png"
-	clashRightAnim = "resources/threefour/battle-low-1-right.png"
-)
+// clashKind is one height's clash: the sheet the fighter on the left plays and
+// the one the fighter on the right plays (the two share frame count and
+// timing), and impacts, the frames where a blow meets the other fighter and a
+// punch is heard. Timings and impacts are to be tuned by eye in play.
+type clashKind struct {
+	left, right string
+	frames      uint8
+	seconds     float64 // 70 ms a frame
+	impacts     []uint8
+}
 
-// clashImpacts are the frames of the clash where a blow meets the other
-// fighter and a punch is heard: the left fighter's punch meeting the knee, and
-// the right fighter's two kicks landing on the guard. Both sheets share their
-// frame count and timing; to be tuned by eye in play.
-var clashImpacts = []uint8{4, 7, 10}
+// clashKinds is indexed by the height both fighters swing at (Updown): low and
+// mid clash, high does not.
+var clashKinds = [...]clashKind{
+	// the left fighter's punch meeting the knee, and the right fighter's two
+	// kicks landing on the guard
+	0: {"resources/threefour/battle-low-1-left.png", "resources/threefour/battle-low-1-right.png", 13, 0.91, []uint8{4, 7, 10}},
+	// the left fighter's kick landing on the right one's guard
+	1: {"resources/threefour/battle-mid-1-left.png", "resources/threefour/battle-mid-1-right.png", 9, 0.63, []uint8{4}},
+}
 
-// openingLowSwing reports whether the fighter is in the first blow of a low
-// attack: the one enterAttackState started. A chained blow or a change of
-// height replaces the animation, so the animation alone says which it is.
-func (a *Actor) openingLowSwing() bool {
-	return a.State == StateAttack && a.Anim == "resources/threefour/attack-low.png"
+// openingSwing reports the height of the fighter's first blow of a low or mid
+// attack - the one enterAttackState started - and whether it is in one. A
+// chained blow or a change of height replaces the animation, so the animation
+// alone says which it is.
+func (a *Actor) openingSwing() (uint8, bool) {
+	if a.State != StateAttack {
+		return 0, false
+	}
+	switch a.Anim {
+	case "resources/threefour/attack-low.png":
+		return 0, true
+	case "resources/threefour/attack-mid.png":
+		return 1, true
+	}
+	return 0, false
+}
+
+// clashImpacts are the impacts of the clash the fighter's animation belongs to,
+// counted on the left fighter's sheet only.
+func clashImpacts(anim string) []uint8 {
+	for _, k := range clashKinds {
+		if anim == k.left {
+			return k.impacts
+		}
+	}
+	return nil
 }
 
 // canClash reports whether the fighter is free to be drawn into a clash at all.
@@ -27,16 +58,17 @@ func (a *Actor) canClash() bool {
 	return a.OnGround
 }
 
-// tryClash starts a clash between a, in its opening low swing, and b, if b
-// answered it in time: with an opening low swing of its own inside the window,
-// or by asking for a low swing from the block a's swing put it in. It is the
-// one place the conditions live, whichever update finds the pair. Only the
-// authority decides a clash, as it decides hits.
+// tryClash starts a clash between a, in its opening low or mid swing, and b,
+// if b answered it in time at the same height: with an opening swing of its own
+// inside the window, or by asking for a swing from the block a's swing put it
+// in. It is the one place the conditions live, whichever update finds the
+// pair. Only the authority decides a clash, as it decides hits.
 func tryClash(a, b *Actor) bool {
 	if a == b || a.W == nil || !a.W.Authority || a.allyOf(b) {
 		return false
 	}
-	if !a.canClash() || !b.canClash() || !a.openingLowSwing() {
+	h, ok := a.openingSwing()
+	if !ok || !a.canClash() || !b.canClash() {
 		return false
 	}
 	if a.Orientation != facing(b.Pos.X-a.Pos.X) || b.Orientation != facing(a.Pos.X-b.Pos.X) {
@@ -45,21 +77,22 @@ func tryClash(a, b *Actor) bool {
 	if !a.inSwingRange(b) || !b.inSwingRange(a) {
 		return false
 	}
+	bh, bOpening := b.openingSwing()
 	switch {
-	case b.openingLowSwing():
+	case bOpening && bh == h:
 		gap := int64(a.SwingTick) - int64(b.SwingTick)
 		if gap < -ClashWindowTicks || gap > ClashWindowTicks {
 			return false
 		}
 	case b.State == StateBlock:
-		if b.Attacker != a || !b.Input.Attack || b.Updown != 0 || !b.canSwing() ||
+		if b.Attacker != a || !b.Input.Attack || b.Updown != h || !b.canSwing() ||
 			a.W.Tick-a.SwingTick > ClashWindowTicks {
 			return false
 		}
 	default:
 		return false
 	}
-	startClash(a, b)
+	startClash(a, b, clashKinds[h])
 	return true
 }
 
@@ -67,7 +100,7 @@ func tryClash(a, b *Actor) bool {
 // tick. A fighter answering from a block never paid for its swing and pays for
 // it here. Structure the clash breaks kills, the other taking the kill, and
 // then there is no clash to play.
-func startClash(a, b *Actor) {
+func startClash(a, b *Actor, k clashKind) {
 	if b.State == StateBlock {
 		b.spendEnergy(EnergySwing)
 	}
@@ -98,10 +131,9 @@ func startClash(a, b *Actor) {
 		x      float32
 		orient int8
 		anim   string
-		frames uint8
 	}{
-		{left, mid - ClashGap/2, 1, clashLeftAnim, ClashLeftFrames},
-		{right, mid + ClashGap/2, -1, clashRightAnim, ClashRightFrames},
+		{left, mid - ClashGap/2, 1, k.left},
+		{right, mid + ClashGap/2, -1, k.right},
 	} {
 		f := s.f
 		f.leaveSwingOrBlock()
@@ -113,7 +145,7 @@ func startClash(a, b *Actor) {
 		f.State = StateClash
 		f.stopFlicker()
 		f.AttackQueued, f.BufAttack, f.BufJump, f.SwingHit = false, false, false, false
-		f.SetAnim(s.anim, AnimOptions{animDuration: ClashSeconds, totalFrames: s.frames, once: true, reset: true})
+		f.SetAnim(s.anim, AnimOptions{animDuration: k.seconds, totalFrames: k.frames, once: true, reset: true})
 	}
 	left.Attacker, right.Attacker = right, left
 }
